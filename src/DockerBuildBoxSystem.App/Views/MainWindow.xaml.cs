@@ -19,6 +19,9 @@ public partial class MainWindow : Window
         //Set the DataContext to the injected ViewModel
         DataContext = viewModel;
         
+        //Subscribe to exit request event
+        viewModel.ExitRequested += (s, e) => Application.Current.Shutdown();
+        
         //Initialize the ViewModel when the window loads
         Loaded += async (s, e) => await viewModel.InitializeCommand.ExecuteAsync(null);
         

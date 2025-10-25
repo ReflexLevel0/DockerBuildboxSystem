@@ -11,6 +11,11 @@ public partial class MainViewModel : ViewModelBase
 {
     private readonly IConfiguration _configuration;
 
+    /// <summary>
+    /// Event raised when the application should exit.
+    /// </summary>
+    public event EventHandler? ExitRequested;
+
     public MainViewModel(IConfiguration configuration)
     {
         _configuration = configuration;
@@ -48,6 +53,18 @@ public partial class MainViewModel : ViewModelBase
     {
         //TODO:Cleanup resources
         //ex: stop any running builds, cleanup Docker containers, save user preferences
+        await Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Command to exit the application.
+    /// </summary>
+    [RelayCommand]
+    private async Task ExitAsync()
+    {
+        //raise the exit event to close the application
+        ExitRequested?.Invoke(this, EventArgs.Empty);
+
         await Task.CompletedTask;
     }
 }
