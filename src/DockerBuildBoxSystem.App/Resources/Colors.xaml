@@ -3,8 +3,10 @@
     
     <!-- Primary Colors -->
     <Color x:Key="PrimaryColor">#FFFFFF</Color>
+    <Color x:Key="TitleTextColor">#313373</Color>
     
     <!-- Brushes -->
     <SolidColorBrush x:Key="PrimaryBrush" Color="{StaticResource PrimaryColor}"/>
+    <SolidColorBrush x:Key="TitleTextBrush" Color="{StaticResource TitleTextColor}"/>
     
 </ResourceDictionary>
