@@ -4,6 +4,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using DockerBuildBoxSystem.ViewModels.Main;
+using DockerBuildBoxSystem.Contracts;
+using DockerBuildBoxSystem.Domain;
 
 namespace DockerBuildBoxSystem.App;
 
@@ -84,6 +86,8 @@ public partial class App : Application
     {
         //register ViewModels as Transient (creates a new instance each time)
         services.AddTransient<MainViewModel>();
+        //The DockerConsoleViewModel depends on IContainerService, which has beem registered as a Singleton
+        services.AddTransient<DockerBuildBoxSystem.ViewModels.ViewModels.ContainerConsoleViewModel>();
     }
 
     /// <summary>
@@ -93,6 +97,9 @@ public partial class App : Application
     {
         //register Windows as Transient (creates a new instance each time)
         services.AddTransient<MainWindow>();
+        
+        //register UserControls as Transient
+        services.AddTransient<UserControls.ContainerConsole>();
     }
 
     /// <summary>
@@ -100,6 +107,9 @@ public partial class App : Application
     /// </summary>
     private static void ConfigureServices(IServiceCollection services)
     {
+        //register container services
+        services.AddSingleton<IContainerService, DockerService>();
+        
         //register UI services
         services.AddSingleton<Services.IDialogService, Services.DialogService>();
         services.AddSingleton<Services.IViewLocator, Services.ViewLocator>();

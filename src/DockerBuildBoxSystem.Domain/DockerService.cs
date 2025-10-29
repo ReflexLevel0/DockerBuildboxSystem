@@ -1,0 +1,243 @@
+﻿using Docker.DotNet;
+using Docker.DotNet.Models;
+using DockerBuildBoxSystem.Contracts;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Runtime.InteropServices;
+using System.Text;
+using System.Threading.Channels;
+using System.Threading.Tasks;
+
+namespace DockerBuildBoxSystem.Domain
+{
+    /// <summary>
+    /// Class for interactions with the Docker Engine API using Docker.DotNet.
+    /// </summary>
+    public sealed class DockerService : IContainerService
+    {
+        #region Variables and Constructor
+        private readonly DockerClient _client;
+        public async ValueTask DisposeAsync() => _client.Dispose();
+
+        /// <summary>
+        /// Constructor for DockerService.
+        /// </summary>
+        /// <param name="endpoint">The docker endpoint URI</param>
+        /// <param name="timeout">Optional timeout for Docker requests</param>
+        public DockerService(string? endpoint = null, TimeSpan? timeout = null)
+        {
+            _client = new DockerClientConfiguration(
+                endpoint is not null ? new Uri(endpoint) : GetDefaultDockerUri(),
+                new AnonymousCredentials(),
+                default,
+                timeout ?? TimeSpan.FromSeconds(100))
+                .CreateClient();
+        }
+
+        #endregion
+
+        #region Container Operations
+        public Task<bool> StartAsync(string containerId, CancellationToken ct = default) =>
+            _client.Containers.StartContainerAsync(containerId, new ContainerStartParameters(), ct);
+
+        public Task StopAsync(string containerId, TimeSpan timeout, CancellationToken ct = default) =>
+            _client.Containers.StopContainerAsync(containerId,
+                new ContainerStopParameters { WaitBeforeKillSeconds = (uint)timeout.TotalSeconds }, ct);
+
+
+        public Task RemoveAsync(string containerId, bool force = false, CancellationToken ct = default) =>
+            _client.Containers.RemoveContainerAsync(containerId,
+                new ContainerRemoveParameters { Force = force }, ct);
+
+
+        public Task RestartAsync(string containerId, TimeSpan timeout, CancellationToken ct = default) =>
+            _client.Containers.RestartContainerAsync(containerId,
+                new ContainerRestartParameters { WaitBeforeKillSeconds = (uint)timeout.TotalSeconds }, ct);
+
+
+        public Task KillContainer(string containerId, CancellationToken ct = default) =>
+            _client.Containers.KillContainerAsync(containerId, new ContainerKillParameters(), ct);
+
+
+        public async Task<IList<ContainerInfo>> ListContainersAsync(
+            bool all = false,
+            string? nameFilter = null,
+            CancellationToken ct = default)
+        {
+            var filters = nameFilter is null ? null : new Dictionary<string, IDictionary<string, bool>>
+            {
+                ["name"] = new Dictionary<string, bool> { [nameFilter] = true }
+            };
+
+            var parameters = new ContainersListParameters
+            {
+                All = all,
+                Filters = filters
+            };
+
+            var containers = await _client.Containers.ListContainersAsync(parameters, ct);
+
+            //mapping the Docker.DotNet model to our own DTO
+            return containers.Select(c => new ContainerInfo
+            {
+                Id = c.ID,
+                Names = c.Names.AsReadOnly(),
+                State = c.State,
+                Status = c.Status,
+                Image = c.Image
+            }).ToList();
+        }
+
+
+
+        public async Task<ChannelReader<(bool IsStdErr, string Line)>> StreamLogsAsync(
+            string containerId,
+            bool follow = true,
+            string tail = "all",
+            bool tty = false,
+            CancellationToken ct = default)
+        {
+            var ch = Channel.CreateUnbounded<(bool, string)>(new UnboundedChannelOptions { SingleReader = true, SingleWriter = true });
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    using var stream = await _client.Containers.GetContainerLogsAsync(
+                        containerId,
+                        tty,
+                        new ContainerLogsParameters
+                        {
+                            ShowStdout = true,
+                            ShowStderr = true,
+                            Follow = follow,
+                            Timestamps = false,
+                            Tail = tail
+                        },
+                        ct);
+
+                    var buffer = new byte[4096];
+                    var lineBufferStdOut = new StringBuilder();
+                    var lineBufferStdErr = new StringBuilder();
+
+                    while (!ct.IsCancellationRequested)
+                    {
+                        //using ReadOutputAsync to read the multiplexed stream
+                        var result = await stream.ReadOutputAsync(buffer, 0, buffer.Length, ct);
+
+                        if (result.Count == 0)
+                            break; //end of stream
+
+                        var text = Encoding.UTF8.GetString(buffer, 0, result.Count);
+                        bool isStdErr = result.Target == MultiplexedStream.TargetStream.StandardError;
+                        var lineBuffer = isStdErr ? lineBufferStdErr : lineBufferStdOut;
+
+                        //split by lines and emit each line
+                        var lines = text.Split(new[] { '\n' }, StringSplitOptions.None);
+                        for (int i = 0; i < lines.Length; i++)
+                        {
+                            if (i == lines.Length - 1 && !text.EndsWith('\n'))
+                            {
+                                //Incomplete line, save for next read
+                                lineBuffer.Append(lines[i]);
+                            }
+                            else
+                            {
+                                var completeLine = lineBuffer.ToString() + lines[i];
+                                if (!string.IsNullOrEmpty(completeLine) || (completeLine == string.Empty && i < lines.Length - 1))
+                                {
+                                    await ch.Writer.WriteAsync((isStdErr, completeLine.TrimEnd('\r')), ct);
+                                }
+                                lineBuffer.Clear();
+                            }
+                        }
+                    }
+
+                    //Emitting any remaining buffered text
+                    if (lineBufferStdOut.Length > 0)
+                    {
+                        await ch.Writer.WriteAsync((false, lineBufferStdOut.ToString().TrimEnd('\r')), ct);
+                    }
+                    if (lineBufferStdErr.Length > 0)
+                    {
+                        await ch.Writer.WriteAsync((true, lineBufferStdErr.ToString().TrimEnd('\r')), ct);
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    //Expected when cancellation is requested
+                }
+                catch (Exception ex)
+                {
+                    ch.Writer.TryComplete(ex);
+                    return;
+                }
+
+                ch.Writer.TryComplete();
+            }, ct);
+
+            return ch.Reader;
+        }
+
+
+        public async Task<(long ExitCode, string StdOut, string StdErr)> ExecAsync(
+            string containerId,
+            IReadOnlyList<string> cmd,
+            bool tty = false,
+            CancellationToken ct = default)
+        {
+            var create = await _client.Exec.ExecCreateContainerAsync(containerId,
+                new ContainerExecCreateParameters
+                {
+                    Cmd = cmd.ToList(),
+                    AttachStdout = true,
+                    AttachStderr = true,
+                    AttachStdin = false,
+                    Tty = tty
+                }, ct);
+
+            //Start and attach in one go... returns MultiplexedStream when TTY==false.
+            using var attach = await _client.Exec.StartAndAttachContainerExecAsync(create.ID, tty, ct);
+
+            //Collect output
+            using var outMs = new MemoryStream();
+            using var errMs = new MemoryStream();
+
+            if (tty)
+            {
+                //With TTY, everything is merged to a single stream.
+                await attach.CopyOutputToAsync(Stream.Null, outMs, Stream.Null, ct);
+            }
+            else
+            {
+                await attach.CopyOutputToAsync(Stream.Null, outMs, errMs, ct);
+            }
+
+            //Wait until the exec finishes and get exit code
+            var resp = await _client.Exec.InspectContainerExecAsync(create.ID, ct);
+
+            var stdout = Encoding.UTF8.GetString(outMs.ToArray());
+            var stderr = Encoding.UTF8.GetString(errMs.ToArray());
+            return (resp.ExitCode, stdout, stderr);
+        }
+        #endregion
+
+
+        #region Helpers
+        /// <summary>
+        /// Gets the default URI for connecting to the Docker engine based on the current operating system.
+        /// </summary>
+        /// <remarks>The returned URI is determined by the operating system at runtime.  Use this method
+        /// to obtain the appropriate default Docker engine URI for the current environment.</remarks>
+        /// <returns>A <see cref="Uri"/> representing the default Docker engine connection endpoint.  On Windows, this is
+        /// <c>npipe://./pipe/docker_engine</c>.  On non-Windows platforms, this is <c>unix:///var/run/docker.sock</c>.</returns>
+        private static Uri GetDefaultDockerUri()
+        {
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                return new Uri("npipe://./pipe/docker_engine");
+            return new Uri("unix:///var/run/docker.sock");
+        }
+        #endregion
+    }
+}
