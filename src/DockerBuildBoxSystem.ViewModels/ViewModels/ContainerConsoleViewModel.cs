@@ -48,10 +48,26 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [ObservableProperty]
         private bool _isLoadingContainers;
 
+        [ObservableProperty]
+        private bool _autoStartLogs = false;
+
         public ContainerConsoleViewModel(IContainerService service)
         {
             _service = service ?? throw new ArgumentNullException(nameof(service));
             _syncContext = SynchronizationContext.Current;
+        }
+
+        [RelayCommand]
+        private async Task InitializeAsync()
+        {
+            //load available containers on initialization
+            await RefreshContainersCommand.ExecuteAsync(null);
+
+            //optionally auto-start logs if ContainerId is set
+            if (AutoStartLogs && !string.IsNullOrWhiteSpace(ContainerId))
+            {
+                await StartLogsCommand.ExecuteAsync(null);
+            }
         }
 
         [RelayCommand]
