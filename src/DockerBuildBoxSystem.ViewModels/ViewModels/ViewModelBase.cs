@@ -19,6 +19,9 @@ public abstract partial class ViewModelBase : ObservableObject, IAsyncDisposable
     [ObservableProperty]
     private string title = string.Empty;
 
+    [ObservableProperty]
+    private bool isActivated;
+
     public virtual Task OnActivatedAsync() => Task.CompletedTask;
     public virtual Task OnDeactivatedAsync() => Task.CompletedTask;
 
