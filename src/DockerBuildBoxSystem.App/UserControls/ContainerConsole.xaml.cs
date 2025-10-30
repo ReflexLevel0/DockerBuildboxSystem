@@ -28,7 +28,7 @@ namespace DockerBuildBoxSystem.App.UserControls
     public partial class ContainerConsole : UserControl
     {
         public ContainerConsoleViewModel? ViewModel => DataContext as ContainerConsoleViewModel;
-        private static bool IsInDesignMode => DesignerProperties.GetIsInDesignMode(new DependencyObject());
+        private bool IsInDesignMode => DesignerProperties.GetIsInDesignMode(this);
 
         /// <summary>
         /// Parameterless constructor.
@@ -37,8 +37,8 @@ namespace DockerBuildBoxSystem.App.UserControls
         /// </summary>
         public ContainerConsole() : this(null)
         {
-        }
 
+        }
         /// <summary>
         /// Constructor with ViewModel injection for manual instantiation.
         /// </summary>
@@ -48,7 +48,7 @@ namespace DockerBuildBoxSystem.App.UserControls
             InitializeComponent();
 
             //resolve ViewModel from DI if not provided AND not in design mode
-            if(IsInDesignMode) 
+            if(IsInDesignMode)
                 return;
 
             viewModel ??= (Application.Current as App)?.Services.GetService<ContainerConsoleViewModel>();
@@ -57,24 +57,52 @@ namespace DockerBuildBoxSystem.App.UserControls
                 throw new InvalidOperationException("ContainerConsoleViewModel could not be resolved from the service provider!");
 
             DataContext = viewModel;
+
+            Loaded += OnLoaded;
+            Unloaded += OnUnloaded;
+            DataContextChanged += OnDataContextChanged;
         }
+
 
         private async void OnLoaded(object? sender, RoutedEventArgs e)
         {
+            if (IsInDesignMode) return;
             if (ViewModel is null) return;
 
             //attach auto-scroll behavior
-            ViewModel.Lines.CollectionChanged += Lines_CollectionChanged;
+            try
+            {
+                ViewModel.Lines.CollectionChanged += Lines_CollectionChanged;
 
-            //innitialize the ViewModel
-            await ViewModel.InitializeCommand.ExecuteAsync(null);
+                //initialize the ViewModel
+                if (ViewModel.InitializeCommand.CanExecute(null))
+                {
+                    await ViewModel.InitializeCommand.ExecuteAsync(null);
+                }
+            }
+            catch (Exception ex)
+            {
+                throw new Exception("Error initializing ContainerConsoleViewModel", ex);
+            }
         }
 
         private async void OnUnloaded(object? sender, RoutedEventArgs e)
         {
-            if (ViewModel is not null)
+            await CleanupAsync();
+        }
+
+
+        /// <summary>
+        /// Performs cleanup operations for the control.
+        /// </summary>
+        public async Task CleanupAsync()
+        {
+            if (ViewModel is null)
+                return;
+
+            try
             {
-                //detach the auto-scroll behavior
+                //detach event handlers
                 ViewModel.Lines.CollectionChanged -= Lines_CollectionChanged;
 
                 //stop logs if running
@@ -82,14 +110,31 @@ namespace DockerBuildBoxSystem.App.UserControls
                 {
                     await ViewModel.StopLogsCommand.ExecuteAsync(null);
                 }
+
+                //dispose the ViewModel
+                await ViewModel.DisposeAsync();
             }
+            catch
+            {
+                //ignoring errors during cleanup
+            }
+        }
+        private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
+        {
+            //unhook the old VM
+            if (e.OldValue is ContainerConsoleViewModel oldVm)
+                oldVm.Lines.CollectionChanged -= Lines_CollectionChanged;
+
+            //hook the new VM if loaded
+            if (IsLoaded && e.NewValue is ContainerConsoleViewModel newVm)
+                newVm.Lines.CollectionChanged += Lines_CollectionChanged;
         }
 
         private void Lines_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
         {
             //auto-scroll to the bottom when new lines are added
             if (e.Action == NotifyCollectionChangedAction.Add)
-                OutputScroller.ScrollToBottom();
+                Dispatcher.BeginInvoke(() => OutputScroller?.ScrollToBottom());
         }
     }
 }

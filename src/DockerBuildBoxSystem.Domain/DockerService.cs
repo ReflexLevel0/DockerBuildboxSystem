@@ -14,11 +14,37 @@ namespace DockerBuildBoxSystem.Domain
     /// <summary>
     /// Class for interactions with the Docker Engine API using Docker.DotNet.
     /// </summary>
-    public sealed class DockerService : IContainerService
+    public sealed class DockerService : IContainerService, IAsyncDisposable, IDisposable
     {
         #region Variables and Constructor
         private readonly DockerClient _client;
-        public async ValueTask DisposeAsync() => _client.Dispose();
+        private bool _disposed;
+
+        public async ValueTask DisposeAsync()
+        {
+            if (_disposed)
+                return;
+
+            _disposed = true;
+
+            //dispose synchronously
+            _client?.Dispose();
+
+            await Task.CompletedTask;
+
+            GC.SuppressFinalize(this);
+        }
+
+        public void Dispose()
+        {
+            if (_disposed)
+                return;
+
+            _disposed = true;
+
+            DisposeAsync().AsTask().GetAwaiter().GetResult();
+            GC.SuppressFinalize(this);
+        }
 
         /// <summary>
         /// Constructor for DockerService.
@@ -102,9 +128,16 @@ namespace DockerBuildBoxSystem.Domain
 
             _ = Task.Run(async () =>
             {
+                MultiplexedStream? stream = null;
+                CancellationTokenRegistration? registration = default;
+
+                var buffer = new byte[4096];
+                var lineBufferStdOut = new StringBuilder();
+                var lineBufferStdErr = new StringBuilder();
+
                 try
                 {
-                    using var stream = await _client.Containers.GetContainerLogsAsync(
+                    stream = await _client.Containers.GetContainerLogsAsync(
                         containerId,
                         tty,
                         new ContainerLogsParameters
@@ -115,11 +148,11 @@ namespace DockerBuildBoxSystem.Domain
                             Timestamps = false,
                             Tail = tail
                         },
-                        ct);
+                        ct).ConfigureAwait(false);
 
-                    var buffer = new byte[4096];
-                    var lineBufferStdOut = new StringBuilder();
-                    var lineBufferStdErr = new StringBuilder();
+                    // Register cancellation callback to dispose stream immediately
+                    // This ensures the ReadOutputAsync call is interrupted
+                    registration = ct.Register(() => stream?.Dispose());
 
                     while (!ct.IsCancellationRequested)
                     {
@@ -147,7 +180,7 @@ namespace DockerBuildBoxSystem.Domain
                                 var completeLine = lineBuffer.ToString() + lines[i];
                                 if (!string.IsNullOrEmpty(completeLine) || (completeLine == string.Empty && i < lines.Length - 1))
                                 {
-                                    await ch.Writer.WriteAsync((isStdErr, completeLine.TrimEnd('\r')), ct);
+                                    await ch.Writer.WriteAsync((isStdErr, completeLine.TrimEnd('\r')), CancellationToken.None);
                                 }
                                 lineBuffer.Clear();
                             }
@@ -157,24 +190,36 @@ namespace DockerBuildBoxSystem.Domain
                     //Emitting any remaining buffered text
                     if (lineBufferStdOut.Length > 0)
                     {
-                        await ch.Writer.WriteAsync((false, lineBufferStdOut.ToString().TrimEnd('\r')), ct);
+                        await ch.Writer.WriteAsync((false, lineBufferStdOut.ToString().TrimEnd('\r')), CancellationToken.None);
                     }
                     if (lineBufferStdErr.Length > 0)
                     {
-                        await ch.Writer.WriteAsync((true, lineBufferStdErr.ToString().TrimEnd('\r')), ct);
+                        await ch.Writer.WriteAsync((true, lineBufferStdErr.ToString().TrimEnd('\r')), CancellationToken.None);
                     }
                 }
                 catch (OperationCanceledException)
                 {
                     //Expected when cancellation is requested
                 }
+                catch (ObjectDisposedException)
+                {
+                    //Expected when stream is disposed due to cancellation
+                }
                 catch (Exception ex)
                 {
                     ch.Writer.TryComplete(ex);
                     return;
                 }
+                finally
+                {
+                    //unregister the cancellation callback
+                    registration?.Dispose();
+                    
+                    //ensure the stream is disposed even if cancelled! This resolves the issue of the application keeps running even though window was closed! :D
+                    stream?.Dispose();
+                    ch.Writer.TryComplete();
+                }
 
-                ch.Writer.TryComplete();
             }, ct);
 
             return ch.Reader;
@@ -238,6 +283,7 @@ namespace DockerBuildBoxSystem.Domain
                 return new Uri("npipe://./pipe/docker_engine");
             return new Uri("unix:///var/run/docker.sock");
         }
+
         #endregion
     }
 }

@@ -5,26 +5,30 @@ namespace DockerBuildBoxSystem.ViewModels.Common;
 /// <summary>
 /// Base class for all ViewModels in the application, uses CommunityToolkit.Mvvm.
 /// </summary>
-public abstract class ViewModelBase : ObservableObject
+public abstract partial class ViewModelBase : ObservableObject, IAsyncDisposable
 {
-    private bool _isBusy;
-    private string _title = string.Empty;
-
     /// <summary>
     /// Gets or sets a value indicating whether the ViewModel is currently busy, showing loading indicators in the UI.
     /// </summary>
-    public bool IsBusy
-    {
-        get => _isBusy;
-        set => SetProperty(ref _isBusy, value);
-    }
+    [ObservableProperty]
+    private bool isBusy;
 
     /// <summary>
     /// Gets or sets the title for the ViewModel.
     /// </summary>
-    public string Title
+    [ObservableProperty]
+    private string title = string.Empty;
+
+    public virtual Task OnActivatedAsync() => Task.CompletedTask;
+    public virtual Task OnDeactivatedAsync() => Task.CompletedTask;
+
+    /// <summary>
+    /// Disposes of the ViewModel asynchronously. Override this method in derived classes to perform cleanup of async resources.
+    /// </summary>
+    /// <returns>A ValueTask representing the asynchronous disposal operation.</returns>
+    public virtual ValueTask DisposeAsync()
     {
-        get => _title;
-        set => SetProperty(ref _title, value);
+        GC.SuppressFinalize(this);
+        return ValueTask.CompletedTask;
     }
 }

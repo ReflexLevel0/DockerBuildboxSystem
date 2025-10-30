@@ -70,13 +70,18 @@ public partial class App : Application
     /// </summary>
     protected override async void OnExit(ExitEventArgs e)
     {
-        if (_host != null)
+        try
         {
-            await _host.StopAsync();
-            _host.Dispose();
+            if (_host != null)
+            {
+                await _host.StopAsync();
+                _host.Dispose();
+            }
         }
-
-        base.OnExit(e);
+        finally
+        {
+            base.OnExit(e);
+        }
     }
 
     /// <summary>

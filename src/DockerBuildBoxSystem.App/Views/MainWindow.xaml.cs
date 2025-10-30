@@ -1,4 +1,5 @@
 ﻿using System.Windows;
+using System.ComponentModel;
 using DockerBuildBoxSystem.ViewModels.Main;
 
 namespace DockerBuildBoxSystem.App;
@@ -8,6 +9,9 @@ namespace DockerBuildBoxSystem.App;
 /// </summary>
 public partial class MainWindow : Window
 {
+    private readonly MainViewModel _viewModel;
+    private bool _isClosing;
+
     /// <summary>
     /// Initializes a new instance of the MainWindow class. The ViewModel is injected via dependency injection.
     /// </summary>
@@ -15,6 +19,8 @@ public partial class MainWindow : Window
     public MainWindow(MainViewModel viewModel)
     {
         InitializeComponent();
+        
+        _viewModel = viewModel;
         
         //Set the DataContext to the injected ViewModel
         DataContext = viewModel;
@@ -24,8 +30,37 @@ public partial class MainWindow : Window
         
         //Initialize the ViewModel when the window loads
         Loaded += async (s, e) => await viewModel.InitializeCommand.ExecuteAsync(null);
-        
-        //Cleanup when window closes
-        Closing += async (s, e) => await viewModel.ShutdownCommand.ExecuteAsync(null);
+
+        //Cleanup when window is closing (before it closes)
+        Closing += OnWindowClosing;
+    }
+
+    private async void OnWindowClosing(object? sender, CancelEventArgs e)
+    {
+        if (_isClosing)
+            return;
+
+        //cancel the close temporarily to perform cleanup
+        e.Cancel = true;
+        _isClosing = true;
+        Closing -= OnWindowClosing;
+
+        await Dispatcher.InvokeAsync(async () =>
+        {
+            try
+            {
+                //cleanup child UserControls by calling their cleanup methods
+                //Subscribing to Dispatcher.ShutdownStarted doesn't work sometimes and is really random from testing,
+                //by manually calling it it consistently works atleast... dont know if there are a better way to solve this.
+                if (ContainerConsoleControl != null)
+                    await ContainerConsoleControl.CleanupAsync();
+
+                await _viewModel.ShutdownCommand.ExecuteAsync(null);
+            }
+            finally
+            {
+                Close();
+            }
+        });
     }
 }

@@ -26,8 +26,10 @@ public partial class MainViewModel : ViewModelBase
         Title = string.IsNullOrEmpty(version) ? appName : $"{appName} v{version}";
     }
 
+    private bool CanRunWhenIdle() => !IsBusy;
+
     /// <summary>
-    /// Command to handle application initialization, which iscalled when the main window is loaded.
+    /// Command to handle application initialization, which is called when the main window is loaded.
     /// </summary>
     [RelayCommand]
     private async Task InitializeAsync()
@@ -48,23 +50,48 @@ public partial class MainViewModel : ViewModelBase
     /// <summary>
     /// Command to handle application shutdown cleanup.
     /// </summary>
-    [RelayCommand]
-    private async Task ShutdownAsync()
+    [RelayCommand(AllowConcurrentExecutions = false, CanExecute = nameof(CanRunWhenIdle), IncludeCancelCommand = true)]
+    private async Task ShutdownAsync(CancellationToken ct)
     {
-        //TODO:Cleanup resources
-        //ex: stop any running builds, cleanup Docker containers, save user preferences
-        await Task.CompletedTask;
+        IsBusy = true;
+        try
+        {
+            ct.ThrowIfCancellationRequested();
+
+            //TODO:Cleanup resources
+            //ex: stop any running builds, cleanup Docker containers, save user preferences
+            await Task.CompletedTask;
+        }
+        catch (OperationCanceledException)
+        {
+            //... handle any cancellation specific logic
+        }
+        finally
+        {
+            IsBusy = false;
+        }
     }
 
     /// <summary>
     /// Command to exit the application.
     /// </summary>
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = false, CanExecute = nameof(CanRunWhenIdle))]
     private async Task ExitAsync()
     {
         //raise the exit event to close the application
         ExitRequested?.Invoke(this, EventArgs.Empty);
 
-        await Task.CompletedTask;
+        await Task.Yield();
+    }
+
+    /// <summary>
+    /// Disposes of the MainViewModel asynchronously, cleaning up event handlers and resources.
+    /// </summary>
+    public override async ValueTask DisposeAsync()
+    {
+        //clean up event handlers
+        ExitRequested = null;
+        
+        await base.DisposeAsync();
     }
 }
