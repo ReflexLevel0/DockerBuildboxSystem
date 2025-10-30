@@ -74,55 +74,49 @@
                     MinWidth="70"/>
         </Grid>
 
-        <!-- Output -->
-        <ScrollViewer Grid.Row="1" 
-                      VerticalScrollBarVisibility="Auto"
-                      Background="#111"
-                      x:Name="OutputScroller">
-            <ItemsControl ItemsSource="{Binding Lines}">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <TextBlock FontFamily="Consolas" FontSize="13">
-                            <TextBlock.Style>
-                                <Style TargetType="TextBlock">
-                                    <Setter Property="Foreground" Value="#ddd"/>
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding IsError}" Value="True">
-                                            <Setter Property="Foreground" Value="#ff4444"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </TextBlock.Style>
-                            <Run Text="{Binding Timestamp, StringFormat='[{0:HH:mm:ss}]'}" Foreground="#888"/>
-                            <Run Text=" "/>
-                            <Run Text="{Binding Text}"/>
-                        </TextBlock>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-        </ScrollViewer>
+        <Grid Grid.Row="1" ClipToBounds="True">
+            <!-- Output -->
+            <ScrollViewer
+                          VerticalScrollBarVisibility="Hidden"
+                          Background="#111"
+                          x:Name="OutputScroller">
+                <ItemsControl ItemsSource="{Binding Lines}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock FontFamily="Consolas" FontSize="13">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Foreground" Value="#ddd"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsError}" Value="True">
+                                                <Setter Property="Foreground" Value="#ff4444"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                                <Run Text="{Binding Timestamp, StringFormat='[{0:HH:mm:ss}]'}" Foreground="#888"/>
+                                <Run Text=" "/>
+                                <Run Text="{Binding Text}"/>
+                            </TextBlock>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
 
-        <!-- Control Buttons -->
-        <StackPanel Grid.Row="2" 
-                    Orientation="Horizontal" 
-                    Margin="6,6,6,0"
-                    HorizontalAlignment="Left">
-            <Button Content="Start Logs" 
-                    Command="{Binding StartLogsCommand}"
-                    Padding="8,4"
-                    Margin="0,0,6,0"
-                    MinWidth="80"/>
-            <Button Content="Stop Logs" 
-                    Command="{Binding StopLogsCommand}"
-                    Padding="8,4"
-                    Margin="0,0,6,0"
-                    MinWidth="80"/>
-            <Button Content="Clear" 
-                    Command="{Binding ClearCommand}"
-                    Padding="8,4"
-                    MinWidth="70"/>
-        </StackPanel>
-
+            <!-- Control Buttons -->
+            <StackPanel Orientation="Horizontal" 
+                        Margin="8"
+                        VerticalAlignment="Top"
+                        HorizontalAlignment="Right">
+                    <Button Content="Copy"
+                        Command="{Binding CopyCommand}"
+                        Padding="4,2"
+                        Margin="0,0,4,0"/>
+                    <Button Content="Clear" 
+                        Command="{Binding ClearCommand}"
+                        Padding="4,2"/>
+            </StackPanel>
+        </Grid>
         <!-- Input -->
         <Grid Grid.Row="3" Margin="6">
             <Grid.ColumnDefinitions>

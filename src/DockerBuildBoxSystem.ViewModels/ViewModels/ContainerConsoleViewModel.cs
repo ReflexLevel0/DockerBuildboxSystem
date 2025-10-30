@@ -49,7 +49,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private bool _isLoadingContainers;
 
         [ObservableProperty]
-        private bool _autoStartLogs = false;
+        private bool _autoStartLogs = true;
 
         public ContainerConsoleViewModel(IContainerService service)
         {
@@ -102,6 +102,10 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             {
                 ContainerId = value.Id;
                 AddLineToUI(new ConsoleLine(DateTime.Now, $"[info] Selected container: {value.Names.FirstOrDefault() ?? value.Id}", false));
+
+                //auto start logs if enabled
+                if(AutoStartLogs && !string.IsNullOrWhiteSpace(ContainerId))
+                    _ = StartLogsCommand.ExecuteAsync(null);
             }
             else
             {
