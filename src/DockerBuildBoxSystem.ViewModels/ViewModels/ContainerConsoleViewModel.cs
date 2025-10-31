@@ -19,8 +19,12 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private readonly IContainerService _service;
         private readonly IClipboardService? _clipboard;
 
-        private CancellationTokenSource? _cts;
+        private CancellationTokenSource? _logsCts;
         private Task? _logStreamTask;
+        
+        //global UI update
+        private readonly ConcurrentQueue<ConsoleLine> _outputQueue = new();
+        private CancellationTokenSource? _uiUpdateCts;
         private Task? _uiUpdateTask;
         private readonly SynchronizationContext? _syncContext;
 
@@ -70,6 +74,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [RelayCommand]
         private async Task InitializeAsync()
         {
+            // Start the global UI update task
+            StartUiUpdateTask();
+
             //load available containers on initialization
             await RefreshContainersCommand.ExecuteAsync(null);
 
@@ -78,6 +85,79 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             {
                 await StartLogsCommand.ExecuteAsync(null);
             }
+        }
+
+        /// <summary>
+        /// Starts the global UI update task that processes the output queue.
+        /// Separated to avoid multiple concurrent UI updates.
+        /// </summary>
+        private void StartUiUpdateTask()
+        {
+            if (_uiUpdateTask != null)
+                return; //if it is already running
+
+            _uiUpdateCts = new CancellationTokenSource();
+            var ct = _uiUpdateCts.Token;
+
+            var uiTimer = new PeriodicTimer(TimeSpan.FromMilliseconds(50));
+
+            _uiUpdateTask = Task.Run(async () =>
+            {
+                try
+                {
+                    while (await uiTimer.WaitForNextTickAsync(ct))
+                    {
+                        while (_outputQueue.TryDequeue(out var line))
+                        {
+                            AddLineToUI(line);
+                        }
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    //flush any remaining items
+                    while (_outputQueue.TryDequeue(out var line))
+                    {
+                        AddLineToUI(line);
+                    }
+                }
+                finally
+                {
+                    uiTimer.Dispose();
+                }
+            }, ct);
+        }
+
+        /// <summary>
+        /// Stops the UI update task.
+        /// </summary>
+        private async Task StopUiUpdateTaskAsync()
+        {
+            _uiUpdateCts?.Cancel();
+
+            if (_uiUpdateTask != null)
+            {
+                try
+                {
+                    await _uiUpdateTask.WaitAsync(TimeSpan.FromSeconds(2));
+                }
+                catch (OperationCanceledException) { }
+                catch (TimeoutException) { }
+                finally
+                {
+                    _uiUpdateTask = null;
+                    _uiUpdateCts?.Dispose();
+                    _uiUpdateCts = null;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Enqueues a line to be added to the console output on the UI thread.
+        /// </summary>
+        private void EnqueueLine(ConsoleLine line)
+        {
+            _outputQueue.Enqueue(line);
         }
 
         [RelayCommand]
@@ -98,7 +178,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             }
             catch (Exception ex)
             {
-                AddLineToUI(new ConsoleLine(DateTime.Now, $"[container-list-error] {ex.Message}", true));
+                EnqueueLine(new ConsoleLine(DateTime.Now, $"[container-list-error] {ex.Message}", true));
             }
             finally
             {
@@ -111,7 +191,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             if (value != null)
             {
                 ContainerId = value.Id;
-                AddLineToUI(new ConsoleLine(DateTime.Now, $"[info] Selected container: {value.Names.FirstOrDefault() ?? value.Id}", false));
+                EnqueueLine(new ConsoleLine(DateTime.Now, $"[info] Selected container: {value.Names.FirstOrDefault() ?? value.Id}", false));
 
                 //auto start logs if enabled
                 if(AutoStartLogs && !string.IsNullOrWhiteSpace(ContainerId))
@@ -148,7 +228,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private async Task ExecuteAndLogAsync(string cmd)
         {
             //add command to console on UI thread
-            Lines.Add(new ConsoleLine(DateTime.Now, $"> {cmd}", false));
+            EnqueueLine(new ConsoleLine(DateTime.Now, $"> {cmd}", false));
 
             try
             {
@@ -160,19 +240,19 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 //back on UI thread so safe to add to Lines
                 if (!string.IsNullOrEmpty(stdout))
                 {
-                    Lines.Add(new ConsoleLine(DateTime.Now, stdout.TrimEnd('\r', '\n'), false));
+                    EnqueueLine(new ConsoleLine(DateTime.Now, stdout.TrimEnd('\r', '\n'), false));
                 }
 
                 if (!string.IsNullOrEmpty(stderr))
                 {
-                    Lines.Add(new ConsoleLine(DateTime.Now, stderr.TrimEnd('\r', '\n'), true));
+                    EnqueueLine(new ConsoleLine(DateTime.Now, stderr.TrimEnd('\r', '\n'), true));
                 }
 
-                Lines.Add(new ConsoleLine(DateTime.Now, $"[exit] {exitCode}", false));
+                EnqueueLine(new ConsoleLine(DateTime.Now, $"[exit] {exitCode}", false));
             }
             catch (Exception ex)
             {
-                Lines.Add(new ConsoleLine(DateTime.Now, $"[exec-error] {ex.Message}", true));
+                EnqueueLine(new ConsoleLine(DateTime.Now, $"[exec-error] {ex.Message}", true));
             }
         }
 
@@ -184,40 +264,8 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             //Stop existing logs if it is currently running
             await StopLogsAsync();
 
-            _cts = new();
-            var ct = _cts.Token;
-
-            var queue = new ConcurrentQueue<ConsoleLine>();
-
-            //
-            var uiTimer = new PeriodicTimer(TimeSpan.FromMilliseconds(50));
-
-            //store the UI update task so we can await it during cleanup
-            _uiUpdateTask = Task.Run(async () =>
-            {
-                try
-                {
-                    while (await uiTimer.WaitForNextTickAsync(ct))
-                    {
-                        while (queue.TryDequeue(out var line))
-                        {
-                            AddLineToUI(line);
-                        }
-                    }
-                }
-                catch (OperationCanceledException)
-                {
-                    //flush any remaining items
-                    while (queue.TryDequeue(out var line))
-                    {
-                        AddLineToUI(line);
-                    }
-                }
-                finally
-                {
-                    uiTimer.Dispose();
-                }
-            }, ct);
+            _logsCts = new();
+            var ct = _logsCts.Token;
 
             _logStreamTask = Task.Run(async () =>
             {
@@ -233,18 +281,18 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                     await foreach (var (isErr, text) in reader.ReadAllAsync(ct))
                     {
                         if (text is null) continue;
-                        queue.Enqueue(new ConsoleLine(DateTime.Now, text, isErr));
+                        EnqueueLine(new ConsoleLine(DateTime.Now, text, isErr));
                     }
 
-                    _cts?.Token.ThrowIfCancellationRequested();
+                    _logsCts?.Token.ThrowIfCancellationRequested();
                 }
                 catch (OperationCanceledException)
                 {
-                    queue.Enqueue(new ConsoleLine(DateTime.Now, "[logs] canceled", false));
+                    EnqueueLine(new ConsoleLine(DateTime.Now, "[logs] canceled", false));
                 }
                 catch (Exception ex)
                 {
-                    queue.Enqueue(new ConsoleLine(DateTime.Now, $"[logs-error] {ex.Message}", true));
+                    EnqueueLine(new ConsoleLine(DateTime.Now, $"[logs-error] {ex.Message}", true));
                 }
             }, ct);
 
@@ -257,32 +305,26 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [RelayCommand(CanExecute = nameof(CanStopLogs))]
         private async Task StopLogsAsync()
         {
-            _cts?.Cancel();
+            _logsCts?.Cancel();
 
-            var toAwait = new List<Task>();
-            if (_logStreamTask is not null) toAwait.Add(_logStreamTask);
-            if (_uiUpdateTask is not null) toAwait.Add(_uiUpdateTask);
-
-            try
+            if (_logStreamTask is not null)
             {
-                if (toAwait.Count > 0)
+                try
                 {
                     //await with a timeout to prevent hanging during shutdown
-                    await Task.WhenAll(toAwait).WaitAsync(TimeSpan.FromSeconds(2));
+                    await _logStreamTask.WaitAsync(TimeSpan.FromSeconds(2));
                 }
-            }
-            catch (OperationCanceledException) {}
-            catch (Exception) { /* shouldn't happen here... */ }
-            finally
-            {
-                _logStreamTask = null;
-                _uiUpdateTask = null;
+                catch (OperationCanceledException) {}
+                catch (TimeoutException) { }
+                finally
+                {
+                    _logStreamTask = null;
+                    _logsCts?.Dispose();
+                    _logsCts = null;
 
-                _cts?.Dispose();
-                _cts = null;
-
-                IsLogsRunning = false;
-                UpdateCommandStates();
+                    IsLogsRunning = false;
+                    UpdateCommandStates();
+                }
             }
         }
 
@@ -343,6 +385,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         public override async ValueTask DisposeAsync()
         {
             await StopLogsAsync();
+            await StopUiUpdateTaskAsync();
             await base.DisposeAsync();
         }
     }
