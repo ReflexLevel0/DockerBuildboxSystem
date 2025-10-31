@@ -25,6 +25,8 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             
             <TextBlock Grid.Column="0" 
@@ -72,6 +74,16 @@
                     Command="{Binding RefreshContainersCommand}"
                     Padding="8,4"
                     MinWidth="70"/>
+
+            <Button Grid.Column="4" 
+                    Content="Build" 
+                    Command="{Binding BuildCommand}"
+                    Padding="8,4"/>
+            
+            <Button Grid.Column="5" 
+                    Content="Clean" 
+                    Command="{Binding CleanCommand}"
+                    Padding="8,4"/>
         </Grid>
 
         <Grid Grid.Row="1" ClipToBounds="True">
