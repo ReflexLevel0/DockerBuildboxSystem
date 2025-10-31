@@ -17,6 +17,8 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
     public sealed partial class ContainerConsoleViewModel : ViewModelBase
     {
         private readonly IContainerService _service;
+        private readonly IClipboardService? _clipboard;
+
         private CancellationTokenSource? _cts;
         private Task? _logStreamTask;
         private Task? _uiUpdateTask;
@@ -52,9 +54,16 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [ObservableProperty]
         private bool _autoStartLogs = true;
 
-        public ContainerConsoleViewModel(IContainerService service)
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ContainerConsoleViewModel"/> class.
+        /// </summary>
+        /// <param name="service">The container service used to interact with containers, ex Docker.</param>
+        /// <param name="clipboard">Optional clipboard service for copying the text output.</param>
+        /// <exception cref="ArgumentNullException"></exception>
+        public ContainerConsoleViewModel(IContainerService service, IClipboardService? clipboard = null)
         {
             _service = service ?? throw new ArgumentNullException(nameof(service));
+            _clipboard = clipboard;
             _syncContext = SynchronizationContext.Current;
         }
 
@@ -273,6 +282,20 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         {
             Lines.Clear();
             return Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// The copy command to copy output of the container to clipboard.
+        /// </summary>
+        /// <returns></returns>
+        [RelayCommand]
+        private async Task CopyAsync()
+        {
+            var text = string.Join(Environment.NewLine, Lines.Select(l => $"{l.Timestamp:HH:mm:ss} {l.Text}"));
+            if (_clipboard is not null)
+            {
+                await _clipboard.SetTextAsync(text);
+            }
         }
 
         private static string[] SplitShellLike(string cmd)
