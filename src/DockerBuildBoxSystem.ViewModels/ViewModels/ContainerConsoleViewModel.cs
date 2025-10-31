@@ -2,11 +2,13 @@
 using CommunityToolkit.Mvvm.Input;
 using DockerBuildBoxSystem.Contracts;
 using DockerBuildBoxSystem.ViewModels.Common;
+using DockerBuildBoxSystem.Models;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -26,11 +28,13 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
         public ObservableCollection<ConsoleLine> Lines { get; } = new();
         public ObservableCollection<ContainerInfo> Containers { get; } = new();
+        public ObservableCollection<UserCommand> UserCommands { get; } = new();
 
         [ObservableProperty]
         private string? _input;
 
         [ObservableProperty]
+
         private string _containerId = "";
 
         [ObservableProperty]
@@ -65,6 +69,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             _service = service ?? throw new ArgumentNullException(nameof(service));
             _clipboard = clipboard;
             _syncContext = SynchronizationContext.Current;
+            _ = LoadUserCommandsAsync();
         }
 
         [RelayCommand]
@@ -295,6 +300,82 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             if (_clipboard is not null)
             {
                 await _clipboard.SetTextAsync(text);
+            }
+        }
+
+        /// <summary>
+        /// Executes the specified user command asynchronously within the selected container.
+        /// </summary>
+        /// <remarks>This method sends the command to the selected container and captures the output,
+        /// including standard output and error streams. The results are displayed in the UI. If no container is
+        /// selected, the method logs a message indicating that no action was taken.</remarks>
+        /// <param name="userCmd">The user command to execute. Can include the command and its arguments. If <paramref name="userCmd"/> is
+        /// <see langword="null"/>, the method does not execute any command.</param>
+        /// <returns>A task that represents the asynchronous operation.</returns>
+        [RelayCommand]
+        private async Task RunUserCommandAsync(UserCommand? userCmd)
+        {
+            // Check if the user command or selected container is null
+            if (userCmd is null || SelectedContainer is null)
+            {
+                AddLineToUI(new ConsoleLine(DateTime.Now, "[user-cmd] No command selected or no container selected.", true));
+                return;
+            }
+            // Get the command to execute and log it to the UI
+            var cmd = userCmd.Command;
+            AddLineToUI(new ConsoleLine(DateTime.Now, $"> {string.Join(' ', cmd)}", false));
+
+            try
+            {
+                var (exitCode, stdout, stderr) = await _service.ExecAsync(SelectedContainer.Id, cmd, tty: false);
+                if (!string.IsNullOrEmpty(stdout))
+                {
+                    AddLineToUI(new ConsoleLine(DateTime.Now, stdout.TrimEnd('\r', '\n'), false));
+                }
+                if (!string.IsNullOrEmpty(stderr))
+                {
+                    AddLineToUI(new ConsoleLine(DateTime.Now, stderr.TrimEnd('\r', '\n'), true));
+                }
+                AddLineToUI(new ConsoleLine(DateTime.Now, $"[exit] {exitCode}", false));
+            }
+            catch (Exception ex)
+            {
+                AddLineToUI(new ConsoleLine(DateTime.Now, $"[exec-error] {ex.Message}", true));
+            }
+        }
+
+        /// <summary>
+        /// Asynchronously loads user-defined commands from a JSON configuration file.
+        /// </summary>
+        /// <remarks>If the specified configuration file does not exist, a default set of commands is
+        /// created, serialized to the file, and then loaded. The commands are deserialized into a list of <see
+        /// cref="UserCommand"/> objects and added to the <c>UserCommands</c> collection.</remarks>
+        /// <param name="filename">The name of the configuration file to load. Defaults to "commands.json".</param>
+        /// <returns>A task that represents the asynchronous operation.</returns>
+        private async Task LoadUserCommandsAsync(string filename = "commands.json")
+        {
+            // Determine the path to the configuration file
+            var configPath = Path.Combine(AppContext.BaseDirectory, "Config", filename);
+            // If the file does not exist, create it with default commands
+            if (!File.Exists(configPath))
+            {
+                var defaultCmds = new[]
+                {
+                    new UserCommand { Label = "List /", Command = ["ls", "/"] },
+                    new UserCommand { Label = "Check Disk", Command = ["df", "-h"] },
+                };
+                Directory.CreateDirectory(Path.GetDirectoryName(configPath)!);
+                await File.WriteAllTextAsync(configPath,
+                    JsonSerializer.Serialize(defaultCmds, new JsonSerializerOptions { WriteIndented = true }));
+            }
+            // Read and deserialize the commands from the configuration file
+            var json = await File.ReadAllTextAsync(configPath);
+            var cmds = JsonSerializer.Deserialize<List<UserCommand>>(json) ?? new List<UserCommand>();
+            UserCommands.Clear();
+            // Add each command to the UserCommands collection
+            foreach (var cmd in cmds)
+            {
+                UserCommands.Add(cmd);
             }
         }
 

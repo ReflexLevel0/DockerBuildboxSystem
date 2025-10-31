@@ -1,0 +1,22 @@
+﻿[
+  {
+    "Label": "List /",
+    "Command": [ "ls", "/" ]
+  },
+  {
+    "Label": "Custom",
+    "Command": [ "bash", "-c", "/home/ubuntu/myscript.sh" ]
+  },
+  {
+    "Label": "Show Env",
+    "Command": [ "printenv" ]
+  },
+  {
+    "Label": "Disk Usage",
+    "Command": [ "df", "-h" ]
+  },
+  {
+    "Label": "Processes",
+    "Command": [ "ps", "aux" ]
+  }
+]

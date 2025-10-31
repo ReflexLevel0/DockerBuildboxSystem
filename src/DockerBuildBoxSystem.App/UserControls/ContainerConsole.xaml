@@ -13,8 +13,8 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
@@ -74,7 +74,29 @@
                     MinWidth="70"/>
         </Grid>
 
-        <Grid Grid.Row="1" ClipToBounds="True">
+        <!-- User Commands -->
+        <ItemsControl Grid.Row="1"
+              ItemsSource="{Binding UserCommands}"
+              Margin="6">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <StackPanel Orientation="Horizontal"  />
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <Button Content="{Binding Label}"
+                    Command="{Binding DataContext.RunUserCommandCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                    CommandParameter="{Binding }"
+                    Padding="8,4"
+                    Margin="0,0,6,0"
+                    MinWidth="80"/>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+
+        </ItemsControl>
+
+        <Grid Grid.Row="2" ClipToBounds="True">
             <!-- Output -->
             <ScrollViewer
                           VerticalScrollBarVisibility="Hidden"
