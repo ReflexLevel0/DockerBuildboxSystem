@@ -452,9 +452,26 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
         private void UpdateCommandStates()
         {
-            SendCommand.NotifyCanExecuteChanged();
-            StartLogsCommand.NotifyCanExecuteChanged();
-            StopLogsCommand.NotifyCanExecuteChanged();
+            if (_syncContext == null)
+            {
+                NotifyAll();
+                return;
+            }
+
+            _syncContext.Post(_ => NotifyAll(), null);
+
+            void NotifyAll()
+            {
+                try { 
+                    SendCommand.NotifyCanExecuteChanged();
+                    StartLogsCommand.NotifyCanExecuteChanged();
+                    StopLogsCommand.NotifyCanExecuteChanged();
+                }
+                catch (InvalidOperationException)
+                {
+                    //protection in case things goes wrong, especially since this might be called during shutdown
+                }
+            }
         }
 
         partial void OnContainerIdChanged(string value)
