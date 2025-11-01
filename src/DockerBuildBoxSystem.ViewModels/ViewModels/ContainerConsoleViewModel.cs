@@ -318,7 +318,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             // Check if the user command or selected container is null
             if (userCmd is null || SelectedContainer is null)
             {
-                AddLineToUI(new ConsoleLine(DateTime.Now, "[user-cmd] No command selected or no container selected.", true));
+                AddLineToUI(new ConsoleLine(DateTime.Now, "[user-cmd] No command or container selected.", true));
                 return;
             }
             // Get the command to execute and log it to the UI
