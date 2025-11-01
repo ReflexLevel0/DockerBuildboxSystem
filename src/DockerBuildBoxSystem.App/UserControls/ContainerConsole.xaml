@@ -76,32 +76,36 @@
 
         <Grid Grid.Row="1" ClipToBounds="True">
             <!-- Output -->
-            <ScrollViewer
-                          VerticalScrollBarVisibility="Hidden"
-                          Background="#111"
-                          x:Name="OutputScroller">
-                <ItemsControl ItemsSource="{Binding Lines}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <TextBlock FontFamily="Consolas" FontSize="13">
-                                <TextBlock.Style>
-                                    <Style TargetType="TextBlock">
-                                        <Setter Property="Foreground" Value="#ddd"/>
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding IsError}" Value="True">
-                                                <Setter Property="Foreground" Value="#ff4444"/>
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </TextBlock.Style>
-                                <Run Text="{Binding Timestamp, StringFormat='[{0:HH:mm:ss}]'}" Foreground="#888"/>
-                                <Run Text=" "/>
-                                <Run Text="{Binding Text}"/>
-                            </TextBlock>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </ScrollViewer>
+            <!-- using ListBox now instead of ScrollViewer -->
+            <ListBox x:Name="OutputList"
+                     ItemsSource="{Binding Lines}"
+                     Background="{StaticResource ContainerBackgroundBrush}"
+                     BorderThickness="0"
+                     ScrollViewer.VerticalScrollBarVisibility="Auto"
+                     ScrollViewer.CanContentScroll="True"
+                     VirtualizingStackPanel.IsVirtualizing="True"
+                     VirtualizingStackPanel.VirtualizationMode="Recycling"
+                     VirtualizingStackPanel.CacheLength="2">
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock FontFamily="Consolas" FontSize="13">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Foreground" Value="{StaticResource ContainerNormalBrush}"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsError}" Value="True">
+                                            <Setter Property="Foreground" Value="{StaticResource ContainerErrorBrush}"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                            <Run Text="{Binding Timestamp, StringFormat='[{0:HH:mm:ss}]'}" Foreground="{StaticResource ContainerTimestampBrush}"/>
+                            <Run Text=" "/>
+                            <Run Text="{Binding Text}"/>
+                        </TextBlock>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
 
             <!-- Control Buttons -->
             <StackPanel Orientation="Horizontal" 

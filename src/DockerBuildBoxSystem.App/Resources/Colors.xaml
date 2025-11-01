@@ -4,9 +4,21 @@
     <!-- Primary Colors -->
     <Color x:Key="PrimaryColor">#FFFFFF</Color>
     <Color x:Key="TitleTextColor">#313373</Color>
-    
+
+    <!-- Container Terminal Colors -->
+    <Color x:Key="ContainerBackgroundColor">#111</Color>
+    <Color x:Key="ContainerNormalTextColor">#ddd</Color>
+    <Color x:Key="ContainerErrorTextColor">#ff4444</Color>
+    <Color x:Key="ContainerTimestampColor">#888</Color>
+
     <!-- Brushes -->
     <SolidColorBrush x:Key="PrimaryBrush" Color="{StaticResource PrimaryColor}"/>
     <SolidColorBrush x:Key="TitleTextBrush" Color="{StaticResource TitleTextColor}"/>
-    
+
+    <!-- Container Terminal Brushes -->
+    <SolidColorBrush x:Key="ContainerBackgroundBrush" Color="{StaticResource ContainerBackgroundColor}"/>
+    <SolidColorBrush x:Key="ContainerNormalBrush" Color="{StaticResource ContainerNormalTextColor}"/>
+    <SolidColorBrush x:Key="ContainerErrorBrush" Color="{StaticResource ContainerErrorTextColor}"/>
+    <SolidColorBrush x:Key="ContainerTimestampBrush" Color="{StaticResource ContainerTimestampColor}"/>
+
 </ResourceDictionary>
