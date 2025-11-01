@@ -288,23 +288,21 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private void Send()
         {
             var cmd = (Input ?? String.Empty).Trim();
+            //Clear the input after sending
             Input = string.Empty;
-            await ExecuteAndLogAsync(cmd);
+            ExecuteAndLogAsync(cmd);
         }
 
         [RelayCommand(CanExecute = nameof(CanSend))]
-        private async Task BuildAsync() => await ExecuteAndLogAsync("echo Building...");
+        private void BuildAsync() => ExecuteAndLogAsync("echo Building...");
 
         [RelayCommand(CanExecute = nameof(CanSend))]
-        private async Task CleanAsync() => await ExecuteAndLogAsync("echo Cleaning...");
+        private void CleanAsync() => ExecuteAndLogAsync("echo Cleaning...");
 
-        private async Task ExecuteAndLogAsync(string cmd)
+        private void ExecuteAndLogAsync(string cmd)
         {
             //add command to console on UI thread
             EnqueueLine(new ConsoleLine(DateTime.Now, $"> {cmd}", false));
-
-            //Clear the input after sending
-            Input = string.Empty;
 
             //cancel any existing exec task
             _execCts?.Cancel();
