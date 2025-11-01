@@ -290,16 +290,16 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             var cmd = (Input ?? String.Empty).Trim();
             //Clear the input after sending
             Input = string.Empty;
-            ExecuteAndLogAsync(cmd);
+            ExecuteAndLog(cmd);
         }
 
         [RelayCommand(CanExecute = nameof(CanSend))]
-        private void BuildAsync() => ExecuteAndLogAsync("echo Building...");
+        private void Build() => ExecuteAndLog("echo Building...");
 
         [RelayCommand(CanExecute = nameof(CanSend))]
-        private void CleanAsync() => ExecuteAndLogAsync("echo Cleaning...");
+        private void Clean() => ExecuteAndLog("echo Cleaning...");
 
-        private void ExecuteAndLogAsync(string cmd)
+        private void ExecuteAndLog(string cmd)
         {
             //add command to console on UI thread
             EnqueueLine(new ConsoleLine(DateTime.Now, $"> {cmd}", false));
@@ -472,6 +472,8 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             {
                 try { 
                     SendCommand.NotifyCanExecuteChanged();
+                    BuildCommand.NotifyCanExecuteChanged();
+                    CleanCommand.NotifyCanExecuteChanged();
                     StartLogsCommand.NotifyCanExecuteChanged();
                     StopLogsCommand.NotifyCanExecuteChanged();
                 }
