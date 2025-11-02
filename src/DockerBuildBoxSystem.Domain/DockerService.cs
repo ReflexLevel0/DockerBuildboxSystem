@@ -8,6 +8,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Channels;
 using System.Threading.Tasks;
+using System.Xml.Linq;
 
 namespace DockerBuildBoxSystem.Domain
 {
@@ -64,27 +65,40 @@ namespace DockerBuildBoxSystem.Domain
         #endregion
 
         #region Container Operations
-        public Task<bool> StartAsync(string containerId, CancellationToken ct = default) =>
-            _client.Containers.StartContainerAsync(containerId, new ContainerStartParameters(), ct);
+        public async Task<bool> StartAsync(string containerId, CancellationToken ct = default) =>
+            await _client.Containers.StartContainerAsync(containerId, new ContainerStartParameters(), ct);
 
-        public Task StopAsync(string containerId, TimeSpan timeout, CancellationToken ct = default) =>
-            _client.Containers.StopContainerAsync(containerId,
+        public async Task StopAsync(string containerId, TimeSpan timeout, CancellationToken ct = default) =>
+            await _client.Containers.StopContainerAsync(containerId,
                 new ContainerStopParameters { WaitBeforeKillSeconds = (uint)timeout.TotalSeconds }, ct);
 
 
-        public Task RemoveAsync(string containerId, bool force = false, CancellationToken ct = default) =>
-            _client.Containers.RemoveContainerAsync(containerId,
+        public async Task RemoveAsync(string containerId, bool force = false, CancellationToken ct = default) =>
+            await _client.Containers.RemoveContainerAsync(containerId,
                 new ContainerRemoveParameters { Force = force }, ct);
 
 
-        public Task RestartAsync(string containerId, TimeSpan timeout, CancellationToken ct = default) =>
-            _client.Containers.RestartContainerAsync(containerId,
+        public async Task RestartAsync(string containerId, TimeSpan timeout, CancellationToken ct = default) =>
+            await _client.Containers.RestartContainerAsync(containerId,
                 new ContainerRestartParameters { WaitBeforeKillSeconds = (uint)timeout.TotalSeconds }, ct);
 
 
-        public Task KillContainer(string containerId, CancellationToken ct = default) =>
-            _client.Containers.KillContainerAsync(containerId, new ContainerKillParameters(), ct);
+        public async Task KillContainer(string containerId, CancellationToken ct = default) =>
+            await _client.Containers.KillContainerAsync(containerId, new ContainerKillParameters(), ct);
 
+        public async Task<ContainerInfo> InspectAsync(string containerId, CancellationToken ct = default)
+        {
+            var inspect = await _client.Containers.InspectContainerAsync(containerId, ct);
+
+            return new ContainerInfo
+            {
+                Id = inspect.ID,
+                Names = string.IsNullOrEmpty(inspect.Name) ? Array.Empty<string>() : [inspect.Name],
+                Status = inspect.State?.Status,
+                Tty = inspect.Config?.Tty ?? false,
+                LogDriver = inspect.HostConfig?.LogConfig?.Type
+            };
+        }
 
         public async Task<IList<ContainerInfo>> ListContainersAsync(
             bool all = false,
@@ -265,6 +279,121 @@ namespace DockerBuildBoxSystem.Domain
             var stdout = Encoding.UTF8.GetString(outMs.ToArray());
             var stderr = Encoding.UTF8.GetString(errMs.ToArray());
             return (resp.ExitCode, stdout, stderr);
+        }
+
+        public async Task<(ChannelReader<(bool IsStdErr, string Line)> Output, Task<long> ExitCodeTask)> StreamExecAsync(
+            string containerId,
+            IReadOnlyList<string> cmd,
+            bool tty = false,
+            CancellationToken ct = default)
+        {
+            var ch = Channel.CreateUnbounded<(bool, string)>(new UnboundedChannelOptions { SingleReader = true, SingleWriter = true });
+
+            //Create the exec instance
+            var create = await _client.Exec.ExecCreateContainerAsync(containerId,
+                new ContainerExecCreateParameters
+                {
+                    Cmd = cmd.ToList(),
+                    AttachStdout = true,
+                    AttachStderr = true,
+                    AttachStdin = false,
+                    Tty = tty
+                }, ct);
+
+            var execId = create.ID;
+
+            //A task that streams the output and returns the exit code
+            var exitCodeTask = Task.Run(async () =>
+            {
+                MultiplexedStream? stream = null;
+                CancellationTokenRegistration? registration = default;
+
+                var buffer = new byte[4096];
+                var lineBufferStdOut = new StringBuilder();
+                var lineBufferStdErr = new StringBuilder();
+
+                try
+                {
+                    //Start and attach to the exec instance
+                    stream = await _client.Exec.StartAndAttachContainerExecAsync(execId, tty, ct).ConfigureAwait(false);
+
+                    //Register cancellation callback to dispose stream immediately
+                    registration = ct.Register(() => stream?.Dispose());
+
+                    while(!ct.IsCancellationRequested)
+                    {
+                        //read from the multiplexed stream
+                        var result = await stream.ReadOutputAsync(buffer, 0, buffer.Length, ct);
+
+                        if (result.Count == 0)
+                            break; //end of stream
+
+                        var text = Encoding.UTF8.GetString(buffer, 0, result.Count);
+
+                        bool isStdErr = result.Target == MultiplexedStream.TargetStream.StandardError;
+                        var lineBuffer = isStdErr ? lineBufferStdErr : lineBufferStdOut;
+
+                        //split by lines and add each line
+                        var lines = text.Split(new[] { '\n' }, StringSplitOptions.None);
+                        for (int i = 0; i < lines.Length; i++)
+                        {
+                            //incomplete line so save for next read
+                            if (i == lines.Length - 1 && !text.EndsWith('\n'))
+                            {
+                                lineBuffer.Append(lines[i]);
+                                continue;
+                            }
+
+                            var completeLine = lineBuffer.ToString() + lines[i];
+                            if (!string.IsNullOrEmpty(completeLine) || (completeLine == string.Empty && i < lines.Length - 1))
+                            {
+                                await ch.Writer.WriteAsync((isStdErr, completeLine.TrimEnd('\r')), CancellationToken.None);
+                            }
+                            lineBuffer.Clear();
+                        }
+                    }
+
+                    //add any remaining buffered text
+                    if (lineBufferStdOut.Length > 0)
+                    {
+                        await ch.Writer.WriteAsync((false, lineBufferStdOut.ToString().TrimEnd('\r')), CancellationToken.None);
+                    }
+                    if (lineBufferStdErr.Length > 0)
+                    {
+                        await ch.Writer.WriteAsync((true, lineBufferStdErr.ToString().TrimEnd('\r')), CancellationToken.None);
+                    }
+
+                    //wait for the exec to finish and get exit code
+                    var resp = await _client.Exec.InspectContainerExecAsync(execId, ct);
+                    return resp.ExitCode;
+                }
+                catch (OperationCanceledException)
+                {
+                    //if cancellation is requested
+                    throw;
+                }
+                catch (ObjectDisposedException)
+                {
+                    //if stream is disposed due to cancellation
+                    throw new OperationCanceledException();
+                }
+                catch (Exception ex)
+                {
+                    ch.Writer.TryComplete(ex);
+                    throw;
+                }
+                finally
+                {
+                    //unregister the cancellation callback
+                    registration?.Dispose();
+
+                    //ensure the stream is disposed
+                    stream?.Dispose();
+                    ch.Writer.TryComplete();
+                }
+            }, ct);
+
+            return (ch.Reader, exitCodeTask);
         }
         #endregion
 

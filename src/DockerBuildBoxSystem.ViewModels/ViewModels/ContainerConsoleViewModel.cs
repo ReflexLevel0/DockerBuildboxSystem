@@ -21,12 +21,26 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private readonly IContainerService _service;
         private readonly IClipboardService? _clipboard;
 
-        private CancellationTokenSource? _cts;
+        //Canellation tokens
+        //logs streaming
+        private CancellationTokenSource? _logsCts;
         private Task? _logStreamTask;
+        
+        //exec streaming
+        private CancellationTokenSource? _execCts;
+        private Task? _execTask;
+
+        //To ensure UI is responsive
+        private const int MaxConsoleLines = 2000;
+        private const int MaxLinesPerTick = 200;
+
+        //global UI update
+        private readonly ConcurrentQueue<ConsoleLine> _outputQueue = new();
+        private CancellationTokenSource? _uiUpdateCts;
         private Task? _uiUpdateTask;
         private readonly SynchronizationContext? _syncContext;
 
-        public ObservableCollection<ConsoleLine> Lines { get; } = new();
+        public ObservableCollection<ConsoleLine> Lines { get; } = new ContainerObservableCollection<ConsoleLine>();
         public ObservableCollection<ContainerInfo> Containers { get; } = new();
         public ObservableCollection<UserCommand> UserCommands { get; } = new();
 
@@ -41,10 +55,10 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private string _tail = "50";
 
         [ObservableProperty]
-        private bool _tty;
+        private bool _isLogsRunning;
 
         [ObservableProperty]
-        private bool _isLogsRunning;
+        private bool _isCommandRunning;
 
         [ObservableProperty]
         private ContainerInfo? _selectedContainer;
@@ -75,6 +89,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [RelayCommand]
         private async Task InitializeAsync()
         {
+            // Start the global UI update task
+            StartUiUpdateTask();
+
             //load available containers on initialization
             await RefreshContainersCommand.ExecuteAsync(null);
 
@@ -83,6 +100,139 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             {
                 await StartLogsCommand.ExecuteAsync(null);
             }
+        }
+
+        /// <summary>
+        /// Starts the global UI update task that processes the output queue.
+        /// Separated to avoid multiple concurrent UI updates.
+        /// </summary>
+        private void StartUiUpdateTask()
+        {
+            if (_uiUpdateTask != null)
+                return; //if it is already running
+
+            _uiUpdateCts = new CancellationTokenSource();
+            var ct = _uiUpdateCts.Token;
+
+            var uiTimer = new PeriodicTimer(TimeSpan.FromMilliseconds(50));
+
+            _uiUpdateTask = Task.Run(async () =>
+            {
+                try
+                {
+                    while (await uiTimer.WaitForNextTickAsync(ct))
+                    {
+                        //Restrict the number of lines per tick
+                        //If we dequeue everything at once it might overwhelm the UI
+                        var batch = new List<ConsoleLine>(MaxLinesPerTick);
+                        while (batch.Count < MaxLinesPerTick && _outputQueue.TryDequeue(out var line))
+                        {
+                            batch.Add(line);
+                        }
+
+                        if (batch.Count > 0)
+                        {
+                            PostBatchToUI(batch);
+                        }
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    //If operation is canceled, flush any remaining items
+                    while(!_outputQueue.IsEmpty)
+                    {
+                        var batch = new List<ConsoleLine>(MaxLinesPerTick);
+                        while (batch.Count < MaxLinesPerTick && _outputQueue.TryDequeue(out var line))
+                        {
+                            batch.Add(line);
+                        }
+                        if (batch.Count == 0) break;
+                        PostBatchToUI(batch);
+                    }
+                }
+                finally
+                {
+                    uiTimer.Dispose();
+                }
+            }, ct);
+        }
+
+        private void PostBatchToUI(IReadOnlyList<ConsoleLine> batch)
+        {
+            if (batch.Count == 0) return;
+
+            if (_syncContext != null)
+            {
+                _syncContext.Post(state =>
+                {
+                    var list = (IReadOnlyList<ConsoleLine>)state!;
+                    AddLinesToUI(list);
+                }, batch);
+            }
+            else
+            {
+                AddLinesToUI(batch);
+            }
+        }
+
+        private void AddLinesToUI(IReadOnlyList<ConsoleLine> lines)
+        {
+            if (lines.Count == 0) return;
+
+            if (Lines is ContainerObservableCollection<ConsoleLine> contLines)
+            {
+                contLines.AddRange(lines);
+            }
+            else
+            {
+                foreach (var line in lines)
+                {
+                    Lines.Add(line);
+                }
+            }
+
+            //Trim the UI by removing old lines - why? keep it responsive! otherwise... lags
+            if (Lines.Count > MaxConsoleLines)
+            {
+                var toRemove = Lines.Count - MaxConsoleLines;
+                //remove from the start
+                for (int i = 0; i < toRemove; i++)
+                {
+                    Lines.RemoveAt(0);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Stops the UI update task.
+        /// </summary>
+        private async Task StopUiUpdateTaskAsync()
+        {
+            _uiUpdateCts?.Cancel();
+
+            if (_uiUpdateTask != null)
+            {
+                try
+                {
+                    await _uiUpdateTask.WaitAsync(TimeSpan.FromSeconds(2));
+                }
+                catch (OperationCanceledException) { }
+                catch (TimeoutException) { }
+                finally
+                {
+                    _uiUpdateTask = null;
+                    _uiUpdateCts?.Dispose();
+                    _uiUpdateCts = null;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Enqueues a line to be added to the console output on the UI thread.
+        /// </summary>
+        private void EnqueueLine(ConsoleLine line)
+        {
+            _outputQueue.Enqueue(line);
         }
 
         [RelayCommand]
@@ -103,7 +253,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             }
             catch (Exception ex)
             {
-                AddLineToUI(new ConsoleLine(DateTime.Now, $"[container-list-error] {ex.Message}", true));
+                EnqueueLine(new ConsoleLine(DateTime.Now, $"[container-list-error] {ex.Message}", true));
             }
             finally
             {
@@ -116,7 +266,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             if (value != null)
             {
                 ContainerId = value.Id;
-                AddLineToUI(new ConsoleLine(DateTime.Now, $"[info] Selected container: {value.Names.FirstOrDefault() ?? value.Id}", false));
+                EnqueueLine(new ConsoleLine(DateTime.Now, $"[info] Selected container: {value.Names.FirstOrDefault() ?? value.Id}", false));
 
                 //auto start logs if enabled
                 if(AutoStartLogs && !string.IsNullOrWhiteSpace(ContainerId))
@@ -134,42 +284,66 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             _ = RefreshContainersCommand.ExecuteAsync(null);
         }
 
-        private bool CanSend() => !string.IsNullOrWhiteSpace(ContainerId);
+        private bool CanSend() => !string.IsNullOrWhiteSpace(ContainerId) && !IsCommandRunning;
 
         [RelayCommand(CanExecute = nameof(CanSend))]
-        private async Task SendAsync()
+        private async Task Send()
         {
             var cmd = (Input ?? "").Trim();
             if (string.IsNullOrEmpty(cmd)) return;
 
             //add command to console on UI thread
-            Lines.Add(new ConsoleLine(DateTime.Now, $"> {cmd}", false));
+            EnqueueLine(new ConsoleLine(DateTime.Now, $"> {cmd}", false));
+
+            //Clear the input after sending
             Input = string.Empty;
 
-            try
+            //cancel any existing exec task
+            _execCts?.Cancel();
+            _execCts = new CancellationTokenSource();
+            var ct = _execCts.Token;
+
+            var containerInfo = await _service.InspectAsync(ContainerId, ct);
+
+            //Whether to use TTY mode based on container settings
+            bool useTty = containerInfo.Tty;
+
+            //Execute with streaming output in background (fire-and-forget style)
+            _execTask = Task.Run(async () =>
             {
-                var args = SplitShellLike(cmd);
-
-                //Execute directly
-                var (exitCode, stdout, stderr) = await _service.ExecAsync(ContainerId, args, tty: false);
-
-                //back on UI thread so safe to add to Lines
-                if (!string.IsNullOrEmpty(stdout))
+                try
                 {
-                    Lines.Add(new ConsoleLine(DateTime.Now, stdout.TrimEnd('\r', '\n'), false));
-                }
+                    var args = SplitShellLike(cmd);
+                    var (output, exitCodeTask) = await _service.StreamExecAsync(ContainerId, args, tty: useTty, ct: ct);
 
-                if (!string.IsNullOrEmpty(stderr))
+                    //Stream the output line by line
+                    await foreach (var (isErr, text) in output.ReadAllAsync(ct))
+                    {
+                        if (text is null) continue;
+                        EnqueueLine(new ConsoleLine(DateTime.Now, text, isErr));
+                    }
+
+                    //Get the exit code after the stream completes
+                    var exitCode = await exitCodeTask;
+                    EnqueueLine(new ConsoleLine(DateTime.Now, $"[exit] {exitCode}", false));
+                }
+                catch (OperationCanceledException)
                 {
-                    Lines.Add(new ConsoleLine(DateTime.Now, stderr.TrimEnd('\r', '\n'), true));
+                    EnqueueLine(new ConsoleLine(DateTime.Now, "[exec] canceled", false));
                 }
+                catch (Exception ex)
+                {
+                    EnqueueLine(new ConsoleLine(DateTime.Now, $"[exec-error] {ex.Message}", true));
+                }
+                finally
+                {
+                    IsCommandRunning = false;
+                    UpdateCommandStates();
+                }
+            }, ct);
 
-                Lines.Add(new ConsoleLine(DateTime.Now, $"[exit] {exitCode}", false));
-            }
-            catch (Exception ex)
-            {
-                Lines.Add(new ConsoleLine(DateTime.Now, $"[exec-error] {ex.Message}", true));
-            }
+            IsCommandRunning = true;
+            UpdateCommandStates();
         }
 
         private bool CanStartLogs() => !IsLogsRunning && !string.IsNullOrWhiteSpace(ContainerId);
@@ -180,40 +354,13 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             //Stop existing logs if it is currently running
             await StopLogsAsync();
 
-            _cts = new();
-            var ct = _cts.Token;
+            _logsCts = new();
+            var ct = _logsCts.Token;
 
-            var queue = new ConcurrentQueue<ConsoleLine>();
+            var containerInfo = await _service.InspectAsync(ContainerId, ct);
 
-            //
-            var uiTimer = new PeriodicTimer(TimeSpan.FromMilliseconds(50));
-
-            //store the UI update task so we can await it during cleanup
-            _uiUpdateTask = Task.Run(async () =>
-            {
-                try
-                {
-                    while (await uiTimer.WaitForNextTickAsync(ct))
-                    {
-                        while (queue.TryDequeue(out var line))
-                        {
-                            AddLineToUI(line);
-                        }
-                    }
-                }
-                catch (OperationCanceledException)
-                {
-                    //flush any remaining items
-                    while (queue.TryDequeue(out var line))
-                    {
-                        AddLineToUI(line);
-                    }
-                }
-                finally
-                {
-                    uiTimer.Dispose();
-                }
-            }, ct);
+            //Whether to use TTY mode based on container settings
+            bool useTty = containerInfo.Tty;
 
             _logStreamTask = Task.Run(async () =>
             {
@@ -223,24 +370,24 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                         ContainerId,
                         follow: true,
                         tail: Tail,
-                        tty: Tty,
+                        tty: useTty,
                         ct: ct);
 
                     await foreach (var (isErr, text) in reader.ReadAllAsync(ct))
                     {
                         if (text is null) continue;
-                        queue.Enqueue(new ConsoleLine(DateTime.Now, text, isErr));
+                        EnqueueLine(new ConsoleLine(DateTime.Now, text, isErr));
                     }
 
-                    _cts?.Token.ThrowIfCancellationRequested();
+                    _logsCts?.Token.ThrowIfCancellationRequested();
                 }
                 catch (OperationCanceledException)
                 {
-                    queue.Enqueue(new ConsoleLine(DateTime.Now, "[logs] canceled", false));
+                    EnqueueLine(new ConsoleLine(DateTime.Now, "[logs] canceled", false));
                 }
                 catch (Exception ex)
                 {
-                    queue.Enqueue(new ConsoleLine(DateTime.Now, $"[logs-error] {ex.Message}", true));
+                    EnqueueLine(new ConsoleLine(DateTime.Now, $"[logs-error] {ex.Message}", true));
                 }
             }, ct);
 
@@ -253,32 +400,26 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [RelayCommand(CanExecute = nameof(CanStopLogs))]
         private async Task StopLogsAsync()
         {
-            _cts?.Cancel();
+            _logsCts?.Cancel();
 
-            var toAwait = new List<Task>();
-            if (_logStreamTask is not null) toAwait.Add(_logStreamTask);
-            if (_uiUpdateTask is not null) toAwait.Add(_uiUpdateTask);
-
-            try
+            if (_logStreamTask is not null)
             {
-                if (toAwait.Count > 0)
+                try
                 {
                     //await with a timeout to prevent hanging during shutdown
-                    await Task.WhenAll(toAwait).WaitAsync(TimeSpan.FromSeconds(2));
+                    await _logStreamTask.WaitAsync(TimeSpan.FromSeconds(2));
                 }
-            }
-            catch (OperationCanceledException) {}
-            catch (Exception) { /* shouldn't happen here... */ }
-            finally
-            {
-                _logStreamTask = null;
-                _uiUpdateTask = null;
+                catch (OperationCanceledException) {}
+                catch (TimeoutException) { }
+                finally
+                {
+                    _logStreamTask = null;
+                    _logsCts?.Dispose();
+                    _logsCts = null;
 
-                _cts?.Dispose();
-                _cts = null;
-
-                IsLogsRunning = false;
-                UpdateCommandStates();
+                    IsLogsRunning = false;
+                    UpdateCommandStates();
+                }
             }
         }
 
@@ -399,9 +540,26 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
         private void UpdateCommandStates()
         {
-            SendCommand.NotifyCanExecuteChanged();
-            StartLogsCommand.NotifyCanExecuteChanged();
-            StopLogsCommand.NotifyCanExecuteChanged();
+            if (_syncContext == null)
+            {
+                NotifyAll();
+                return;
+            }
+
+            _syncContext.Post(_ => NotifyAll(), null);
+
+            void NotifyAll()
+            {
+                try { 
+                    SendCommand.NotifyCanExecuteChanged();
+                    StartLogsCommand.NotifyCanExecuteChanged();
+                    StopLogsCommand.NotifyCanExecuteChanged();
+                }
+                catch (InvalidOperationException)
+                {
+                    //protection in case things goes wrong, especially since this might be called during shutdown
+                }
+            }
         }
 
         partial void OnContainerIdChanged(string value)
@@ -409,9 +567,33 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             UpdateCommandStates();
         }
 
+        /// <summary>
+        /// cancel and cleanup task
+        /// </summary>
+        /// <returns></returns>
         public override async ValueTask DisposeAsync()
         {
             await StopLogsAsync();
+            
+            _execCts?.Cancel();
+            if (_execTask != null)
+            {
+                try
+                {
+                    await _execTask.WaitAsync(TimeSpan.FromSeconds(2));
+                }
+                //If operation is canceled or times out.. cur only proceeds to cleanup
+                catch (OperationCanceledException) { }
+                catch (TimeoutException) { }
+                finally
+                {
+                    _execTask = null;
+                    _execCts?.Dispose();
+                    _execCts = null;
+                }
+            }
+            
+            await StopUiUpdateTaskAsync();
             await base.DisposeAsync();
         }
     }

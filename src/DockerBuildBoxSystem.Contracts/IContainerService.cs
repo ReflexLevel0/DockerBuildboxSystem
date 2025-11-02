@@ -36,7 +36,14 @@ namespace DockerBuildBoxSystem.Contracts
         /// The image name used by the container.
         /// </summary>
         public string? Image { get; init; }
+
+        //whether the container was started with TTY (Config.Tty)
+        public bool Tty { get; init; }
+
+        //HostConfig.LogConfig.Type (e.g., "json-file", "none", "local")
+        public string? LogDriver { get; init; }
     }
+
     /// <summary>
     /// Defines an abstraction for interacting with the Docker Engine API.
     /// </summary>
@@ -88,6 +95,16 @@ namespace DockerBuildBoxSystem.Contracts
         Task KillContainer(string containerId, CancellationToken ct = default);
 
         /// <summary>
+        /// Retrieves detailed information about a container with the specified ID.
+        /// </summary>
+        /// <remarks>Method to retrieve metadata and runtime details about a container, such as
+        /// its status, configuration, and resource usage.</remarks>
+        /// <param name="containerId">The unique identifier of the container to inspect.</param>
+        /// <param name="ct">Cancellation token</param>
+        /// <returns>A <see cref="ContainerInfo"/> object containing detailed information about the specified container.</returns>
+        Task<ContainerInfo> InspectAsync(string containerId, CancellationToken ct = default);
+
+        /// <summary>
         /// Lists docker containers existing on the host, optionally filtered by name.
         /// </summary>
         /// <param name="all">If true, includes stopped containers</param>
@@ -119,12 +136,28 @@ namespace DockerBuildBoxSystem.Contracts
         /// Runs a command inside a running container and returns (exitCode, stdout, stderr).
         /// Set shell=null to pass a raw argv (e.g., ["sh","-lc","echo test"]).
         /// </summary>
-        /// <param name="containerId">The id or name of the container to log</param>
+        /// <param name="containerId">The id or name of the container</param>
         /// <param name="cmd">Command arguments (e.g., ["sh", "-c", "echo hello"])</param>
         /// <param name="tty">If true, runs a command with TTY enabled (merged output stream)</param>
-        /// <param name="ct">Cancellation token</param>
+        /// <param name="ct">Cancellation token to stop reading</param>
         /// <returns>Returns a tuple of (ExitCode, StdOut, StdErr).</returns>
         Task<(long ExitCode, string StdOut, string StdErr)> ExecAsync(
+            string containerId,
+            IReadOnlyList<string> cmd,
+            bool tty = false,
+            CancellationToken ct = default);
+
+        /// <summary>
+        /// Runs a command inside a running container and instead streams the output as it is produced.
+        /// Similar (same impl) to ExecAsync but returns output line-by-line as a Channel instead of waiting for completion.
+        /// The exit code can be retrieved by reading until the channel completes, then inspecting the exec.
+        /// </summary>
+        /// <param name="containerId">The id or name of the container</param>
+        /// <param name="cmd">Command arguments (e.g., ["sh", "-c", "echo hello"])</param>
+        /// <param name="tty">If true, runs a command with TTY enabled (merged output stream)</param>
+        /// <param name="ct">Cancellation token to stop reading</param>
+        /// <returns>Returns a tuple containing a channel reader that yields (IsStdErr, Line) tuples and a task that completes with the exit code when the command finishes</returns>
+        Task<(ChannelReader<(bool IsStdErr, string Line)> Output, Task<long> ExitCodeTask)> StreamExecAsync(
             string containerId,
             IReadOnlyList<string> cmd,
             bool tty = false,

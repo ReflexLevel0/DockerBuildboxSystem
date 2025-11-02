@@ -112,8 +112,11 @@ namespace DockerBuildBoxSystem.App.UserControls
         private void Lines_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
         {
             //auto-scroll to the bottom when new lines are added
-            if (e.Action == NotifyCollectionChangedAction.Add)
-                Dispatcher.BeginInvoke(() => OutputScroller?.ScrollToBottom());
+            if (e.Action == NotifyCollectionChangedAction.Add && OutputList?.Items.Count > 0)
+            {
+                var last = OutputList.Items[^1];
+                OutputList.ScrollIntoView(last);
+            }
         }
     }
 }
