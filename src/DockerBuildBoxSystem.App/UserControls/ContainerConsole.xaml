@@ -86,11 +86,11 @@
             <ItemsControl.ItemTemplate>
                 <DataTemplate>
                     <Button Content="{Binding Label}"
-                    Command="{Binding DataContext.RunUserCommandCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                    CommandParameter="{Binding }"
-                    Padding="8,4"
-                    Margin="0,0,6,0"
-                    MinWidth="80"/>
+                            Command="{Binding DataContext.RunUserCommandCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                            CommandParameter="{Binding }"
+                            Padding="8,4"
+                            Margin="0,0,6,0"
+                            MinWidth="80"/>
                 </DataTemplate>
             </ItemsControl.ItemTemplate>
 

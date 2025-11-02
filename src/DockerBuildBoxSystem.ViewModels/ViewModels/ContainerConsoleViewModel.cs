@@ -83,7 +83,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             _service = service ?? throw new ArgumentNullException(nameof(service));
             _clipboard = clipboard;
             _syncContext = SynchronizationContext.Current;
-            _ = LoadUserCommandsAsync();
         }
 
         [RelayCommand]
@@ -94,6 +93,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
             //load available containers on initialization
             await RefreshContainersCommand.ExecuteAsync(null);
+
+            // Load user-defined commands
+            await LoadUserCommandsAsync();
 
             //optionally auto-start logs if ContainerId is set
             if (AutoStartLogs && !string.IsNullOrWhiteSpace(ContainerId))
