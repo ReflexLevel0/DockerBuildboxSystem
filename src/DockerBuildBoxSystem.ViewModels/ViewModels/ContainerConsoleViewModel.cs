@@ -282,21 +282,21 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private bool CanSend() => !string.IsNullOrWhiteSpace(ContainerId) && !IsCommandRunning;
 
         [RelayCommand(CanExecute = nameof(CanSend))]
-        private async Task Send()
+        private async Task SendAsync()
         {
             var cmd = (Input ?? String.Empty).Trim();
             //Clear the input after sending
             Input = string.Empty;
-            ExecuteAndLog(cmd);
+            await ExecuteAndLogAsync(cmd);
         }
 
         [RelayCommand(CanExecute = nameof(CanSend))]
-        private void Build() => ExecuteAndLog("echo Building...");
+        private async Task BuildAsync() => await ExecuteAndLogAsync("echo Building...");
 
         [RelayCommand(CanExecute = nameof(CanSend))]
-        private void Clean() => ExecuteAndLog("echo Cleaning...");
+        private async Task CleanAsync() => await ExecuteAndLogAsync("echo Cleaning...");
 
-        private void ExecuteAndLog(string cmd)
+        private async Task ExecuteAndLogAsync(string cmd)
         {
             //add command to console on UI thread
             EnqueueLine(new ConsoleLine(DateTime.Now, $"> {cmd}", false));
