@@ -51,9 +51,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private string _tail = "50";
 
         [ObservableProperty]
-        private bool _tty;
-
-        [ObservableProperty]
         private bool _isLogsRunning;
 
         [ObservableProperty]
@@ -285,7 +282,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private bool CanSend() => !string.IsNullOrWhiteSpace(ContainerId) && !IsCommandRunning;
 
         [RelayCommand(CanExecute = nameof(CanSend))]
-        private void Send()
+        private async Task Send()
         {
             var cmd = (Input ?? "").Trim();
             if (string.IsNullOrEmpty(cmd)) return;
@@ -301,13 +298,18 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             _execCts = new CancellationTokenSource();
             var ct = _execCts.Token;
 
+            var containerInfo = await _service.InspectAsync(ContainerId, ct);
+
+            //Whether to use TTY mode based on container settings
+            bool useTty = containerInfo.Tty;
+
             //Execute with streaming output in background (fire-and-forget style)
             _execTask = Task.Run(async () =>
             {
                 try
                 {
                     var args = SplitShellLike(cmd);
-                    var (output, exitCodeTask) = await _service.StreamExecAsync(ContainerId, args, tty: false, ct: ct);
+                    var (output, exitCodeTask) = await _service.StreamExecAsync(ContainerId, args, tty: useTty, ct: ct);
 
                     //Stream the output line by line
                     await foreach (var (isErr, text) in output.ReadAllAsync(ct))
@@ -350,6 +352,11 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             _logsCts = new();
             var ct = _logsCts.Token;
 
+            var containerInfo = await _service.InspectAsync(ContainerId, ct);
+
+            //Whether to use TTY mode based on container settings
+            bool useTty = containerInfo.Tty;
+
             _logStreamTask = Task.Run(async () =>
             {
                 try
@@ -358,7 +365,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                         ContainerId,
                         follow: true,
                         tail: Tail,
-                        tty: Tty,
+                        tty: useTty,
                         ct: ct);
 
                     await foreach (var (isErr, text) in reader.ReadAllAsync(ct))
