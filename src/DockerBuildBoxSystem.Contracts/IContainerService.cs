@@ -36,7 +36,14 @@ namespace DockerBuildBoxSystem.Contracts
         /// The image name used by the container.
         /// </summary>
         public string? Image { get; init; }
+
+        //whether the container was started with TTY (Config.Tty)
+        public bool Tty { get; init; }
+
+        //HostConfig.LogConfig.Type (e.g., "json-file", "none", "local")
+        public string? LogDriver { get; init; }
     }
+
     /// <summary>
     /// Defines an abstraction for interacting with the Docker Engine API.
     /// </summary>
@@ -86,6 +93,16 @@ namespace DockerBuildBoxSystem.Contracts
         /// <param name="ct">Cancellation token</param>
         /// <returns></returns>
         Task KillContainer(string containerId, CancellationToken ct = default);
+
+        /// <summary>
+        /// Retrieves detailed information about a container with the specified ID.
+        /// </summary>
+        /// <remarks>Method to retrieve metadata and runtime details about a container, such as
+        /// its status, configuration, and resource usage.</remarks>
+        /// <param name="containerId">The unique identifier of the container to inspect.</param>
+        /// <param name="ct">Cancellation token</param>
+        /// <returns>A <see cref="ContainerInfo"/> object containing detailed information about the specified container.</returns>
+        Task<ContainerInfo> InspectAsync(string containerId, CancellationToken ct = default);
 
         /// <summary>
         /// Lists docker containers existing on the host, optionally filtered by name.

@@ -8,6 +8,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Channels;
 using System.Threading.Tasks;
+using System.Xml.Linq;
 
 namespace DockerBuildBoxSystem.Domain
 {
@@ -64,27 +65,40 @@ namespace DockerBuildBoxSystem.Domain
         #endregion
 
         #region Container Operations
-        public Task<bool> StartAsync(string containerId, CancellationToken ct = default) =>
-            _client.Containers.StartContainerAsync(containerId, new ContainerStartParameters(), ct);
+        public async Task<bool> StartAsync(string containerId, CancellationToken ct = default) =>
+            await _client.Containers.StartContainerAsync(containerId, new ContainerStartParameters(), ct);
 
-        public Task StopAsync(string containerId, TimeSpan timeout, CancellationToken ct = default) =>
-            _client.Containers.StopContainerAsync(containerId,
+        public async Task StopAsync(string containerId, TimeSpan timeout, CancellationToken ct = default) =>
+            await _client.Containers.StopContainerAsync(containerId,
                 new ContainerStopParameters { WaitBeforeKillSeconds = (uint)timeout.TotalSeconds }, ct);
 
 
-        public Task RemoveAsync(string containerId, bool force = false, CancellationToken ct = default) =>
-            _client.Containers.RemoveContainerAsync(containerId,
+        public async Task RemoveAsync(string containerId, bool force = false, CancellationToken ct = default) =>
+            await _client.Containers.RemoveContainerAsync(containerId,
                 new ContainerRemoveParameters { Force = force }, ct);
 
 
-        public Task RestartAsync(string containerId, TimeSpan timeout, CancellationToken ct = default) =>
-            _client.Containers.RestartContainerAsync(containerId,
+        public async Task RestartAsync(string containerId, TimeSpan timeout, CancellationToken ct = default) =>
+            await _client.Containers.RestartContainerAsync(containerId,
                 new ContainerRestartParameters { WaitBeforeKillSeconds = (uint)timeout.TotalSeconds }, ct);
 
 
-        public Task KillContainer(string containerId, CancellationToken ct = default) =>
-            _client.Containers.KillContainerAsync(containerId, new ContainerKillParameters(), ct);
+        public async Task KillContainer(string containerId, CancellationToken ct = default) =>
+            await _client.Containers.KillContainerAsync(containerId, new ContainerKillParameters(), ct);
 
+        public async Task<ContainerInfo> InspectAsync(string containerId, CancellationToken ct = default)
+        {
+            var inspect = await _client.Containers.InspectContainerAsync(containerId, ct);
+
+            return new ContainerInfo
+            {
+                Id = inspect.ID,
+                Names = string.IsNullOrEmpty(inspect.Name) ? Array.Empty<string>() : [inspect.Name],
+                Status = inspect.State?.Status,
+                Tty = inspect.Config?.Tty ?? false,
+                LogDriver = inspect.HostConfig?.LogConfig?.Type
+            };
+        }
 
         public async Task<IList<ContainerInfo>> ListContainersAsync(
             bool all = false,
