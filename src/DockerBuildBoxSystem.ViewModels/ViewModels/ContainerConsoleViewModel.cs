@@ -25,7 +25,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         //logs streaming
         private CancellationTokenSource? _logsCts;
         private Task? _logStreamTask;
-        
+
         //exec streaming
         private CancellationTokenSource? _execCts;
         private Task? _execTask;
@@ -141,7 +141,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 catch (OperationCanceledException)
                 {
                     //If operation is canceled, flush any remaining items
-                    while(!_outputQueue.IsEmpty)
+                    while (!_outputQueue.IsEmpty)
                     {
                         var batch = new List<ConsoleLine>(MaxLinesPerTick);
                         while (batch.Count < MaxLinesPerTick && _outputQueue.TryDequeue(out var line))
@@ -245,7 +245,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             {
                 //not using ConfigureAwait(false) since we want to return to the UI thread as soon as possible (no stalling :))
                 var containers = await _service.ListContainersAsync(all: ShowAllContainers);
-                
+
                 //Back to the UI threa so safe to update ObservableCollection
                 Containers.Clear();
                 foreach (var container in containers)
@@ -271,7 +271,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 EnqueueLine(new ConsoleLine(DateTime.Now, $"[info] Selected container: {value.Names.FirstOrDefault() ?? value.Id}", false));
 
                 //auto start logs if enabled
-                if(AutoStartLogs && !string.IsNullOrWhiteSpace(ContainerId))
+                if (AutoStartLogs && !string.IsNullOrWhiteSpace(ContainerId))
                     _ = StartLogsCommand.ExecuteAsync(null);
             }
             else
@@ -285,20 +285,45 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             //auto refresh when this changes
             _ = RefreshContainersCommand.ExecuteAsync(null);
         }
-
         private bool CanSend() => !string.IsNullOrWhiteSpace(ContainerId) && !IsCommandRunning;
 
+        /// <summary>
+        /// Executes the specified user command asynchronously within the selected container.
+        /// </summary>
+        /// <remarks>This method sends the command to the selected container and captures the output,
+        /// including standard output and error streams. The results are displayed in the UI. If no container is
+        /// selected, the method logs a message indicating that no action was taken.</remarks>
+        /// <param name="userCmd">The user command to execute. Can include the command and its arguments. If <paramref name="userCmd"/> is
+        /// <see langword="null"/>, the method does not execute any command.</param>
+        /// <returns>A task that represents the asynchronous operation.</returns>
         [RelayCommand(CanExecute = nameof(CanSend))]
-        private async Task Send()
+        private async Task RunUserCommandAsync(UserCommand? userCmd)
         {
-            var cmd = (Input ?? "").Trim();
-            if (string.IsNullOrEmpty(cmd)) return;
+            // Check if the user command or selected container is null
+            if (userCmd is null || SelectedContainer is null)
+            {
+                EnqueueLine(new ConsoleLine(DateTime.Now, "[user-cmd] No command or container selected.", true));
+                return;
+            }
 
-            //add command to console on UI thread
-            EnqueueLine(new ConsoleLine(DateTime.Now, $"> {cmd}", false));
+            var cmd = userCmd.Command;
 
+            await ExecuteAndLogAsync(string.Join(' ', cmd));
+        }
+
+        [RelayCommand(CanExecute = nameof(CanSend))]
+        private async Task SendAsync()
+        {
+            var cmd = (Input ?? String.Empty).Trim();
             //Clear the input after sending
             Input = string.Empty;
+            await ExecuteAndLogAsync(cmd);
+        }
+
+        private async Task ExecuteAndLogAsync(string cmd)
+        {
+            //add command to console on UI thread
+            EnqueueLine(new ConsoleLine(DateTime.Now, $"> {cmd}", false));
 
             //cancel any existing exec task
             _execCts?.Cancel();
@@ -411,7 +436,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                     //await with a timeout to prevent hanging during shutdown
                     await _logStreamTask.WaitAsync(TimeSpan.FromSeconds(2));
                 }
-                catch (OperationCanceledException) {}
+                catch (OperationCanceledException) { }
                 catch (TimeoutException) { }
                 finally
                 {
@@ -443,47 +468,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             if (_clipboard is not null)
             {
                 await _clipboard.SetTextAsync(text);
-            }
-        }
-
-        /// <summary>
-        /// Executes the specified user command asynchronously within the selected container.
-        /// </summary>
-        /// <remarks>This method sends the command to the selected container and captures the output,
-        /// including standard output and error streams. The results are displayed in the UI. If no container is
-        /// selected, the method logs a message indicating that no action was taken.</remarks>
-        /// <param name="userCmd">The user command to execute. Can include the command and its arguments. If <paramref name="userCmd"/> is
-        /// <see langword="null"/>, the method does not execute any command.</param>
-        /// <returns>A task that represents the asynchronous operation.</returns>
-        [RelayCommand]
-        private async Task RunUserCommandAsync(UserCommand? userCmd)
-        {
-            // Check if the user command or selected container is null
-            if (userCmd is null || SelectedContainer is null)
-            {
-                AddLineToUI(new ConsoleLine(DateTime.Now, "[user-cmd] No command or container selected.", true));
-                return;
-            }
-            // Get the command to execute and log it to the UI
-            var cmd = userCmd.Command;
-            AddLineToUI(new ConsoleLine(DateTime.Now, $"> {string.Join(' ', cmd)}", false));
-
-            try
-            {
-                var (exitCode, stdout, stderr) = await _service.ExecAsync(SelectedContainer.Id, cmd, tty: false);
-                if (!string.IsNullOrEmpty(stdout))
-                {
-                    AddLineToUI(new ConsoleLine(DateTime.Now, stdout.TrimEnd('\r', '\n'), false));
-                }
-                if (!string.IsNullOrEmpty(stderr))
-                {
-                    AddLineToUI(new ConsoleLine(DateTime.Now, stderr.TrimEnd('\r', '\n'), true));
-                }
-                AddLineToUI(new ConsoleLine(DateTime.Now, $"[exit] {exitCode}", false));
-            }
-            catch (Exception ex)
-            {
-                AddLineToUI(new ConsoleLine(DateTime.Now, $"[exec-error] {ex.Message}", true));
             }
         }
 
@@ -528,18 +512,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             return cmd.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         }
 
-        private void AddLineToUI(ConsoleLine line)
-        {
-            if (_syncContext != null)
-            {
-                _syncContext.Post(state => Lines.Add((ConsoleLine)state!), line);
-            }
-            else
-            {
-                Lines.Add(line);
-            }
-        }
-
         private void UpdateCommandStates()
         {
             if (_syncContext == null)
@@ -552,9 +524,11 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
             void NotifyAll()
             {
-                try { 
+                try
+                {
                     SendCommand.NotifyCanExecuteChanged();
                     StartLogsCommand.NotifyCanExecuteChanged();
+                    RunUserCommandCommand.NotifyCanExecuteChanged();
                     StopLogsCommand.NotifyCanExecuteChanged();
                 }
                 catch (InvalidOperationException)
@@ -576,7 +550,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         public override async ValueTask DisposeAsync()
         {
             await StopLogsAsync();
-            
+
             _execCts?.Cancel();
             if (_execTask != null)
             {
@@ -594,7 +568,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                     _execCts = null;
                 }
             }
-            
+
             await StopUiUpdateTaskAsync();
             await base.DisposeAsync();
         }
