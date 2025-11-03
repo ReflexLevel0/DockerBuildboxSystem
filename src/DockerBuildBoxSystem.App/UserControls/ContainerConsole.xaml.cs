@@ -1,24 +1,10 @@
-﻿using DockerBuildBoxSystem.Contracts;
-using DockerBuildBoxSystem.Domain;
-using DockerBuildBoxSystem.ViewModels.Main;
-using DockerBuildBoxSystem.ViewModels.ViewModels;
+﻿using DockerBuildBoxSystem.ViewModels.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
-using System;
-using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.ComponentModel;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
+using System.Windows.Threading;
 
 namespace DockerBuildBoxSystem.App.UserControls
 {
@@ -74,7 +60,7 @@ namespace DockerBuildBoxSystem.App.UserControls
                 DataContext = _viewModel;
 
             //attach auto-scroll behavior
-            _viewModel.Lines.CollectionChanged += Lines_CollectionChanged;
+            _viewModel.PropertyChanged += ViewModelOnPropertyChanged;
         }
 
         private void OnUnloaded(object? sender, RoutedEventArgs e)
@@ -83,7 +69,7 @@ namespace DockerBuildBoxSystem.App.UserControls
                 return;
 
             //Only detach view-specific behavior
-            _viewModel.Lines.CollectionChanged -= Lines_CollectionChanged;
+            _viewModel.PropertyChanged -= ViewModelOnPropertyChanged;
         }
 
 
@@ -98,7 +84,7 @@ namespace DockerBuildBoxSystem.App.UserControls
             try
             {
                 //detach event handlers
-                _viewModel.Lines.CollectionChanged -= Lines_CollectionChanged;
+                _viewModel.PropertyChanged -= ViewModelOnPropertyChanged;
 
                 //dispose the ViewModel
                 await _viewModel.DisposeAsync();
@@ -109,13 +95,31 @@ namespace DockerBuildBoxSystem.App.UserControls
             }
         }
 
-        private void Lines_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        private void ViewModelOnPropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
-            //auto-scroll to the bottom when new lines are added
-            if (e.Action == NotifyCollectionChangedAction.Add && OutputList?.Items.Count > 0)
+            if (_viewModel is null)
+                return;
+
+            switch(e.PropertyName)
             {
-                var last = OutputList.Items[^1];
-                OutputList.ScrollIntoView(last);
+                case (nameof(ContainerConsoleViewModel.IsCommandRunning)):
+                    //scroll once the command has completed
+                    if (!_viewModel.IsCommandRunning)
+                        ScrollToLastItem();
+                    break;
+            }
+        }
+
+        private void ScrollToLastItem()
+        {
+            if (OutputList?.Items.Count is > 0)
+            {
+                Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+                {
+                    if (OutputList.Items.Count == 0) return;
+                    var last = OutputList.Items[^1];
+                    OutputList.ScrollIntoView(last);
+                }));
             }
         }
     }
