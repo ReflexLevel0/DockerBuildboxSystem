@@ -308,7 +308,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
             var cmd = userCmd.Command;
 
-            await ExecuteAndLogAsync(string.Join(' ', cmd));
+            await ExecuteAndLogAsync(cmd);
         }
 
         [RelayCommand(CanExecute = nameof(CanSend))]
@@ -320,10 +320,11 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             await ExecuteAndLogAsync(cmd);
         }
 
-        private async Task ExecuteAndLogAsync(string cmd)
+        private async Task ExecuteAndLogAsync(string cmd) => await ExecuteAndLogAsync(SplitShellLike(cmd));
+        private async Task ExecuteAndLogAsync(string[] args)
         {
             //add command to console on UI thread
-            EnqueueLine(new ConsoleLine(DateTime.Now, $"> {cmd}", false));
+            EnqueueLine(new ConsoleLine(DateTime.Now, $"> {string.Join(' ', args)}", false));
 
             //cancel any existing exec task
             _execCts?.Cancel();
@@ -340,7 +341,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             {
                 try
                 {
-                    var args = SplitShellLike(cmd);
                     var (output, exitCodeTask) = await _service.StreamExecAsync(ContainerId, args, tty: useTty, ct: ct);
 
                     //Stream the output line by line
