@@ -398,6 +398,37 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             IsCommandRunning = true;
             UpdateCommandStates();
         }
+        private bool CanStopExec() => IsCommandRunning;
+
+        /// <summary>
+        /// Stops the current command execution task, if it is running.
+        /// </summary>
+        [RelayCommand(CanExecute = nameof(CanStopExec))]
+        private async Task StopExecAsync()
+        {
+            _execCts?.Cancel();
+
+            if (_execTask is not null)
+            {
+                try
+                {
+                    // Await with a timeout to prevent hanging during shutdown
+                    await _execTask.WaitAsync(TimeSpan.FromSeconds(2));
+                }
+                catch (OperationCanceledException) { }
+                catch (TimeoutException) { }
+                finally
+                {
+                    _execTask = null;
+                    _execCts?.Dispose();
+                    _execCts = null;
+
+                    IsCommandRunning = false;
+                    UpdateCommandStates();
+                }
+            }
+        }
+
 
         private bool CanStartLogs() => !IsLogsRunning && !string.IsNullOrWhiteSpace(ContainerId);
 
@@ -553,9 +584,12 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 try
                 {
                     SendCommand.NotifyCanExecuteChanged();
+                    StopExecCommand.NotifyCanExecuteChanged();
+
                     StartLogsCommand.NotifyCanExecuteChanged();
-                    RunUserCommandCommand.NotifyCanExecuteChanged();
                     StopLogsCommand.NotifyCanExecuteChanged();
+
+                    RunUserCommandCommand.NotifyCanExecuteChanged();
                 }
                 catch (InvalidOperationException)
                 {
