@@ -14,7 +14,7 @@ using System.Threading.Tasks;
 
 namespace DockerBuildBoxSystem.ViewModels.ViewModels
 {
-    public sealed record ConsoleLine(DateTime Timestamp, string Text, bool IsError);
+    public sealed record ConsoleLine(DateTime Timestamp, string Text, bool IsError, bool IsImportant = false);
 
     public sealed partial class ContainerConsoleViewModel : ViewModelBase
     {
@@ -39,6 +39,10 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private CancellationTokenSource? _uiUpdateCts;
         private Task? _uiUpdateTask;
         private readonly SynchronizationContext? _syncContext;
+
+        //An event that is envoked when an important line is added to the UI
+        //For instance, to trigger auto-scroll behavior
+        public event EventHandler<ConsoleLine>? ImportantLineArrived;
 
         public ObservableCollection<ConsoleLine> Lines { get; } = new ContainerObservableCollection<ConsoleLine>();
         public ObservableCollection<ContainerInfo> Containers { get; } = new();
@@ -71,6 +75,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
         [ObservableProperty]
         private bool _autoStartLogs = true;
+
+        //Batch for the UI, comprised of two subsets: general lines that are posted to the UI, and important lines that might need some special handling (ex: auto-scroll)
+        private sealed record UiBatch(IReadOnlyList<ConsoleLine> Lines, IReadOnlyList<ConsoleLine> Important);
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ContainerConsoleViewModel"/> class.
@@ -127,14 +134,17 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                         //Restrict the number of lines per tick
                         //If we dequeue everything at once it might overwhelm the UI
                         var batch = new List<ConsoleLine>(MaxLinesPerTick);
+                        var important = new List<ConsoleLine>();
                         while (batch.Count < MaxLinesPerTick && _outputQueue.TryDequeue(out var line))
                         {
                             batch.Add(line);
+                            if (line.IsImportant)
+                                important.Add(line);
                         }
 
                         if (batch.Count > 0)
                         {
-                            PostBatchToUI(batch);
+                            PostBatchToUI(new UiBatch(batch, important));
                         }
                     }
                 }
@@ -144,12 +154,15 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                     while (!_outputQueue.IsEmpty)
                     {
                         var batch = new List<ConsoleLine>(MaxLinesPerTick);
+                        var important = new List<ConsoleLine>();
                         while (batch.Count < MaxLinesPerTick && _outputQueue.TryDequeue(out var line))
                         {
                             batch.Add(line);
+                            if (line.IsImportant)
+                                important.Add(line);
                         }
                         if (batch.Count == 0) break;
-                        PostBatchToUI(batch);
+                        PostBatchToUI(new UiBatch(batch, important));
                     }
                 }
                 finally
@@ -159,16 +172,16 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             }, ct);
         }
 
-        private void PostBatchToUI(IReadOnlyList<ConsoleLine> batch)
+        private void PostBatchToUI(UiBatch batch)
         {
-            if (batch.Count == 0) return;
+            if (batch.Lines.Count == 0) return;
 
             if (_syncContext != null)
             {
                 _syncContext.Post(state =>
                 {
-                    var list = (IReadOnlyList<ConsoleLine>)state!;
-                    AddLinesToUI(list);
+                    var b = (UiBatch)state!;
+                    AddLinesToUI(b);
                 }, batch);
             }
             else
@@ -177,8 +190,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             }
         }
 
-        private void AddLinesToUI(IReadOnlyList<ConsoleLine> lines)
+        private void AddLinesToUI(UiBatch batch)
         {
+            var lines = batch.Lines;
             if (lines.Count == 0) return;
 
             if (Lines is ContainerObservableCollection<ConsoleLine> contLines)
@@ -202,6 +216,12 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 {
                     Lines.RemoveAt(0);
                 }
+            }
+
+            //nnbotify only for the important lines captured during batching
+            foreach (var l in batch.Important)
+            {
+                ImportantLineArrived?.Invoke(this, l);
             }
         }
 
@@ -235,6 +255,11 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private void EnqueueLine(ConsoleLine line)
         {
             _outputQueue.Enqueue(line);
+        }
+
+        private void EnqueueLine(string text, bool isError, bool isImportant = false)
+        {
+            EnqueueLine(new ConsoleLine(DateTime.Now, text, isError, isImportant));
         }
 
         [RelayCommand]
@@ -293,7 +318,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// <remarks>This method sends the command to the selected container and captures the output,
         /// including standard output and error streams. The results are displayed in the UI. If no container is
         /// selected, the method logs a message indicating that no action was taken.</remarks>
-        /// <param name="userCmd">The user command to execute. Can include the command and its arguments. If <paramref name="userCmd"/> is
+        /// <param name="userCmd">The user command to execute. Can include the command and its arguments. If <paramref name="userCmd"/>
         /// <see langword="null"/>, the method does not execute any command.</param>
         /// <returns>A task that represents the asynchronous operation.</returns>
         [RelayCommand(CanExecute = nameof(CanSend))]
@@ -311,6 +336,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             await ExecuteAndLogAsync(cmd);
         }
 
+
         [RelayCommand(CanExecute = nameof(CanSend))]
         private async Task SendAsync()
         {
@@ -323,9 +349,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private async Task ExecuteAndLogAsync(string cmd) => await ExecuteAndLogAsync(SplitShellLike(cmd));
         private async Task ExecuteAndLogAsync(string[] args)
         {
-            //add command to console on UI thread
-            EnqueueLine(new ConsoleLine(DateTime.Now, $"> {string.Join(' ', args)}", false));
-
             //cancel any existing exec task
             _execCts?.Cancel();
             _execCts = new CancellationTokenSource();
@@ -335,6 +358,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
             //Whether to use TTY mode based on container settings
             bool useTty = containerInfo.Tty;
+
+            //add command to console on UI thread
+            EnqueueLine($"> {string.Join(' ', args)}", false);
 
             //Execute with streaming output in background (fire-and-forget style)
             _execTask = Task.Run(async () =>
@@ -347,20 +373,20 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                     await foreach (var (isErr, text) in output.ReadAllAsync(ct))
                     {
                         if (text is null) continue;
-                        EnqueueLine(new ConsoleLine(DateTime.Now, text, isErr));
+                        EnqueueLine(text, isErr);
                     }
 
                     //Get the exit code after the stream completes
                     var exitCode = await exitCodeTask;
-                    EnqueueLine(new ConsoleLine(DateTime.Now, $"[exit] {exitCode}", false));
+                    EnqueueLine($"[exit] {exitCode}", false, true);
                 }
                 catch (OperationCanceledException)
                 {
-                    EnqueueLine(new ConsoleLine(DateTime.Now, "[exec] canceled", false));
+                    EnqueueLine("[exec] canceled", false, true);
                 }
                 catch (Exception ex)
                 {
-                    EnqueueLine(new ConsoleLine(DateTime.Now, $"[exec-error] {ex.Message}", true));
+                    EnqueueLine($"[exec-error] {ex.Message}", true, true);
                 }
                 finally
                 {

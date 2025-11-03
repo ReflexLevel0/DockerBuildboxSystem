@@ -60,7 +60,7 @@ namespace DockerBuildBoxSystem.App.UserControls
                 DataContext = _viewModel;
 
             //attach auto-scroll behavior
-            _viewModel.PropertyChanged += ViewModelOnPropertyChanged;
+            _viewModel.ImportantLineArrived += ViewModelOnImportantLineArrived;
         }
 
         private void OnUnloaded(object? sender, RoutedEventArgs e)
@@ -69,7 +69,7 @@ namespace DockerBuildBoxSystem.App.UserControls
                 return;
 
             //Only detach view-specific behavior
-            _viewModel.PropertyChanged -= ViewModelOnPropertyChanged;
+            _viewModel.ImportantLineArrived -= ViewModelOnImportantLineArrived;
         }
 
 
@@ -84,7 +84,7 @@ namespace DockerBuildBoxSystem.App.UserControls
             try
             {
                 //detach event handlers
-                _viewModel.PropertyChanged -= ViewModelOnPropertyChanged;
+                _viewModel.ImportantLineArrived -= ViewModelOnImportantLineArrived;
 
                 //dispose the ViewModel
                 await _viewModel.DisposeAsync();
@@ -94,33 +94,22 @@ namespace DockerBuildBoxSystem.App.UserControls
                 //ignoring errors during cleanup
             }
         }
-
-        private void ViewModelOnPropertyChanged(object? sender, PropertyChangedEventArgs e)
+        private void ViewModelOnImportantLineArrived(object? sender, ConsoleLine line)
         {
-            if (_viewModel is null)
-                return;
-
-            switch(e.PropertyName)
-            {
-                case (nameof(ContainerConsoleViewModel.IsCommandRunning)):
-                    //scroll once the command has completed
-                    if (!_viewModel.IsCommandRunning)
-                        ScrollToLastItem();
-                    break;
-            }
+            //scroll to the specific important line that was just added
+            ScrollToItem(line);
         }
 
-        private void ScrollToLastItem()
+        private void ScrollToItem(object item)
         {
-            if (OutputList?.Items.Count is > 0)
+            if (OutputList is null) return;
+
+            Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
             {
-                Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
-                {
-                    if (OutputList.Items.Count == 0) return;
-                    var last = OutputList.Items[^1];
-                    OutputList.ScrollIntoView(last);
-                }));
-            }
+                if (OutputList.Items.Count == 0) return;
+                OutputList.ScrollIntoView(item);
+            }));
         }
+
     }
 }
