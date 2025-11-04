@@ -14,14 +14,24 @@ using System.Threading.Tasks;
 
 namespace DockerBuildBoxSystem.ViewModels.ViewModels
 {
+    /// <summary>
+    /// Represents a console line, containing metadata
+    /// </summary>
+    /// <param name="Timestamp">The time at which the line was produced.</param>
+    /// <param name="Text">The line text.</param>
+    /// <param name="IsError">True if the line represents an error output.</param>
+    /// <param name="IsImportant">True if the line is considered important (e.g., should trigger auto-scroll).</param>
     public sealed record ConsoleLine(DateTime Timestamp, string Text, bool IsError, bool IsImportant = false);
 
+
+    /// <summary>
+    /// ViewModel for a container console that streams logs and executes commands inside Docker containers.
+    /// </summary>
     public sealed partial class ContainerConsoleViewModel : ViewModelBase
     {
         private readonly IContainerService _service;
         private readonly IClipboardService? _clipboard;
 
-        //Canellation tokens
         //logs streaming
         private CancellationTokenSource? _logsCts;
         private Task? _logStreamTask;
@@ -40,43 +50,85 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private Task? _uiUpdateTask;
         private readonly SynchronizationContext? _syncContext;
 
-        //An event that is envoked when an important line is added to the UI
-        //For instance, to trigger auto-scroll behavior
+        /// <summary>
+        /// Raised whenever an important line is added to the UI, ex a error line that needs attention.
+        /// Used for view-specific behaviors (e.g., auto-scroll).
+        /// </summary>
         public event EventHandler<ConsoleLine>? ImportantLineArrived;
 
+        /// <summary>
+        /// Lines currently displayed in the console UI.
+        /// </summary>
         public ObservableCollection<ConsoleLine> Lines { get; } = new ContainerObservableCollection<ConsoleLine>();
+
+        /// <summary>
+        /// List of available containers on the host.
+        /// </summary>
         public ObservableCollection<ContainerInfo> Containers { get; } = new();
+
+        /// <summary>
+        /// User-defined commands
+        /// </summary>
         public ObservableCollection<UserCommand> UserCommands { get; } = new();
 
+        /// <summary>
+        /// The raw user input text bound from the UI.
+        /// </summary>
         [ObservableProperty]
         private string? _input;
 
+        /// <summary>
+        /// Currently selected container id OR name.
+        /// </summary>
         [ObservableProperty]
-
         private string _containerId = "";
 
+        /// <summary>
+        /// How many lines to tail when starting logs ("all" or a number).
+        /// </summary>
         [ObservableProperty]
         private string _tail = "50";
 
+        /// <summary>
+        /// True while logs are currently being streamed.
+        /// </summary>
         [ObservableProperty]
         private bool _isLogsRunning;
 
+        /// <summary>
+        /// True while a command is being executed.
+        /// </summary>
         [ObservableProperty]
         private bool _isCommandRunning;
 
+        /// <summary>
+        /// The selected container info object.
+        /// </summary>
         [ObservableProperty]
         private ContainerInfo? _selectedContainer;
 
+        /// <summary>
+        /// If true, include stopped containers in the list.
+        /// </summary>
         [ObservableProperty]
         private bool _showAllContainers = true;
 
+        /// <summary>
+        /// True while the containers list is being refreshed.
+        /// </summary>
         [ObservableProperty]
         private bool _isLoadingContainers;
 
+        /// <summary>
+        /// If true, automatically start streaming logs when a container becomes selected.
+        /// </summary>
         [ObservableProperty]
         private bool _autoStartLogs = true;
 
-        //Batch for the UI, comprised of two subsets: general lines that are posted to the UI, and important lines that might need some special handling (ex: auto-scroll)
+        /// <summary>
+        /// Repreents a batch for the UI, comprised of two subsets: general lines that are posted to the UI, and important lines
+        /// that might need some special handling (e.g., auto-scroll in the view).
+        /// </summary>
         private sealed record UiBatch(IReadOnlyList<ConsoleLine> Lines, IReadOnlyList<ConsoleLine> Important);
 
         /// <summary>
@@ -84,7 +136,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// </summary>
         /// <param name="service">The container service used to interact with containers, ex Docker.</param>
         /// <param name="clipboard">Optional clipboard service for copying the text output.</param>
-        /// <exception cref="ArgumentNullException"></exception>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="service"/> is null.</exception>
         public ContainerConsoleViewModel(IContainerService service, IClipboardService? clipboard = null)
         {
             _service = service ?? throw new ArgumentNullException(nameof(service));
@@ -92,24 +144,33 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             _syncContext = SynchronizationContext.Current;
         }
 
+        /// <summary>
+        /// Initializes the ViewModel: 
+        ///     starts the UI update loop, 
+        ///     refreshes containers, 
+        ///     loads user commands, 
+        ///     and optionally starts logs.
+        /// </summary>
         [RelayCommand]
         private async Task InitializeAsync()
         {
             // Start the global UI update task
             StartUiUpdateTask();
 
-            //load available containers on initialization
+            // Load available containers on initialization
             await RefreshContainersCommand.ExecuteAsync(null);
 
             // Load user-defined commands
             await LoadUserCommandsAsync();
 
-            //optionally auto-start logs if ContainerId is set
+            // Optionally auto-start logs if ContainerId is set
             if (AutoStartLogs && !string.IsNullOrWhiteSpace(ContainerId))
             {
                 await StartLogsCommand.ExecuteAsync(null);
             }
         }
+
+        #region UI Update Mechanism
 
         /// <summary>
         /// Starts the global UI update task that processes the output queue.
@@ -172,6 +233,10 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             }, ct);
         }
 
+        /// <summary>
+        /// Posts a batch to the UI thread (OR directly if no synchronization context is available).
+        /// </summary>
+        /// <param name="batch">The batch of console lines to append to the UI.</param>
         private void PostBatchToUI(UiBatch batch)
         {
             if (batch.Lines.Count == 0) return;
@@ -190,6 +255,12 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             }
         }
 
+        /// <summary>
+        /// Appends a batch of lines to the bound collection.
+        /// Trims the collection to keep the UI responsive.
+        /// Triggers <see cref="ImportantLineArrived"/> for any important lines in the batch.
+        /// </summary>
+        /// <param name="batch">The batch of lines to add.</param>
         private void AddLinesToUI(UiBatch batch)
         {
             var lines = batch.Lines;
@@ -252,16 +323,29 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// <summary>
         /// Enqueues a line to be added to the console output on the UI thread.
         /// </summary>
+        /// <param name="line">The console line to enqueue.</param>
         private void EnqueueLine(ConsoleLine line)
         {
             _outputQueue.Enqueue(line);
         }
 
+        /// <summary>
+        /// Creates and enqueues a console line with the provided text and flags.
+        /// </summary>
+        /// <param name="text">Text to append.</param>
+        /// <param name="isError">Whether the line is an error.</param>
+        /// <param name="isImportant">Whether the line is important.</param>
         private void EnqueueLine(string text, bool isError, bool isImportant = false)
         {
             EnqueueLine(new ConsoleLine(DateTime.Now, text, isError, isImportant));
         }
 
+        #endregion
+
+        #region Container Management
+        /// <summary>
+        /// Refreshes the list of containers from the container service.
+        /// </summary>
         [RelayCommand]
         private async Task RefreshContainersAsync()
         {
@@ -280,7 +364,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             }
             catch (Exception ex)
             {
-                EnqueueLine(new ConsoleLine(DateTime.Now, $"[container-list-error] {ex.Message}", true));
+                EnqueueLine($"[container-list-error] {ex.Message}", true);
             }
             finally
             {
@@ -288,12 +372,16 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             }
         }
 
+        /// <summary>
+        /// Updates dependent state when the selected container changes.
+        /// </summary>
+        /// <param name="value">The newly selected container info or null.</param>
         partial void OnSelectedContainerChanged(ContainerInfo? value)
         {
             if (value != null)
             {
                 ContainerId = value.Id;
-                EnqueueLine(new ConsoleLine(DateTime.Now, $"[info] Selected container: {value.Names.FirstOrDefault() ?? value.Id}", false));
+                EnqueueLine($"[info] Selected container: {value.Names.FirstOrDefault() ?? value.Id}", false);
 
                 //auto start logs if enabled
                 if (AutoStartLogs && !string.IsNullOrWhiteSpace(ContainerId))
@@ -305,21 +393,36 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             }
         }
 
+        /// <summary>
+        /// Invoked when the value of the "Show All Containers" setting changes.
+        /// </summary>
+        /// <param name="value">The new value of the "Show All Containers" setting.
+        /// <see langword="true"/> if all containers should be shown; otherwise, <see langword="false"/>.</param>
         partial void OnShowAllContainersChanged(bool value)
         {
             //auto refresh when this changes
             _ = RefreshContainersCommand.ExecuteAsync(null);
         }
+
+        #endregion
+
+        #region Command Execution
+
+        /// <summary>
+        /// Determines whether sending commands is currently allowed.
+        /// </summary>
         private bool CanSend() => !string.IsNullOrWhiteSpace(ContainerId) && !IsCommandRunning;
 
         /// <summary>
         /// Executes the specified user command asynchronously within the selected container.
         /// </summary>
-        /// <remarks>This method sends the command to the selected container and captures the output,
+        /// <remarks>
+        /// This method sends the command to the selected container and captures the output,
         /// including standard output and error streams. The results are displayed in the UI. If no container is
-        /// selected, the method logs a message indicating that no action was taken.</remarks>
+        /// selected, the method logs a message indicating that no action was taken.
+        /// </remarks>
         /// <param name="userCmd">The user command to execute. Can include the command and its arguments. If <paramref name="userCmd"/>
-        /// <see langword="null"/>, the method does not execute any command.</param>
+        /// is <see langword="null"/>, the method does not execute any command.</param>
         /// <returns>A task that represents the asynchronous operation.</returns>
         [RelayCommand(CanExecute = nameof(CanSend))]
         private async Task RunUserCommandAsync(UserCommand? userCmd)
@@ -327,7 +430,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             // Check if the user command or selected container is null
             if (userCmd is null || SelectedContainer is null)
             {
-                EnqueueLine(new ConsoleLine(DateTime.Now, "[user-cmd] No command or container selected.", true));
+                EnqueueLine("[user-cmd] No command or container selected.", true);
                 return;
             }
 
@@ -336,7 +439,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             await ExecuteAndLogAsync(cmd);
         }
 
-
+        /// <summary>
+        /// Sends the current input text as a command to the container.
+        /// </summary>
         [RelayCommand(CanExecute = nameof(CanSend))]
         private async Task SendAsync()
         {
@@ -346,7 +451,15 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             await ExecuteAndLogAsync(cmd);
         }
 
+        /// <summary>
+        /// Executes a command string by splitting it as a argv array.
+        /// </summary>
         private async Task ExecuteAndLogAsync(string cmd) => await ExecuteAndLogAsync(SplitShellLike(cmd));
+
+        /// <summary>
+        /// Executes a command inside the selected container and streams output to the console UI.
+        /// </summary>
+        /// <param name="args">The command and its arguments (argv form).</param>
         private async Task ExecuteAndLogAsync(string[] args)
         {
             //cancel any existing exec task
@@ -398,6 +511,10 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             IsCommandRunning = true;
             UpdateCommandStates();
         }
+
+        /// <summary>
+        /// Determines whether log streaming can be stopped.
+        /// </summary>
         private bool CanStopExec() => IsCommandRunning;
 
         /// <summary>
@@ -429,9 +546,18 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             }
         }
 
+        #endregion
 
+        #region Log Streaming
+
+        /// <summary>
+        /// Determines whether log streaming can be started.
+        /// </summary>
         private bool CanStartLogs() => !IsLogsRunning && !string.IsNullOrWhiteSpace(ContainerId);
 
+        /// <summary>
+        /// Starts streaming container logs, following container TTY settings.
+        /// </summary>
         [RelayCommand(CanExecute = nameof(CanStartLogs))]
         private async Task StartLogsAsync()
         {
@@ -460,18 +586,18 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                     await foreach (var (isErr, text) in reader.ReadAllAsync(ct))
                     {
                         if (text is null) continue;
-                        EnqueueLine(new ConsoleLine(DateTime.Now, text, isErr));
+                        EnqueueLine(text, isErr);
                     }
 
                     _logsCts?.Token.ThrowIfCancellationRequested();
                 }
                 catch (OperationCanceledException)
                 {
-                    EnqueueLine(new ConsoleLine(DateTime.Now, "[logs] canceled", false));
+                    EnqueueLine("[logs] canceled", false);
                 }
                 catch (Exception ex)
                 {
-                    EnqueueLine(new ConsoleLine(DateTime.Now, $"[logs-error] {ex.Message}", true));
+                    EnqueueLine($"[logs-error] {ex.Message}", true, true);
                 }
             }, ct);
 
@@ -479,8 +605,14 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             UpdateCommandStates();
         }
 
+        /// <summary>
+        /// Determines whether log streaming can be stopped.
+        /// </summary>
         private bool CanStopLogs() => IsLogsRunning;
 
+        /// <summary>
+        /// Stops the current log streaming task, if it is running.
+        /// </summary>
         [RelayCommand(CanExecute = nameof(CanStopLogs))]
         private async Task StopLogsAsync()
         {
@@ -507,6 +639,13 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             }
         }
 
+        #endregion
+
+        #region Console Management
+
+        /// <summary>
+        /// Clears all lines from the console.
+        /// </summary>
         [RelayCommand]
         private Task ClearAsync()
         {
@@ -517,7 +656,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// <summary>
         /// The copy command to copy output of the container to clipboard.
         /// </summary>
-        /// <returns></returns>
         [RelayCommand]
         private async Task CopyAsync()
         {
@@ -527,6 +665,10 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 await _clipboard.SetTextAsync(text);
             }
         }
+
+        #endregion
+
+        #region Helpers
 
         /// <summary>
         /// Asynchronously loads user-defined commands from a JSON configuration file.
@@ -563,12 +705,20 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             }
         }
 
+        /// <summary>
+        /// Splits a shell-like command string into argv tokens (very simple splitting by spaces).
+        /// </summary>
+        /// <param name="cmd">The command string.</param>
+        /// <returns>The argv array.</returns>
         private static string[] SplitShellLike(string cmd)
         {
             //simple split
             return cmd.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         }
 
+        /// <summary>
+        /// Notifies dependent commands that their CanExecute state may have changed.
+        /// </summary>
         private void UpdateCommandStates()
         {
             if (_syncContext == null)
@@ -598,6 +748,10 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             }
         }
 
+        /// <summary>
+        /// Invoked when the <see cref="ContainerId"/> property changes.
+        /// </summary>
+        /// <param name="value">The new container id or name."></param>
         partial void OnContainerIdChanged(string value)
         {
             UpdateCommandStates();
@@ -606,7 +760,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// <summary>
         /// cancel and cleanup task
         /// </summary>
-        /// <returns></returns>
         public override async ValueTask DisposeAsync()
         {
             await StopLogsAsync();
@@ -632,5 +785,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             await StopUiUpdateTaskAsync();
             await base.DisposeAsync();
         }
+
+        #endregion
     }
 }

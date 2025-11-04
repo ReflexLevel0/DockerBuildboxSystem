@@ -118,7 +118,7 @@ public partial class App : Application
         //register UI services
         services.AddSingleton<Services.IDialogService, Services.DialogService>();
         services.AddSingleton<Services.IViewLocator, Services.ViewLocator>();
-        services.AddSingleton<IClipboardService, Services.ClipboardService>();
+        services.AddSingleton<IClipboardService, Services.WPFClipboardService>();
     }
 }
 
