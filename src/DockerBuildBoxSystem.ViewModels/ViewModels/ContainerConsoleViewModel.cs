@@ -756,32 +756,14 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         {
             UpdateCommandStates();
         }
-
+        
         /// <summary>
         /// cancel and cleanup task
         /// </summary>
         public override async ValueTask DisposeAsync()
         {
             await StopLogsAsync();
-
-            _execCts?.Cancel();
-            if (_execTask != null)
-            {
-                try
-                {
-                    await _execTask.WaitAsync(TimeSpan.FromSeconds(2));
-                }
-                //If operation is canceled or times out.. cur only proceeds to cleanup
-                catch (OperationCanceledException) { }
-                catch (TimeoutException) { }
-                finally
-                {
-                    _execTask = null;
-                    _execCts?.Dispose();
-                    _execCts = null;
-                }
-            }
-
+            await StopExecAsync();
             await StopUiUpdateTaskAsync();
             await base.DisposeAsync();
         }
