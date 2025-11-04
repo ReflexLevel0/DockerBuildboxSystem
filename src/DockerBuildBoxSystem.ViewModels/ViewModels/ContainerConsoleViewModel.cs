@@ -513,7 +513,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         }
 
         /// <summary>
-        /// Determines whether log streaming can be stopped.
+        /// Determines whether command execution can be stopped.
         /// </summary>
         private bool CanStopExec() => IsCommandRunning;
 
