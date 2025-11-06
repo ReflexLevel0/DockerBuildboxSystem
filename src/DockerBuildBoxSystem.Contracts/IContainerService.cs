@@ -2,11 +2,28 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 
 namespace DockerBuildBoxSystem.Contracts
-{    
+{
+    /// <summary>
+    /// Strong typed representation of docker container states.
+    /// https://www.baeldung.com/ops/docker-container-states#bd-possible-states-of-a-docker-container
+    /// </summary>
+    public enum ContainerState
+    {
+        //To be on the safe side... in case I missed a state or docker decides to add new ones.
+        Unknown = 0,
+        Created,
+        Running,
+        Restarting,
+        Exited,
+        Paused,
+        Dead
+    }
+
     /// <summary>
     /// Represents a container with essential information.
     /// </summary>
@@ -42,6 +59,32 @@ namespace DockerBuildBoxSystem.Contracts
 
         //HostConfig.LogConfig.Type (e.g., "json-file", "none", "local")
         public string? LogDriver { get; init; }
+
+        /// <summary>
+        /// Strong typed state derived from <see cref="State"/>.
+        /// </summary>
+        public ContainerState StateKind => ParseState(State);
+
+        /// <summary>
+        /// Convenience flag indicating whether the container is currently running.
+        /// </summary>
+        public bool IsRunning => StateKind == ContainerState.Running;
+
+        private static ContainerState ParseState(string? s)
+        {
+            if (string.IsNullOrWhiteSpace(s)) return ContainerState.Unknown;
+
+            return s.Trim().ToLowerInvariant() switch
+            {
+                "created" => ContainerState.Created,
+                "running" => ContainerState.Running,
+                "restarting" => ContainerState.Restarting,
+                "exited" => ContainerState.Exited,
+                "paused" => ContainerState.Paused,
+                "dead" => ContainerState.Dead,
+                _ => ContainerState.Unknown
+            };
+        }
     }
 
     /// <summary>
