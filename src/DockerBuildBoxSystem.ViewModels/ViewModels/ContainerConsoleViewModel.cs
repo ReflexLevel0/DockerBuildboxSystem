@@ -11,6 +11,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using DockerBuildBoxSystem.Domain;
 
 namespace DockerBuildBoxSystem.ViewModels.ViewModels
 {
@@ -39,6 +40,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private CancellationTokenSource? _uiUpdateCts;
         private Task? _uiUpdateTask;
         private readonly SynchronizationContext? _syncContext;
+
+        // Manage user commands
+        private readonly UserCommandService _userCommandService = new();
 
         public ObservableCollection<ConsoleLine> Lines { get; } = new ContainerObservableCollection<ConsoleLine>();
         public ObservableCollection<ContainerInfo> Containers { get; } = new();
@@ -504,6 +508,19 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             {
                 UserCommands.Add(cmd);
             }
+        }
+
+
+        public async Task AddCommandAsync(UserCommand newCmd)
+        {
+            await _userCommandService.AddAsync(newCmd);
+            UserCommands.Add(newCmd);
+        }
+
+        public async Task RemoveCommandAtAsync(int index)
+        {
+            await _userCommandService.RemoveAtAsync(index);
+            UserCommands.RemoveAt(index);
         }
 
         private static string[] SplitShellLike(string cmd)
