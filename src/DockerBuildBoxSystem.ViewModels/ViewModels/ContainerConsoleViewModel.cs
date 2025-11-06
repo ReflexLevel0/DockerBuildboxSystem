@@ -85,6 +85,8 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [NotifyCanExecuteChangedFor(nameof(StartContainerCommand))]
         [NotifyCanExecuteChangedFor(nameof(StopContainerCommand))]
         [NotifyCanExecuteChangedFor(nameof(RestartContainerCommand))]
+        [NotifyCanExecuteChangedFor(nameof(SendCommand))]
+        [NotifyCanExecuteChangedFor(nameof(RunUserCommandCommand))]
         private string _containerId = "";
 
         /// <summary>
@@ -97,12 +99,17 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// True while logs are currently being streamed.
         /// </summary>
         [ObservableProperty]
+        [NotifyCanExecuteChangedFor(nameof(StartLogsCommand))]
+        [NotifyCanExecuteChangedFor(nameof(StopLogsCommand))]
         private bool _isLogsRunning;
 
         /// <summary>
         /// True while a command is being executed.
         /// </summary>
         [ObservableProperty]
+        [NotifyCanExecuteChangedFor(nameof(SendCommand))]
+        [NotifyCanExecuteChangedFor(nameof(RunUserCommandCommand))]
+        [NotifyCanExecuteChangedFor(nameof(StopExecCommand))]
         private bool _isCommandRunning;
 
         /// <summary>
@@ -112,6 +119,8 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [NotifyCanExecuteChangedFor(nameof(StartContainerCommand))]
         [NotifyCanExecuteChangedFor(nameof(StopContainerCommand))]
         [NotifyCanExecuteChangedFor(nameof(RestartContainerCommand))]
+        [NotifyCanExecuteChangedFor(nameof(SendCommand))]
+        [NotifyCanExecuteChangedFor(nameof(RunUserCommandCommand))]
         private ContainerInfo? _selectedContainer;
 
         /// <summary>
@@ -440,7 +449,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             }
             finally
             {
-                UpdateCommandStates();
                 _ = RefreshContainersCommand.ExecuteAsync(null);
             }
         }
@@ -466,7 +474,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             }
             finally
             {
-                UpdateCommandStates();
                 _ = RefreshContainersCommand.ExecuteAsync(null);
             }
         }
@@ -492,7 +499,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             }
             finally
             {
-                UpdateCommandStates();
                 _ = RefreshContainersCommand.ExecuteAsync(null);
             }
         }
@@ -596,13 +602,11 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 }
                 finally
                 {
-                    IsCommandRunning = false;
-                    UpdateCommandStates();
+                    SetOnUiThread(() => IsCommandRunning = false);
                 }
             }, ct);
 
-            IsCommandRunning = true;
-            UpdateCommandStates();
+            SetOnUiThread(() => IsCommandRunning = true);
         }
 
         /// <summary>
@@ -633,8 +637,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                     _execCts?.Dispose();
                     _execCts = null;
 
-                    IsCommandRunning = false;
-                    UpdateCommandStates();
+                    SetOnUiThread(() => IsCommandRunning = false);
                 }
             }
         }
@@ -695,7 +698,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             }, ct);
 
             IsLogsRunning = true;
-            UpdateCommandStates();
         }
 
         /// <summary>
@@ -727,7 +729,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                     _logsCts = null;
 
                     IsLogsRunning = false;
-                    UpdateCommandStates();
                 }
             }
         }
@@ -810,49 +811,31 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         }
 
         /// <summary>
-        /// Notifies dependent commands that their CanExecute state may have changed.
+        /// Executes an action on the UI thread IF a synchronization context is available, otherwise executes it inline.
         /// </summary>
-        private void UpdateCommandStates()
+        private void SetOnUiThread(Action action)
         {
-            if (_syncContext == null)
+            if (_syncContext == null || SynchronizationContext.Current == _syncContext)
             {
-                NotifyAll();
+                action();
                 return;
             }
 
-            _syncContext.Post(_ => NotifyAll(), null);
-
-            void NotifyAll()
+            _syncContext.Post(_ =>
             {
-                try
-                {
-                    SendCommand.NotifyCanExecuteChanged();
-                    StopExecCommand.NotifyCanExecuteChanged();
-
-                    StartLogsCommand.NotifyCanExecuteChanged();
-                    StopLogsCommand.NotifyCanExecuteChanged();
-
-                    RunUserCommandCommand.NotifyCanExecuteChanged();
-
-                    // Container lifecycle commands
-                    //removed direct NotifyCanExecuteChanged calls that caused compile errors
+                try { 
+                    action(); 
                 }
-                catch (InvalidOperationException)
-                {
-                    //protection in case things goes wrong, especially since this might be called during shutdown
+                catch (InvalidOperationException) { 
+                
                 }
-            }
+            }, null);
         }
 
-        /// <summary>
-        /// Invoked when the <see cref="ContainerId"/> property changes.
-        /// </summary>
-        /// <param name="value">The new container id or name."></param>
-        partial void OnContainerIdChanged(string value)
-        {
-            UpdateCommandStates();
-        }
-        
+        #endregion
+
+        #region Cleanup
+
         /// <summary>
         /// cancel and cleanup task
         /// </summary>
