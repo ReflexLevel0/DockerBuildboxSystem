@@ -2,11 +2,13 @@
 using CommunityToolkit.Mvvm.Input;
 using DockerBuildBoxSystem.Contracts;
 using DockerBuildBoxSystem.ViewModels.Common;
+using DockerBuildBoxSystem.Models;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -23,7 +25,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         //logs streaming
         private CancellationTokenSource? _logsCts;
         private Task? _logStreamTask;
-        
+
         //exec streaming
         private CancellationTokenSource? _execCts;
         private Task? _execTask;
@@ -40,11 +42,13 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
         public ObservableCollection<ConsoleLine> Lines { get; } = new ContainerObservableCollection<ConsoleLine>();
         public ObservableCollection<ContainerInfo> Containers { get; } = new();
+        public ObservableCollection<UserCommand> UserCommands { get; } = new();
 
         [ObservableProperty]
         private string? _input;
 
         [ObservableProperty]
+
         private string _containerId = "";
 
         [ObservableProperty]
@@ -90,6 +94,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             //load available containers on initialization
             await RefreshContainersCommand.ExecuteAsync(null);
 
+            // Load user-defined commands
+            await LoadUserCommandsAsync();
+
             //optionally auto-start logs if ContainerId is set
             if (AutoStartLogs && !string.IsNullOrWhiteSpace(ContainerId))
             {
@@ -134,7 +141,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 catch (OperationCanceledException)
                 {
                     //If operation is canceled, flush any remaining items
-                    while(!_outputQueue.IsEmpty)
+                    while (!_outputQueue.IsEmpty)
                     {
                         var batch = new List<ConsoleLine>(MaxLinesPerTick);
                         while (batch.Count < MaxLinesPerTick && _outputQueue.TryDequeue(out var line))
@@ -238,7 +245,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             {
                 //not using ConfigureAwait(false) since we want to return to the UI thread as soon as possible (no stalling :))
                 var containers = await _service.ListContainersAsync(all: ShowAllContainers);
-                
+
                 //Back to the UI threa so safe to update ObservableCollection
                 Containers.Clear();
                 foreach (var container in containers)
@@ -264,7 +271,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 EnqueueLine(new ConsoleLine(DateTime.Now, $"[info] Selected container: {value.Names.FirstOrDefault() ?? value.Id}", false));
 
                 //auto start logs if enabled
-                if(AutoStartLogs && !string.IsNullOrWhiteSpace(ContainerId))
+                if (AutoStartLogs && !string.IsNullOrWhiteSpace(ContainerId))
                     _ = StartLogsCommand.ExecuteAsync(null);
             }
             else
@@ -278,20 +285,46 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             //auto refresh when this changes
             _ = RefreshContainersCommand.ExecuteAsync(null);
         }
-
         private bool CanSend() => !string.IsNullOrWhiteSpace(ContainerId) && !IsCommandRunning;
 
+        /// <summary>
+        /// Executes the specified user command asynchronously within the selected container.
+        /// </summary>
+        /// <remarks>This method sends the command to the selected container and captures the output,
+        /// including standard output and error streams. The results are displayed in the UI. If no container is
+        /// selected, the method logs a message indicating that no action was taken.</remarks>
+        /// <param name="userCmd">The user command to execute. Can include the command and its arguments. If <paramref name="userCmd"/> is
+        /// <see langword="null"/>, the method does not execute any command.</param>
+        /// <returns>A task that represents the asynchronous operation.</returns>
         [RelayCommand(CanExecute = nameof(CanSend))]
-        private async Task Send()
+        private async Task RunUserCommandAsync(UserCommand? userCmd)
         {
-            var cmd = (Input ?? "").Trim();
-            if (string.IsNullOrEmpty(cmd)) return;
+            // Check if the user command or selected container is null
+            if (userCmd is null || SelectedContainer is null)
+            {
+                EnqueueLine(new ConsoleLine(DateTime.Now, "[user-cmd] No command or container selected.", true));
+                return;
+            }
 
-            //add command to console on UI thread
-            EnqueueLine(new ConsoleLine(DateTime.Now, $"> {cmd}", false));
+            var cmd = userCmd.Command;
 
+            await ExecuteAndLogAsync(cmd);
+        }
+
+        [RelayCommand(CanExecute = nameof(CanSend))]
+        private async Task SendAsync()
+        {
+            var cmd = (Input ?? String.Empty).Trim();
             //Clear the input after sending
             Input = string.Empty;
+            await ExecuteAndLogAsync(cmd);
+        }
+
+        private async Task ExecuteAndLogAsync(string cmd) => await ExecuteAndLogAsync(SplitShellLike(cmd));
+        private async Task ExecuteAndLogAsync(string[] args)
+        {
+            //add command to console on UI thread
+            EnqueueLine(new ConsoleLine(DateTime.Now, $"> {string.Join(' ', args)}", false));
 
             //cancel any existing exec task
             _execCts?.Cancel();
@@ -308,7 +341,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             {
                 try
                 {
-                    var args = SplitShellLike(cmd);
                     var (output, exitCodeTask) = await _service.StreamExecAsync(ContainerId, args, tty: useTty, ct: ct);
 
                     //Stream the output line by line
@@ -404,7 +436,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                     //await with a timeout to prevent hanging during shutdown
                     await _logStreamTask.WaitAsync(TimeSpan.FromSeconds(2));
                 }
-                catch (OperationCanceledException) {}
+                catch (OperationCanceledException) { }
                 catch (TimeoutException) { }
                 finally
                 {
@@ -439,22 +471,45 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             }
         }
 
+        /// <summary>
+        /// Asynchronously loads user-defined commands from a JSON configuration file.
+        /// </summary>
+        /// <remarks>If the specified configuration file does not exist, a default set of commands is
+        /// created, serialized to the file, and then loaded. The commands are deserialized into a list of <see
+        /// cref="UserCommand"/> objects and added to the <c>UserCommands</c> collection.</remarks>
+        /// <param name="filename">The name of the configuration file to load. Defaults to "commands.json".</param>
+        /// <returns>A task that represents the asynchronous operation.</returns>
+        private async Task LoadUserCommandsAsync(string filename = "commands.json")
+        {
+            // Determine the path to the configuration file
+            var configPath = Path.Combine(AppContext.BaseDirectory, "Config", filename);
+            // If the file does not exist, create it with default commands
+            if (!File.Exists(configPath))
+            {
+                var defaultCmds = new[]
+                {
+                    new UserCommand { Label = "List /", Command = ["ls", "/"] },
+                    new UserCommand { Label = "Check Disk", Command = ["df", "-h"] },
+                };
+                Directory.CreateDirectory(Path.GetDirectoryName(configPath)!);
+                await File.WriteAllTextAsync(configPath,
+                    JsonSerializer.Serialize(defaultCmds, new JsonSerializerOptions { WriteIndented = true }));
+            }
+            // Read and deserialize the commands from the configuration file
+            var json = await File.ReadAllTextAsync(configPath);
+            var cmds = JsonSerializer.Deserialize<List<UserCommand>>(json) ?? new List<UserCommand>();
+            UserCommands.Clear();
+            // Add each command to the UserCommands collection
+            foreach (var cmd in cmds)
+            {
+                UserCommands.Add(cmd);
+            }
+        }
+
         private static string[] SplitShellLike(string cmd)
         {
             //simple split
             return cmd.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        }
-
-        private void AddLineToUI(ConsoleLine line)
-        {
-            if (_syncContext != null)
-            {
-                _syncContext.Post(state => Lines.Add((ConsoleLine)state!), line);
-            }
-            else
-            {
-                Lines.Add(line);
-            }
         }
 
         private void UpdateCommandStates()
@@ -469,9 +524,11 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
             void NotifyAll()
             {
-                try { 
+                try
+                {
                     SendCommand.NotifyCanExecuteChanged();
                     StartLogsCommand.NotifyCanExecuteChanged();
+                    RunUserCommandCommand.NotifyCanExecuteChanged();
                     StopLogsCommand.NotifyCanExecuteChanged();
                 }
                 catch (InvalidOperationException)
@@ -493,7 +550,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         public override async ValueTask DisposeAsync()
         {
             await StopLogsAsync();
-            
+
             _execCts?.Cancel();
             if (_execTask != null)
             {
@@ -511,7 +568,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                     _execCts = null;
                 }
             }
-            
+
             await StopUiUpdateTaskAsync();
             await base.DisposeAsync();
         }
