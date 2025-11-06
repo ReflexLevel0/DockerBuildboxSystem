@@ -66,7 +66,7 @@ namespace DockerBuildBoxSystem.Contracts
         public ContainerState StateKind => ParseState(State);
 
         /// <summary>
-        /// Convenience flag indicating whether the container is currently running.
+        /// A flag indicating whether the container is currently running or not, based on the <see cref="StateKind"/>.
         /// </summary>
         public bool IsRunning => StateKind == ContainerState.Running;
 
