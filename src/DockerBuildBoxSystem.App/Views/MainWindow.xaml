@@ -5,6 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:DockerBuildBoxSystem.App"
         xmlns:vm="clr-namespace:DockerBuildBoxSystem.ViewModels.Main;assembly=DockerBuildBoxSystem.ViewModels"
+        xmlns:uc="clr-namespace:DockerBuildBoxSystem.App.UserControls"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:MainViewModel}"
         Title="{Binding Title}"
@@ -19,10 +20,8 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
         
-        <!-- Main Content Area -->
-        <TextBlock Grid.Row="0" 
-                   Text="Docker BuildBox System!!!" 
-                   Style="{StaticResource TitleTextBlockStyle}"/>
+        <!-- Main Content Area - the UserControl is responsible for its own ViewModel lifecycle -->
+        <uc:ContainerConsole x:Name="ContainerConsoleControl" Grid.Row="0" />
         
         <!-- Exit Button -->
         <Button Grid.Row="1" 
