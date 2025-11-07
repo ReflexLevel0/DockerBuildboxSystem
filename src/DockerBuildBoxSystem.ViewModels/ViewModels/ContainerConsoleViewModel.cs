@@ -55,6 +55,15 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         // Manage user commands
         private readonly UserCommandService _userCommandService = new();
 
+        /// <summary>
+        /// Raised whenever an important line is added to the UI, ex a error line that needs attention.
+        /// Used for view-specific behaviors (e.g., auto-scroll).
+        /// </summary>
+        public event EventHandler<ConsoleLine>? ImportantLineArrived;
+
+        /// <summary>
+        /// Lines currently displayed in the console UI.
+        /// </summary>
         public ObservableCollection<ConsoleLine> Lines { get; } = new ContainerObservableCollection<ConsoleLine>();
 
         /// <summary>
@@ -807,6 +816,11 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             UserCommands.RemoveAt(index);
         }
 
+        /// <summary>
+        /// Splits a shell-like command string into argv tokens (very simple splitting by spaces
+        /// </summary>
+        /// <param name="cmd">The command string.</param>
+        /// <returns>The argv array.</returns>
         private static string[] SplitShellLike(string cmd)
         {
             //simple split
