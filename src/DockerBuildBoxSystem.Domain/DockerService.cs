@@ -21,6 +21,10 @@ namespace DockerBuildBoxSystem.Domain
         private readonly DockerClient _client;
         private bool _disposed;
 
+        /// <summary>
+        /// Disposes the underlying Docker client
+        /// </summary>
+        /// <returns>A task that represents the dispose operation.</returns>
         public async ValueTask DisposeAsync()
         {
             if (_disposed)
@@ -36,6 +40,9 @@ namespace DockerBuildBoxSystem.Domain
             GC.SuppressFinalize(this);
         }
 
+        /// <summary>
+        /// Synchronously disposes resources by delegating to <see cref="DisposeAsync"/> and blocking until completion.
+        /// </summary>
         public void Dispose()
         {
             if (_disposed)
@@ -48,10 +55,10 @@ namespace DockerBuildBoxSystem.Domain
         }
 
         /// <summary>
-        /// Constructor for DockerService.
+        /// Initializes a new instance of the <see cref="DockerService"/> class.
         /// </summary>
-        /// <param name="endpoint">The docker endpoint URI</param>
-        /// <param name="timeout">Optional timeout for Docker requests</param>
+        /// <param name="endpoint">The docker endpoint URI. If null, a platform default is used retrieved from <see cref="GetDefaultDockerUri"/>.</param>
+        /// <param name="timeout">Optional timeout for Docker requests. Defaults to 100 seconds.</param>
         public DockerService(string? endpoint = null, TimeSpan? timeout = null)
         {
             _client = new DockerClientConfiguration(
