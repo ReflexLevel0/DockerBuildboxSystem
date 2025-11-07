@@ -14,6 +14,7 @@ using System.Threading.Tasks;
 
 namespace DockerBuildBoxSystem.ViewModels.ViewModels
 {
+    #region UI/Presentation DTOs
     /// <summary>
     /// Represents a console line, containing metadata
     /// </summary>
@@ -22,7 +23,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
     /// <param name="IsError">True if the line represents an error output.</param>
     /// <param name="IsImportant">True if the line is considered important (e.g., should trigger auto-scroll).</param>
     public sealed record ConsoleLine(DateTime Timestamp, string Text, bool IsError, bool IsImportant = false);
-
+    #endregion
 
     /// <summary>
     /// ViewModel for a container console that streams logs and executes commands inside Docker containers.
@@ -81,6 +82,11 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// Currently selected container id OR name.
         /// </summary>
         [ObservableProperty]
+        [NotifyCanExecuteChangedFor(nameof(StartContainerCommand))]
+        [NotifyCanExecuteChangedFor(nameof(StopContainerCommand))]
+        [NotifyCanExecuteChangedFor(nameof(RestartContainerCommand))]
+        [NotifyCanExecuteChangedFor(nameof(SendCommand))]
+        [NotifyCanExecuteChangedFor(nameof(RunUserCommandCommand))]
         private string _containerId = "";
 
         /// <summary>
@@ -93,18 +99,28 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// True while logs are currently being streamed.
         /// </summary>
         [ObservableProperty]
+        [NotifyCanExecuteChangedFor(nameof(StartLogsCommand))]
+        [NotifyCanExecuteChangedFor(nameof(StopLogsCommand))]
         private bool _isLogsRunning;
 
         /// <summary>
         /// True while a command is being executed.
         /// </summary>
         [ObservableProperty]
+        [NotifyCanExecuteChangedFor(nameof(SendCommand))]
+        [NotifyCanExecuteChangedFor(nameof(RunUserCommandCommand))]
+        [NotifyCanExecuteChangedFor(nameof(StopExecCommand))]
         private bool _isCommandRunning;
 
         /// <summary>
         /// The selected container info object.
         /// </summary>
         [ObservableProperty]
+        [NotifyCanExecuteChangedFor(nameof(StartContainerCommand))]
+        [NotifyCanExecuteChangedFor(nameof(StopContainerCommand))]
+        [NotifyCanExecuteChangedFor(nameof(RestartContainerCommand))]
+        [NotifyCanExecuteChangedFor(nameof(SendCommand))]
+        [NotifyCanExecuteChangedFor(nameof(RunUserCommandCommand))]
         private ContainerInfo? _selectedContainer;
 
         /// <summary>
@@ -127,7 +143,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
         /// <summary>
         /// Repreents a batch for the UI, comprised of two subsets: general lines that are posted to the UI, and important lines
-        /// that might need some special handling (e.g., auto-scroll in the view).
+        /// that might need some special handling (e.g., auto-scroll in the view). Only defined internally 
         /// </summary>
         private sealed record UiBatch(IReadOnlyList<ConsoleLine> Lines, IReadOnlyList<ConsoleLine> Important);
 
@@ -404,6 +420,89 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             _ = RefreshContainersCommand.ExecuteAsync(null);
         }
 
+        
+        private bool CanStartContainer() => !string.IsNullOrWhiteSpace(ContainerId) && (SelectedContainer?.IsRunning == false);
+
+        /// <summary>
+        /// Starts the selected container.
+        /// </summary>
+        [RelayCommand(CanExecute = nameof(CanStartContainer))]
+        private async Task StartContainerAsync()
+        {
+            if (string.IsNullOrWhiteSpace(ContainerId)) return;
+            try
+            {
+                EnqueueLine($"[info] Starting container: {ContainerId}", false);
+                var status = await _service.StartAsync(ContainerId);
+                if(status)
+                {
+                    EnqueueLine($"[info] Started container: {ContainerId}", false);
+                }
+                else
+                {
+                    EnqueueLine($"[start-container] Container did not start: {ContainerId}", true);
+                }
+            }
+            catch (Exception ex)
+            {
+                EnqueueLine($"[start-container-error] {ex.Message}", true);
+            }
+            finally
+            {
+                _ = RefreshContainersCommand.ExecuteAsync(null);
+            }
+        }
+
+        private bool CanStopContainer() => !string.IsNullOrWhiteSpace(ContainerId) && (SelectedContainer?.IsRunning == true);
+
+        /// <summary>
+        /// Stops a running container.
+        /// </summary>
+        [RelayCommand(CanExecute = nameof(CanStopContainer))]
+        private async Task StopContainerAsync()
+        {
+            if (string.IsNullOrWhiteSpace(ContainerId)) return;
+            try
+            {
+                EnqueueLine($"[info] Stopping container: {ContainerId}", false);
+                await _service.StopAsync(ContainerId, timeout: TimeSpan.FromSeconds(10));
+                EnqueueLine($"[info] Stopped container: {ContainerId}", false);
+            }
+            catch (Exception ex)
+            {
+                EnqueueLine($"[stop-container-error] {ex.Message}", true);
+            }
+            finally
+            {
+                _ = RefreshContainersCommand.ExecuteAsync(null);
+            }
+        }
+
+        private bool CanRestartContainer() => !string.IsNullOrWhiteSpace(ContainerId) && (SelectedContainer?.IsRunning == true);
+
+        /// <summary>
+        /// Restarts a running container.
+        /// </summary>
+        [RelayCommand(CanExecute = nameof(CanRestartContainer))]
+        private async Task RestartContainerAsync()
+        {
+            if (string.IsNullOrWhiteSpace(ContainerId)) return;
+            try
+            {
+                EnqueueLine($"[info] Restarting container: {ContainerId}", false);
+                await _service.RestartAsync(ContainerId, timeout: TimeSpan.FromSeconds(10));
+                EnqueueLine($"[info] Restarted container: {ContainerId}", false);
+            }
+            catch (Exception ex)
+            {
+                EnqueueLine($"[restart-container-error] {ex.Message}", true);
+            }
+            finally
+            {
+                _ = RefreshContainersCommand.ExecuteAsync(null);
+            }
+        }
+
         #endregion
 
         #region Command Execution
@@ -411,7 +510,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// <summary>
         /// Determines whether sending commands is currently allowed.
         /// </summary>
-        private bool CanSend() => !string.IsNullOrWhiteSpace(ContainerId) && !IsCommandRunning;
+        private bool CanSend() => !string.IsNullOrWhiteSpace(ContainerId) && !IsCommandRunning && (SelectedContainer?.IsRunning == true);
 
         /// <summary>
         /// Executes the specified user command asynchronously within the selected container.
@@ -503,13 +602,11 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 }
                 finally
                 {
-                    IsCommandRunning = false;
-                    UpdateCommandStates();
+                    SetOnUiThread(() => IsCommandRunning = false);
                 }
             }, ct);
 
-            IsCommandRunning = true;
-            UpdateCommandStates();
+            SetOnUiThread(() => IsCommandRunning = true);
         }
 
         /// <summary>
@@ -540,8 +637,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                     _execCts?.Dispose();
                     _execCts = null;
 
-                    IsCommandRunning = false;
-                    UpdateCommandStates();
+                    SetOnUiThread(() => IsCommandRunning = false);
                 }
             }
         }
@@ -602,7 +698,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             }, ct);
 
             IsLogsRunning = true;
-            UpdateCommandStates();
         }
 
         /// <summary>
@@ -634,7 +729,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                     _logsCts = null;
 
                     IsLogsRunning = false;
-                    UpdateCommandStates();
                 }
             }
         }
@@ -717,46 +811,31 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         }
 
         /// <summary>
-        /// Notifies dependent commands that their CanExecute state may have changed.
+        /// Executes an action on the UI thread IF a synchronization context is available, otherwise executes it inline.
         /// </summary>
-        private void UpdateCommandStates()
+        private void SetOnUiThread(Action action)
         {
-            if (_syncContext == null)
+            if (_syncContext == null || SynchronizationContext.Current == _syncContext)
             {
-                NotifyAll();
+                action();
                 return;
             }
 
-            _syncContext.Post(_ => NotifyAll(), null);
-
-            void NotifyAll()
+            _syncContext.Post(_ =>
             {
-                try
-                {
-                    SendCommand.NotifyCanExecuteChanged();
-                    StopExecCommand.NotifyCanExecuteChanged();
-
-                    StartLogsCommand.NotifyCanExecuteChanged();
-                    StopLogsCommand.NotifyCanExecuteChanged();
-
-                    RunUserCommandCommand.NotifyCanExecuteChanged();
+                try { 
+                    action(); 
                 }
-                catch (InvalidOperationException)
-                {
-                    //protection in case things goes wrong, especially since this might be called during shutdown
+                catch (InvalidOperationException) { 
+                
                 }
-            }
+            }, null);
         }
 
-        /// <summary>
-        /// Invoked when the <see cref="ContainerId"/> property changes.
-        /// </summary>
-        /// <param name="value">The new container id or name."></param>
-        partial void OnContainerIdChanged(string value)
-        {
-            UpdateCommandStates();
-        }
-        
+        #endregion
+
+        #region Cleanup
+
         /// <summary>
         /// cancel and cleanup task
         /// </summary>

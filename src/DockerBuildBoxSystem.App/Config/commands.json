@@ -18,5 +18,13 @@
   {
     "Label": "Processes",
     "Command": [ "ps", "aux" ]
+  },
+  {
+    "Label": "Build",
+    "Command": [ "echo", "Building!" ]
+  },
+  {
+    "Label": "Clean",
+    "Command": [ "echo", "Cleaning!" ]
   }
 ]
