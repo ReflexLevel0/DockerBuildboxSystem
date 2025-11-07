@@ -10,11 +10,11 @@ namespace DockerBuildBoxSystem.App.Services
     /// A WPF implementation of clipboard service, STA safe so it marshals the UI dispatcher.
     /// Put here instead of in DockerBuildBoxSystem.Domain since it have WPF dependencies (i.e this is a UI-specific implementation of the IClipboardInterface).
     /// </summary>
-    public sealed class WPFClipboardService : IClipboardService
+    public sealed class ClipboardService : IClipboardService
     {
         private readonly Dispatcher _dispatcher;
 
-        public WPFClipboardService()
+        public ClipboardService()
         {
             _dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
         }

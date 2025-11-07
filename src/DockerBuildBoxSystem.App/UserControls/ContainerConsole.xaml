@@ -25,7 +25,6 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             
             <TextBlock Grid.Column="0" 
@@ -73,22 +72,6 @@
                     Command="{Binding RefreshContainersCommand}"
                     Padding="8,4"
                     MinWidth="70"/>
-            <StackPanel Grid.Column="4" Orientation="Horizontal" Margin="6,0,0,0" VerticalAlignment="Center">
-                <Button Content="Start"
-                     Margin="0,0,6,0"
-                     Padding="8,4"
-                     MinWidth="70"
-                     Command="{Binding StartContainerCommand}"/>
-                <Button Content="Stop"
-                     Margin="0,0,6,0"
-                     Padding="8,4"
-                     MinWidth="70"
-                     Command="{Binding StopContainerCommand}"/>
-                <Button Content="Restart"
-                     Padding="8,4"
-                     MinWidth="70"
-                     Command="{Binding RestartContainerCommand}"/>
-            </StackPanel>
         </Grid>
 
         <!-- User Commands -->
@@ -165,7 +148,6 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             
             <TextBox x:Name="Input"
@@ -183,11 +165,6 @@
                     Content="Send"
                     Padding="12,4"
                     Command="{Binding SendCommand}" />
-            
-            <Button Grid.Column="2"
-                    Content="Stop"
-                    Padding="12,4"
-                    Command="{Binding StopExecCommand}" />
         </Grid>
     </Grid>
 </UserControl>

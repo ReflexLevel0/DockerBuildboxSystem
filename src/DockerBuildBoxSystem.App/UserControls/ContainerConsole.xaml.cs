@@ -1,10 +1,24 @@
-﻿using DockerBuildBoxSystem.ViewModels.ViewModels;
+﻿using DockerBuildBoxSystem.Contracts;
+using DockerBuildBoxSystem.Domain;
+using DockerBuildBoxSystem.ViewModels.Main;
+using DockerBuildBoxSystem.ViewModels.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
+using System;
+using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Threading;
+using System.Windows.Data;
+using System.Windows.Documents;
+using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using System.Windows.Navigation;
+using System.Windows.Shapes;
 
 namespace DockerBuildBoxSystem.App.UserControls
 {
@@ -60,7 +74,7 @@ namespace DockerBuildBoxSystem.App.UserControls
                 DataContext = _viewModel;
 
             //attach auto-scroll behavior
-            _viewModel.ImportantLineArrived += ViewModelOnImportantLineArrived;
+            _viewModel.Lines.CollectionChanged += Lines_CollectionChanged;
         }
 
         private void OnUnloaded(object? sender, RoutedEventArgs e)
@@ -69,7 +83,7 @@ namespace DockerBuildBoxSystem.App.UserControls
                 return;
 
             //Only detach view-specific behavior
-            _viewModel.ImportantLineArrived -= ViewModelOnImportantLineArrived;
+            _viewModel.Lines.CollectionChanged -= Lines_CollectionChanged;
         }
 
 
@@ -84,7 +98,7 @@ namespace DockerBuildBoxSystem.App.UserControls
             try
             {
                 //detach event handlers
-                _viewModel.ImportantLineArrived -= ViewModelOnImportantLineArrived;
+                _viewModel.Lines.CollectionChanged -= Lines_CollectionChanged;
 
                 //dispose the ViewModel
                 await _viewModel.DisposeAsync();
@@ -94,22 +108,15 @@ namespace DockerBuildBoxSystem.App.UserControls
                 //ignoring errors during cleanup
             }
         }
-        private void ViewModelOnImportantLineArrived(object? sender, ConsoleLine line)
-        {
-            //scroll to the specific important line that was just added
-            ScrollToItem(line);
-        }
 
-        private void ScrollToItem(object item)
+        private void Lines_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
         {
-            if (OutputList is null) return;
-
-            Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+            //auto-scroll to the bottom when new lines are added
+            if (e.Action == NotifyCollectionChangedAction.Add && OutputList?.Items.Count > 0)
             {
-                if (OutputList.Items.Count == 0) return;
-                OutputList.ScrollIntoView(item);
-            }));
+                var last = OutputList.Items[^1];
+                OutputList.ScrollIntoView(last);
+            }
         }
-
     }
 }
