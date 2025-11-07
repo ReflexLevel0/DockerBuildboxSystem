@@ -11,6 +11,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using DockerBuildBoxSystem.Domain;
 
 namespace DockerBuildBoxSystem.ViewModels.ViewModels
 {
@@ -51,15 +52,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private Task? _uiUpdateTask;
         private readonly SynchronizationContext? _syncContext;
 
-        /// <summary>
-        /// Raised whenever an important line is added to the UI, ex a error line that needs attention.
-        /// Used for view-specific behaviors (e.g., auto-scroll).
-        /// </summary>
-        public event EventHandler<ConsoleLine>? ImportantLineArrived;
+        // Manage user commands
+        private readonly UserCommandService _userCommandService = new();
 
-        /// <summary>
-        /// Lines currently displayed in the console UI.
-        /// </summary>
         public ObservableCollection<ConsoleLine> Lines { get; } = new ContainerObservableCollection<ConsoleLine>();
 
         /// <summary>
@@ -799,11 +794,19 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             }
         }
 
-        /// <summary>
-        /// Splits a shell-like command string into argv tokens (very simple splitting by spaces).
-        /// </summary>
-        /// <param name="cmd">The command string.</param>
-        /// <returns>The argv array.</returns>
+
+        public async Task AddCommandAsync(UserCommand newCmd)
+        {
+            await _userCommandService.AddAsync(newCmd);
+            UserCommands.Add(newCmd);
+        }
+
+        public async Task RemoveCommandAtAsync(int index)
+        {
+            await _userCommandService.RemoveAtAsync(index);
+            UserCommands.RemoveAt(index);
+        }
+
         private static string[] SplitShellLike(string cmd)
         {
             //simple split
