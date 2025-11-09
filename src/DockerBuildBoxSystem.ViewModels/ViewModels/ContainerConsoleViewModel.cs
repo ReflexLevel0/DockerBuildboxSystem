@@ -1,17 +1,19 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DockerBuildBoxSystem.Contracts;
-using DockerBuildBoxSystem.ViewModels.Common;
+using DockerBuildBoxSystem.Domain;
 using DockerBuildBoxSystem.Models;
+using DockerBuildBoxSystem.ViewModels.Common;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
+using System.Threading.Channels;
 using System.Threading.Tasks;
-using DockerBuildBoxSystem.Domain;
 
 namespace DockerBuildBoxSystem.ViewModels.ViewModels
 {
@@ -41,6 +43,10 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         //exec streaming
         private CancellationTokenSource? _execCts;
         private Task? _execTask;
+        private ChannelWriter<string>? _execInputWriter;
+        // registration to force channel completion
+        private CancellationTokenRegistration? _execCancelRegistration; 
+
 
         //To ensure UI is responsive
         private const int MaxConsoleLines = 2000;
@@ -55,16 +61,16 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         // Manage user commands
         private readonly UserCommandService _userCommandService = new();
 
+        //Text output bound to TextBox in the view
+        [ObservableProperty]
+        private string _output = string.Empty;
+        private readonly StringBuilder _outputBuilder = new();
+
         /// <summary>
         /// Raised whenever an important line is added to the UI, ex a error line that needs attention.
         /// Used for view-specific behaviors (e.g., auto-scroll).
         /// </summary>
         public event EventHandler<ConsoleLine>? ImportantLineArrived;
-
-        /// <summary>
-        /// Lines currently displayed in the console UI.
-        /// </summary>
-        public ObservableCollection<ConsoleLine> Lines { get; } = new ContainerObservableCollection<ConsoleLine>();
 
         /// <summary>
         /// List of available containers on the host.
@@ -144,6 +150,10 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// </summary>
         [ObservableProperty]
         private bool _autoStartLogs = true;
+
+        //force TTY for exec sessions - used for interactive shells such python
+        [ObservableProperty]
+        private bool _forceTtyExec = true;
 
         /// <summary>
         /// Repreents a batch for the UI, comprised of two subsets: general lines that are posted to the UI, and important lines
@@ -286,30 +296,16 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             var lines = batch.Lines;
             if (lines.Count == 0) return;
 
-            if (Lines is ContainerObservableCollection<ConsoleLine> contLines)
+            // Append new lines to aggregated output
+            foreach (var line in lines)
             {
-                contLines.AddRange(lines);
-            }
-            else
-            {
-                foreach (var line in lines)
-                {
-                    Lines.Add(line);
-                }
+                _outputBuilder.Append(line.Text).Append('\n');
             }
 
-            //Trim the UI by removing old lines - why? keep it responsive! otherwise... lags
-            if (Lines.Count > MaxConsoleLines)
-            {
-                var toRemove = Lines.Count - MaxConsoleLines;
-                //remove from the start
-                for (int i = 0; i < toRemove; i++)
-                {
-                    Lines.RemoveAt(0);
-                }
-            }
+            // Update bound Output once per batch
+            Output = _outputBuilder.ToString();
 
-            //nnbotify only for the important lines captured during batching
+            // Notify only for important lines captured during batching
             foreach (var l in batch.Important)
             {
                 ImportantLineArrived?.Invoke(this, l);
@@ -514,7 +510,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// <summary>
         /// Determines whether sending commands is currently allowed.
         /// </summary>
-        private bool CanSend() => !string.IsNullOrWhiteSpace(ContainerId) && !IsCommandRunning && (SelectedContainer?.IsRunning == true);
+        private bool CanSend() => !string.IsNullOrWhiteSpace(ContainerId) && (SelectedContainer?.IsRunning == true);
 
         /// <summary>
         /// Executes the specified user command asynchronously within the selected container.
@@ -539,7 +535,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
             var cmd = userCmd.Command;
 
-            await ExecuteAndLogAsync(cmd);
+            await RouteInputAsync(string.Join(' ', cmd));
         }
 
         /// <summary>
@@ -548,16 +544,12 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [RelayCommand(CanExecute = nameof(CanSend))]
         private async Task SendAsync()
         {
-            var cmd = (Input ?? String.Empty).Trim();
-            //Clear the input after sending
+            var raw = (Input ?? string.Empty);
             Input = string.Empty;
-            await ExecuteAndLogAsync(cmd);
+
+            await RouteInputAsync(raw);
         }
 
-        /// <summary>
-        /// Executes a command string by splitting it as a argv array.
-        /// </summary>
-        private async Task ExecuteAndLogAsync(string cmd) => await ExecuteAndLogAsync(SplitShellLike(cmd));
 
         /// <summary>
         /// Executes a command inside the selected container and streams output to the console UI.
@@ -565,7 +557,11 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// <param name="args">The command and its arguments (argv form).</param>
         private async Task ExecuteAndLogAsync(string[] args)
         {
-            //cancel any existing exec task
+            if (args.Length == 0)
+            {
+                return; //ignore empty
+            }
+
             _execCts?.Cancel();
             _execCts = new CancellationTokenSource();
             var ct = _execCts.Token;
@@ -573,7 +569,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             var containerInfo = await _service.InspectAsync(ContainerId, ct);
 
             //Whether to use TTY mode based on container settings
-            bool useTty = containerInfo.Tty;
+            bool useTty = ForceTtyExec || containerInfo.Tty;
 
             //add command to console on UI thread
             EnqueueLine($"> {string.Join(' ', args)}", false);
@@ -583,7 +579,15 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             {
                 try
                 {
-                    var (output, exitCodeTask) = await _service.StreamExecAsync(ContainerId, args, tty: useTty, ct: ct);
+                    var (output, input, exitCodeTask) = await _service.StreamExecAsync(ContainerId, args, tty: useTty, ct: ct);
+                    _execInputWriter = input;
+
+                    // register cancellation to aggressively complete writer so reader loop unblocks
+                    _execCancelRegistration?.Dispose();
+                    _execCancelRegistration = ct.Register(() =>
+                    {
+                        try { _execInputWriter?.Complete(); } catch { }
+                    });
 
                     //Stream the output line by line
                     await foreach (var (isErr, text) in output.ReadAllAsync(ct))
@@ -606,6 +610,10 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 }
                 finally
                 {
+                    _execCancelRegistration?.Dispose();
+                    _execCancelRegistration = null;
+                    // mark interactive session closed
+                    _execInputWriter = null;
                     SetOnUiThread(() => IsCommandRunning = false);
                 }
             }, ct);
@@ -625,7 +633,11 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private async Task StopExecAsync()
         {
             _execCts?.Cancel();
-
+            try { _execInputWriter?.Complete(); } catch { }
+            // prevent further interactive writes while shutting down
+            _execInputWriter = null;
+            _execCancelRegistration?.Dispose();
+            _execCancelRegistration = null;
             if (_execTask is not null)
             {
                 try
@@ -634,7 +646,10 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                     await _execTask.WaitAsync(TimeSpan.FromSeconds(2));
                 }
                 catch (OperationCanceledException) { }
-                catch (TimeoutException) { }
+                catch (TimeoutException)
+                {
+                    EnqueueLine("[exec-stop-timeout] Execution did not stop within timeout.", true, true);
+                }
                 finally
                 {
                     _execTask = null;
@@ -747,7 +762,8 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [RelayCommand]
         private Task ClearAsync()
         {
-            Lines.Clear();
+            _outputBuilder.Clear();
+            Output = string.Empty;
             return Task.CompletedTask;
         }
 
@@ -757,7 +773,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [RelayCommand]
         private async Task CopyAsync()
         {
-            var text = string.Join(Environment.NewLine, Lines.Select(l => $"{l.Timestamp:HH:mm:ss} {l.Text}"));
+            var text = Output;
             if (_clipboard is not null)
             {
                 await _clipboard.SetTextAsync(text);
@@ -823,8 +839,43 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// <returns>The argv array.</returns>
         private static string[] SplitShellLike(string cmd)
         {
-            //simple split
-            return cmd.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var result = new List<string>();
+            if (string.IsNullOrWhiteSpace(cmd))
+            {
+                return result.ToArray();
+            }
+
+            var current = new StringBuilder();
+            var inQuotes = false;
+
+            foreach (var ch in cmd)
+            {
+                switch (ch)
+                {
+                    case '\"':
+                        inQuotes = !inQuotes;
+                        current.Append(ch);
+                        break;
+                    case ' ' when !inQuotes:
+                        if (current.Length > 0)
+                        {
+                            result.Add(current.ToString());
+                            current.Clear();
+                        }
+
+                        break;
+                    default:
+                        current.Append(ch);
+                        break;
+                }
+            }
+
+            if (current.Length > 0)
+            {
+                result.Add(current.ToString());
+            }
+
+            return result.ToArray();
         }
 
         /// <summary>
@@ -847,6 +898,36 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 
                 }
             }, null);
+        }
+
+        private bool IsInteractive => IsCommandRunning && _execInputWriter is not null;
+
+        private async Task<bool> TryWriteToInteractiveAsync(string raw)
+        {
+            if (!IsInteractive) return false;
+
+            try
+            {
+                await _execInputWriter!.WriteAsync(raw);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                EnqueueLine($"[input-error] {ex.Message}", true);
+                return true; //handled by interactive path
+            }
+        }
+
+        private async Task RouteInputAsync(string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+                return;
+
+            if (await TryWriteToInteractiveAsync(raw))
+                return;
+
+            var args = SplitShellLike(raw);
+            await ExecuteAndLogAsync(args);
         }
 
         #endregion

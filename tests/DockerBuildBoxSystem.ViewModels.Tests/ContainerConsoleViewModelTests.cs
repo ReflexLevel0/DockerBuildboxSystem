@@ -79,8 +79,8 @@ public class ContainerConsoleViewModelTests
         vm.SelectedContainer = new ContainerInfo { Id = "abc", Names = ["abc"] };
 
         //Act
-        //Wait until line appears., with timeout after 2 seconds...
-        var ok = await WaitUntilAsync(() => vm.Lines.Any(l => l.Text == "sup"), TimeSpan.FromSeconds(2));
+        //Wait until line appears., with timeout after2 seconds...
+        var ok = await WaitUntilAsync(() => vm.Output.Contains("sup"), TimeSpan.FromSeconds(2));
 
         //Assert
         Assert.True(ok);
@@ -120,8 +120,9 @@ public class ContainerConsoleViewModelTests
             (true,  "err1"),
         ]);
         var exitTask = Task.FromResult(0L);
+        var inputWriter = Channel.CreateUnbounded<string>().Writer;
         ContainerService.StreamExecAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult((output, (Task<long>)exitTask)));
+            .Returns(Task.FromResult((output, inputWriter, (Task<long>)exitTask)));
 
         var vm = CreateViewModel(ContainerService);
 
@@ -135,10 +136,10 @@ public class ContainerConsoleViewModelTests
         await vm.SendCommand.ExecuteAsync(null);
 
         //Assert
-        var ok = await WaitUntilAsync(() => vm.Lines.Any(l => l.Text.Contains("[exit] 0")), TimeSpan.FromSeconds(2));
+        var ok = await WaitUntilAsync(() => vm.Output.Contains("[exit] 0"), TimeSpan.FromSeconds(2));
         Assert.True(ok);
-        Assert.Contains(vm.Lines, l => l.Text == "line1");
-        Assert.Contains(vm.Lines, l => l.Text == "err1");
+        Assert.Contains("line1", vm.Output);
+        Assert.Contains("err1", vm.Output);
         Assert.False(vm.IsCommandRunning);
     }
 
@@ -194,7 +195,7 @@ public class ContainerConsoleViewModelTests
         var Clipboard = Substitute.For<IClipboardService>();
 
         var vm = CreateViewModel(ContainerService, Clipboard);
-        vm.Lines.Add(new ConsoleLine(DateTime.Now, "sup", false));
+        vm.Output = "sup";
 
         //Act
         await vm.CopyCommand.ExecuteAsync(null);

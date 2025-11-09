@@ -2,10 +2,14 @@
 using Docker.DotNet.Models;
 using DockerBuildBoxSystem.Contracts;
 using System;
+using System.Buffers;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 using System.Xml.Linq;
@@ -20,39 +24,6 @@ namespace DockerBuildBoxSystem.Domain
         #region Variables and Constructor
         private readonly DockerClient _client;
         private bool _disposed;
-
-        /// <summary>
-        /// Disposes the underlying Docker client
-        /// </summary>
-        /// <returns>A task that represents the dispose operation.</returns>
-        public async ValueTask DisposeAsync()
-        {
-            if (_disposed)
-                return;
-
-            _disposed = true;
-
-            //dispose synchronously
-            _client?.Dispose();
-
-            await Task.CompletedTask;
-
-            GC.SuppressFinalize(this);
-        }
-
-        /// <summary>
-        /// Synchronously disposes resources by delegating to <see cref="DisposeAsync"/> and blocking until completion.
-        /// </summary>
-        public void Dispose()
-        {
-            if (_disposed)
-                return;
-
-            _disposed = true;
-
-            DisposeAsync().AsTask().GetAwaiter().GetResult();
-            GC.SuppressFinalize(this);
-        }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="DockerService"/> class.
@@ -160,7 +131,6 @@ namespace DockerBuildBoxSystem.Domain
                 {
                     stream = await _client.Containers.GetContainerLogsAsync(
                         containerId,
-                        tty,
                         new ContainerLogsParameters
                         {
                             ShowStdout = true,
@@ -247,101 +217,95 @@ namespace DockerBuildBoxSystem.Domain
         }
 
 
-        public async Task<(long ExitCode, string StdOut, string StdErr)> ExecAsync(
+        public async Task<(ChannelReader<(bool IsStdErr, string Line)> Output, ChannelWriter<string> Input, Task<long> ExitCodeTask)> StreamExecAsync(
             string containerId,
             IReadOnlyList<string> cmd,
             bool tty = false,
             CancellationToken ct = default)
         {
-            var create = await _client.Exec.ExecCreateContainerAsync(containerId,
-                new ContainerExecCreateParameters
-                {
-                    Cmd = cmd.ToList(),
-                    AttachStdout = true,
-                    AttachStderr = true,
-                    AttachStdin = false,
-                    Tty = tty
-                }, ct);
+            var outCh = Channel.CreateUnbounded<(bool, string)>(new UnboundedChannelOptions { SingleReader = true, SingleWriter = true });
 
-            //Start and attach in one go... returns MultiplexedStream when TTY==false.
-            using var attach = await _client.Exec.StartAndAttachContainerExecAsync(create.ID, tty, ct);
-
-            //Collect output
-            using var outMs = new MemoryStream();
-            using var errMs = new MemoryStream();
-
-            if (tty)
-            {
-                //With TTY, everything is merged to a single stream.
-                await attach.CopyOutputToAsync(Stream.Null, outMs, Stream.Null, ct);
-            }
-            else
-            {
-                await attach.CopyOutputToAsync(Stream.Null, outMs, errMs, ct);
-            }
-
-            //Wait until the exec finishes and get exit code
-            var resp = await _client.Exec.InspectContainerExecAsync(create.ID, ct);
-
-            var stdout = Encoding.UTF8.GetString(outMs.ToArray());
-            var stderr = Encoding.UTF8.GetString(errMs.ToArray());
-            return (resp.ExitCode, stdout, stderr);
-        }
-
-        public async Task<(ChannelReader<(bool IsStdErr, string Line)> Output, Task<long> ExitCodeTask)> StreamExecAsync(
-            string containerId,
-            IReadOnlyList<string> cmd,
-            bool tty = false,
-            CancellationToken ct = default)
-        {
-            var ch = Channel.CreateUnbounded<(bool, string)>(new UnboundedChannelOptions { SingleReader = true, SingleWriter = true });
+            var inCh = Channel.CreateUnbounded<string>(
+                new UnboundedChannelOptions { SingleReader = true, SingleWriter = true });
 
             //Create the exec instance
-            var create = await _client.Exec.ExecCreateContainerAsync(containerId,
+            var create = await _client.Exec.CreateContainerExecAsync(containerId,
                 new ContainerExecCreateParameters
                 {
                     Cmd = cmd.ToList(),
                     AttachStdout = true,
                     AttachStderr = true,
-                    AttachStdin = false,
+                    AttachStdin = true,
                     Tty = tty
                 }, ct);
 
             var execId = create.ID;
 
+            MultiplexedStream? stream = null;
+            CancellationTokenRegistration? registration = default;
+
+            //Start and attach to the exec instance
+            stream = await _client.Exec.StartContainerExecAsync(execId, new ContainerExecStartParameters { Detach = false, Tty = tty }, ct);
+
+            using var baseCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            using var stdinCts = CancellationTokenSource.CreateLinkedTokenSource(baseCts.Token);
+            using var stdoutCts = CancellationTokenSource.CreateLinkedTokenSource(baseCts.Token);
+            var stdinToken = stdinCts.Token;
+            var stdoutToken = stdoutCts.Token;
+
+            //Register cancellation callback to dispose stream immediately
+            registration = ct.Register(() => stream?.Dispose());
+
+            var inputCodeTask = Task.Run(async () =>
+            {
+                try
+                {
+                    await foreach (var chunk in inCh.Reader.ReadAllAsync(stdinToken))
+                    {
+                        var data = EncodeTerminalInput(chunk);
+                        await stream.WriteAsync(data, 0, data.Length, stdinToken).ConfigureAwait(false);
+                    }
+                }
+                catch (OperationCanceledException) { }
+                catch (ObjectDisposedException) { }
+                catch (Exception ex) { outCh.Writer.TryComplete(ex); }
+                finally
+                {
+                    try { stream?.CloseWrite(); } catch { }
+                }
+            }, stdinToken);
+
             //A task that streams the output and returns the exit code
             var exitCodeTask = Task.Run(async () =>
             {
-                MultiplexedStream? stream = null;
-                CancellationTokenRegistration? registration = default;
-
-                var buffer = new byte[4096];
+                var buffer = ArrayPool<byte>.Shared.Rent(8192);
                 var lineBufferStdOut = new StringBuilder();
                 var lineBufferStdErr = new StringBuilder();
 
                 try
                 {
-                    //Start and attach to the exec instance
-                    stream = await _client.Exec.StartAndAttachContainerExecAsync(execId, tty, ct).ConfigureAwait(false);
 
-                    //Register cancellation callback to dispose stream immediately
-                    registration = ct.Register(() => stream?.Dispose());
-
-                    while(!ct.IsCancellationRequested)
+                    while (!stdoutToken.IsCancellationRequested)
                     {
-                        //read from the multiplexed stream
-                        var result = await stream.ReadOutputAsync(buffer, 0, buffer.Length, ct);
-
+                        var result = await stream.ReadOutputAsync(buffer, 0, buffer.Length, stdoutToken);
                         if (result.Count == 0)
-                            break; //end of stream
+                            break; // EOF
 
                         var text = Encoding.UTF8.GetString(buffer, 0, result.Count);
+
+                        if (tty)
+                        {
+                            // TTY merges streams and REPLs often don't end with '\n'
+                            // => forward raw chunks immediately so prompts/banner show up
+                            await outCh.Writer.WriteAsync((false, text), CancellationToken.None);
+                            continue;
+                        }
 
                         bool isStdErr = result.Target == MultiplexedStream.TargetStream.StandardError;
                         var lineBuffer = isStdErr ? lineBufferStdErr : lineBufferStdOut;
 
                         //split by lines and add each line
-                        var lines = text.Split(new[] { '\n' }, StringSplitOptions.None);
+                        var lines = text.Split(['\n'], StringSplitOptions.None);
                         for (int i = 0; i < lines.Length; i++)
                         {
                             //incomplete line so save for next read
@@ -352,26 +316,24 @@ namespace DockerBuildBoxSystem.Domain
                             }
 
                             var completeLine = lineBuffer.ToString() + lines[i];
-                            if (!string.IsNullOrEmpty(completeLine) || (completeLine == string.Empty && i < lines.Length - 1))
-                            {
-                                await ch.Writer.WriteAsync((isStdErr, completeLine.TrimEnd('\r')), CancellationToken.None);
-                            }
                             lineBuffer.Clear();
+                            await outCh.Writer.WriteAsync((isStdErr, completeLine.TrimEnd('\r')), CancellationToken.None)
+                                            .ConfigureAwait(false);
                         }
                     }
 
                     //add any remaining buffered text
-                    if (lineBufferStdOut.Length > 0)
+                    if (!tty)
                     {
-                        await ch.Writer.WriteAsync((false, lineBufferStdOut.ToString().TrimEnd('\r')), CancellationToken.None);
-                    }
-                    if (lineBufferStdErr.Length > 0)
-                    {
-                        await ch.Writer.WriteAsync((true, lineBufferStdErr.ToString().TrimEnd('\r')), CancellationToken.None);
+                        if (lineBufferStdOut.Length > 0)
+                            await outCh.Writer.WriteAsync((false, lineBufferStdOut.ToString().TrimEnd('\r')), CancellationToken.None);
+                        if (lineBufferStdErr.Length > 0)
+                            await outCh.Writer.WriteAsync((true, lineBufferStdErr.ToString().TrimEnd('\r')), CancellationToken.None);
                     }
 
+
                     //wait for the exec to finish and get exit code
-                    var resp = await _client.Exec.InspectContainerExecAsync(execId, ct);
+                    var resp = await _client.Exec.InspectContainerExecAsync(execId, stdoutToken).ConfigureAwait(false);
                     return resp.ExitCode;
                 }
                 catch (OperationCanceledException)
@@ -386,26 +348,81 @@ namespace DockerBuildBoxSystem.Domain
                 }
                 catch (Exception ex)
                 {
-                    ch.Writer.TryComplete(ex);
+                    outCh.Writer.TryComplete(ex);
                     throw;
                 }
                 finally
                 {
-                    //unregister the cancellation callback
-                    registration?.Dispose();
+                    //Stop stdin
+                    try { stdinCts.Cancel(); } catch { }
+                    try { inCh.Writer.TryComplete(); } catch { }
 
-                    //ensure the stream is disposed
-                    stream?.Dispose();
-                    ch.Writer.TryComplete();
+                    //Break any I/O and release resources
+                    try { registration?.Dispose(); } catch { }
+                    try { stream?.Dispose(); } catch { }
+
+                    //Complete output channel
+                    outCh.Writer.TryComplete();
+
+                    try { await inputCodeTask.WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false); }
+                    catch { /* shutting it down */ }
                 }
-            }, ct);
+            }, stdoutToken);
 
-            return (ch.Reader, exitCodeTask);
+
+            return (outCh.Reader, inCh.Writer, exitCodeTask);
         }
         #endregion
 
 
         #region Helpers
+
+        /// <summary>
+        /// Disposes the underlying Docker client
+        /// </summary>
+        /// <returns>A task that represents the dispose operation.</returns>
+        public async ValueTask DisposeAsync()
+        {
+            if (_disposed)
+                return;
+
+            _disposed = true;
+
+            //dispose synchronously
+            _client?.Dispose();
+
+            await Task.CompletedTask;
+
+            GC.SuppressFinalize(this);
+        }
+
+        /// <summary>
+        /// Synchronously disposes resources by delegating to <see cref="DisposeAsync"/> and blocking until completion.
+        /// </summary>
+        public void Dispose()
+        {
+            if (_disposed)
+                return;
+
+            _disposed = true;
+
+            DisposeAsync().AsTask().GetAwaiter().GetResult();
+            GC.SuppressFinalize(this);
+        }
+        private static byte[] EncodeTerminalInput(string? value)
+        {
+            var normalized = value?.Replace("\r\n", "\n", StringComparison.Ordinal)
+                               .Replace('\r', '\n') ?? string.Empty;
+
+            if (!normalized.EndsWith('\n'))
+            {
+                normalized += '\n';
+            }
+
+            //interactive TTY sessions expect carriage returns to signal end of a line.
+            var carriageReturnNormalized = normalized.Replace('\n', '\r');
+            return Encoding.UTF8.GetBytes(carriageReturnNormalized);
+        }
         /// <summary>
         /// Gets the default URI for connecting to the Docker engine based on the current operating system.
         /// </summary>
@@ -419,6 +436,8 @@ namespace DockerBuildBoxSystem.Domain
                 return new Uri("npipe://./pipe/docker_engine");
             return new Uri("unix:///var/run/docker.sock");
         }
+
+
 
         #endregion
     }
