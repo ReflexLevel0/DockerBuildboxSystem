@@ -299,7 +299,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             // Append new lines to aggregated output
             foreach (var line in lines)
             {
-                _outputBuilder.Append(line.Text).Append('\n');
+                _outputBuilder.Append(line.Text);
             }
 
             // Update bound Output once per batch
@@ -380,7 +380,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             }
             catch (Exception ex)
             {
-                EnqueueLine($"[container-list-error] {ex.Message}", true);
+                EnqueueLine($"[container-list-error] {ex.Message} \r\n", true);
             }
             finally
             {
@@ -397,7 +397,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             if (value != null)
             {
                 ContainerId = value.Id;
-                EnqueueLine($"[info] Selected container: {value.Names.FirstOrDefault() ?? value.Id}", false);
+                EnqueueLine($"[info] Selected container: {value.Names.FirstOrDefault() ?? value.Id} \r\n", false);
 
                 //auto start logs if enabled
                 if (AutoStartLogs && !string.IsNullOrWhiteSpace(ContainerId))
@@ -432,20 +432,20 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             if (string.IsNullOrWhiteSpace(ContainerId)) return;
             try
             {
-                EnqueueLine($"[info] Starting container: {ContainerId}", false);
+                EnqueueLine($"[info] Starting container: {ContainerId} \r\n", false);
                 var status = await _service.StartAsync(ContainerId);
                 if(status)
                 {
-                    EnqueueLine($"[info] Started container: {ContainerId}", false);
+                    EnqueueLine($"[info] Started container: {ContainerId} \r\n", false);
                 }
                 else
                 {
-                    EnqueueLine($"[start-container] Container did not start: {ContainerId}", true);
+                    EnqueueLine($"[start-container] Container did not start: {ContainerId} \r\n", true);
                 }
             }
             catch (Exception ex)
             {
-                EnqueueLine($"[start-container-error] {ex.Message}", true);
+                EnqueueLine($"[start-container-error] {ex.Message} \r\n", true);
             }
             finally
             {
@@ -464,9 +464,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             if (string.IsNullOrWhiteSpace(ContainerId)) return;
             try
             {
-                EnqueueLine($"[info] Stopping container: {ContainerId}", false);
+                EnqueueLine($"[info] Stopping container: {ContainerId} \r\n", false);
                 await _service.StopAsync(ContainerId, timeout: TimeSpan.FromSeconds(10));
-                EnqueueLine($"[info] Stopped container: {ContainerId}", false);
+                EnqueueLine($"[info] Stopped container: {ContainerId} \r\n", false);
             }
             catch (Exception ex)
             {
@@ -489,13 +489,13 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             if (string.IsNullOrWhiteSpace(ContainerId)) return;
             try
             {
-                EnqueueLine($"[info] Restarting container: {ContainerId}", false);
+                EnqueueLine($"[info] Restarting container: {ContainerId}\r\n", false);
                 await _service.RestartAsync(ContainerId, timeout: TimeSpan.FromSeconds(10));
-                EnqueueLine($"[info] Restarted container: {ContainerId}", false);
+                EnqueueLine($"[info] Restarted container: {ContainerId}\r\n", false);
             }
             catch (Exception ex)
             {
-                EnqueueLine($"[restart-container-error] {ex.Message}", true);
+                EnqueueLine($"[restart-container-error] {ex.Message}\r\n", true);
             }
             finally
             {
@@ -529,7 +529,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             // Check if the user command or selected container is null
             if (userCmd is null || SelectedContainer is null)
             {
-                EnqueueLine("[user-cmd] No command or container selected.", true);
+                EnqueueLine("[user-cmd] No command or container selected.\r\n", true);
                 return;
             }
 
@@ -572,7 +572,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             bool useTty = ForceTtyExec || containerInfo.Tty;
 
             //add command to console on UI thread
-            EnqueueLine($"> {string.Join(' ', args)}", false);
+            EnqueueLine($"> {string.Join(' ', args)}\r\n", false);
 
             //Execute with streaming output in background (fire-and-forget style)
             _execTask = Task.Run(async () =>
@@ -598,15 +598,15 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
                     //Get the exit code after the stream completes
                     var exitCode = await exitCodeTask;
-                    EnqueueLine($"[exit] {exitCode}", false, true);
+                    EnqueueLine($"[exit] {exitCode}\r\n", false, true);
                 }
                 catch (OperationCanceledException)
                 {
-                    EnqueueLine("[exec] canceled", false, true);
+                    EnqueueLine("[exec] canceled\r\n", false, true);
                 }
                 catch (Exception ex)
                 {
-                    EnqueueLine($"[exec-error] {ex.Message}", true, true);
+                    EnqueueLine($"[exec-error] {ex.Message}\r\n", true, true);
                 }
                 finally
                 {
@@ -648,7 +648,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 catch (OperationCanceledException) { }
                 catch (TimeoutException)
                 {
-                    EnqueueLine("[exec-stop-timeout] Execution did not stop within timeout.", true, true);
+                    EnqueueLine("[exec-stop-timeout] Execution did not stop within timeout.\r\n", true, true);
                 }
                 finally
                 {
@@ -701,18 +701,18 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                     await foreach (var (isErr, text) in reader.ReadAllAsync(ct))
                     {
                         if (text is null) continue;
-                        EnqueueLine(text, isErr);
+                        EnqueueLine(text + "\r\n", isErr);
                     }
 
                     _logsCts?.Token.ThrowIfCancellationRequested();
                 }
                 catch (OperationCanceledException)
                 {
-                    EnqueueLine("[logs] canceled", false);
+                    EnqueueLine("[logs] canceled\r\n", false);
                 }
                 catch (Exception ex)
                 {
-                    EnqueueLine($"[logs-error] {ex.Message}", true, true);
+                    EnqueueLine($"[logs-error] {ex.Message}\r\n", true, true);
                 }
             }, ct);
 
@@ -913,7 +913,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             }
             catch (Exception ex)
             {
-                EnqueueLine($"[input-error] {ex.Message}", true);
+                EnqueueLine($"[input-error] {ex.Message} \r\n", true);
                 return true; //handled by interactive path
             }
         }
