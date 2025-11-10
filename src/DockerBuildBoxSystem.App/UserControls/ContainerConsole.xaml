@@ -110,7 +110,13 @@
         </ItemsControl>
         <!-- Output TextBox -->
         <Grid Grid.Row="2" ClipToBounds="True">
-            <TextBox x:Name="TerminalOutput" Style="{StaticResource TerminalTextBoxStyle}" Text="{Binding Output}" IsReadOnly="True" Background="{StaticResource ContainerBackgroundBrush}"/>
+            <TextBox x:Name="TerminalOutput" 
+                     Style="{StaticResource TerminalTextBoxStyle}" 
+                     IsReadOnly="True" 
+                     AcceptsReturn="True" 
+                     HorizontalScrollBarVisibility="Auto"
+                     VerticalScrollBarVisibility="Auto"
+                     Background="{StaticResource ContainerBackgroundBrush}"/>
             <StackPanel Orientation="Horizontal" Margin="8" VerticalAlignment="Top" HorizontalAlignment="Right">
                 <Button Content="Copy" Command="{Binding CopyCommand}" Padding="4,2" Margin="0,0,4,0"/>
                 <Button Content="Clear" Command="{Binding ClearCommand}" Padding="4,2"/>

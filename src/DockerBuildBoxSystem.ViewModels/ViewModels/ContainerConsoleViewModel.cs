@@ -45,12 +45,14 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private Task? _execTask;
         private ChannelWriter<string>? _execInputWriter;
         // registration to force channel completion
-        private CancellationTokenRegistration? _execCancelRegistration; 
+        private CancellationTokenRegistration? _execCancelRegistration;
 
 
         //To ensure UI is responsive
-        private const int MaxConsoleLines = 2000;
-        private const int MaxLinesPerTick = 200;
+        private const int UITimerDurationInMilliseconds = 200;
+        private const int MaxLinesPerTick = 50;
+        public event EventHandler<string>? OutputChunk;
+
 
         //global UI update
         private readonly ConcurrentQueue<ConsoleLine> _outputQueue = new();
@@ -58,13 +60,19 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private Task? _uiUpdateTask;
         private readonly SynchronizationContext? _syncContext;
 
+        //Rolling buffer
+        private readonly StringBuilder _buffer = new();
+        private readonly object _bufferLock = new();
+        public event EventHandler? OutputCleared;
+
+        //for tests/debug
+        public string Output
+        {
+            get { lock (_bufferLock) return _buffer.ToString(); }
+        }
+
         // Manage user commands
         private readonly UserCommandService _userCommandService = new();
-
-        //Text output bound to TextBox in the view
-        [ObservableProperty]
-        private string _output = string.Empty;
-        private readonly StringBuilder _outputBuilder = new();
 
         /// <summary>
         /// Raised whenever an important line is added to the UI, ex a error line that needs attention.
@@ -214,7 +222,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             _uiUpdateCts = new CancellationTokenSource();
             var ct = _uiUpdateCts.Token;
 
-            var uiTimer = new PeriodicTimer(TimeSpan.FromMilliseconds(50));
+            var uiTimer = new PeriodicTimer(TimeSpan.FromMilliseconds(UITimerDurationInMilliseconds));
 
             _uiUpdateTask = Task.Run(async () =>
             {
@@ -297,13 +305,19 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             if (lines.Count == 0) return;
 
             // Append new lines to aggregated output
+            var chunk = new StringBuilder();
             foreach (var line in lines)
             {
-                _outputBuilder.Append(line.Text);
+                chunk.Append(line.Text);
             }
 
             // Update bound Output once per batch
-            Output = _outputBuilder.ToString();
+            OutputChunk?.Invoke(this, chunk.ToString());
+
+            lock (_bufferLock)
+            {
+                _buffer.Append(chunk);
+            }
 
             // Notify only for important lines captured during batching
             foreach (var l in batch.Important)
@@ -529,7 +543,8 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             // Check if the user command or selected container is null
             if (userCmd is null || SelectedContainer is null)
             {
-                EnqueueLine("[user-cmd] No command or container selected.\r\n", true);
+                EnqueueLine("[user-cmd] No command or container selected.\r\n" +
+                    "", true);
                 return;
             }
 
@@ -760,11 +775,18 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// Clears all lines from the console.
         /// </summary>
         [RelayCommand]
-        private Task ClearAsync()
+        private async Task ClearAsync()
         {
-            _outputBuilder.Clear();
-            Output = string.Empty;
-            return Task.CompletedTask;
+            //Clear buffer
+            lock (_bufferLock)
+            {
+                _buffer.Clear();
+            }
+
+            OutputCleared?.Invoke(this, EventArgs.Empty);
+
+            //drop anything queued but not yet flushed
+            while (_outputQueue.TryDequeue(out _)) { }
         }
 
         /// <summary>
@@ -773,7 +795,12 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [RelayCommand]
         private async Task CopyAsync()
         {
-            var text = Output;
+            string text;
+            lock (_bufferLock)
+            {
+                text = _buffer.ToString();
+            }
+
             if (_clipboard is not null)
             {
                 await _clipboard.SetTextAsync(text);

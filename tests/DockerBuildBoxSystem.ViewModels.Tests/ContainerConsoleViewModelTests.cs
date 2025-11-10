@@ -195,7 +195,20 @@ public class ContainerConsoleViewModelTests
         var Clipboard = Substitute.For<IClipboardService>();
 
         var vm = CreateViewModel(ContainerService, Clipboard);
-        vm.Output = "sup";
+
+        ContainerService
+            .InspectAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ContainerInfo { Id = "abc", Names = ["abc"], Tty = false }));
+
+        ContainerService
+            .StreamLogsAsync(Arg.Any<string>(), true, Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(CreateCompletedReader([(false, "sup")])));
+
+        await vm.InitializeCommand.ExecuteAsync(null);
+        vm.ContainerId = "abc";
+        await vm.StartLogsCommand.ExecuteAsync(null);
+
+        await WaitUntilAsync(() => vm.Output.Contains("sup"), TimeSpan.FromSeconds(2));
 
         //Act
         await vm.CopyCommand.ExecuteAsync(null);

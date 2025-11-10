@@ -61,6 +61,18 @@ namespace DockerBuildBoxSystem.App.UserControls
 
             //attach auto-scroll behavior
             _viewModel.ImportantLineArrived += ViewModelOnImportantLineArrived;
+            _viewModel.OutputChunk += _viewModel_OutputChunk;
+            _viewModel.OutputCleared += _viewModel_OutputCleared;
+        }
+
+        private void _viewModel_OutputCleared(object? sender, EventArgs e)
+        {
+            TerminalOutput.Clear();
+        }
+
+        private void _viewModel_OutputChunk(object? sender, string chunk)
+        {
+            TerminalOutput.AppendText(chunk);
         }
 
         private void OnUnloaded(object? sender, RoutedEventArgs e)
