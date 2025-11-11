@@ -118,7 +118,10 @@
                 <DataTemplate DataType="{x:Type model:DropdownOption}">
                     <StackPanel Orientation="Horizontal" >
                         <TextBlock Text="{Binding Label}" Margin="0,0,4,0" VerticalAlignment="Center"/>
-                        <ComboBox ItemsSource="{Binding Values}" Width="100" Height="25" Padding="6"/>
+                        <ComboBox ItemsSource="{Binding Values}"
+                                  SelectedItem="{Binding SelectedValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                  Width="100" Height="25"
+                                  Padding="6"/>
                     </StackPanel>
 
                 </DataTemplate>
@@ -134,6 +137,12 @@
                                  Padding="6"
                                  FontFamily="Consolas"
                                  FontSize="13"/>
+                        <!--Button to retrieve input from textbox-->
+                        <Button Content="Send"
+                                Style="{StaticResource FlatIconButton}"
+                                Margin="4,0,0,0"
+                                Command="{Binding DataContext.SubmitTextCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                            />
                     </StackPanel>
                 </DataTemplate>
             </ItemsControl.Resources>

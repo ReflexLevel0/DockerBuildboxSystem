@@ -849,9 +849,21 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             {
                 EnqueueLine($"[user-control] Error loading user controls: {ex.Message}", true);
             }
+        }
 
-
-
+        /// <summary>
+        /// Retrieves the platform selection from the dropdown options.
+        /// </summary>
+        /// <remarks>This method searches the dropdown options for an entry with an ID matching "platform"
+        /// (case-insensitive). If no such option exists, the method returns <see langword="null"/>.</remarks>
+        /// <returns>The <see cref="DropdownOption"/> representing the platform selection, or <see langword="null"/>  if no
+        /// matching option is found.</returns>
+        private DropdownOption? GetPlatformFromDropdown()
+        {
+            // To use in the build process when the target platform is needed
+            return UserControlDefinition
+                .OfType<DropdownOption>()
+                .FirstOrDefault(d => d.Id.Equals("platform", StringComparison.OrdinalIgnoreCase));
         }
 
 
