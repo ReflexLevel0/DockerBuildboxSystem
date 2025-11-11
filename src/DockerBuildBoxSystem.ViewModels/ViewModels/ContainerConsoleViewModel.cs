@@ -1,17 +1,18 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DockerBuildBoxSystem.Contracts;
-using DockerBuildBoxSystem.ViewModels.Common;
+using DockerBuildBoxSystem.Domain;
 using DockerBuildBoxSystem.Models;
+using DockerBuildBoxSystem.ViewModels.Common;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using DockerBuildBoxSystem.Domain;
 
 namespace DockerBuildBoxSystem.ViewModels.ViewModels
 {
@@ -33,14 +34,8 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
     {
         private readonly IContainerService _service;
         private readonly IClipboardService? _clipboard;
-
-        //logs streaming
-        private CancellationTokenSource? _logsCts;
-        private Task? _logStreamTask;
-
-        //exec streaming
-        private CancellationTokenSource? _execCts;
-        private Task? _execTask;
+        private readonly ILogRunner _logRunner;
+        private readonly ICommandRunner _cmdRunner;
 
         //To ensure UI is responsive
         private const int MaxConsoleLines = 2000;
@@ -162,6 +157,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             _service = service ?? throw new ArgumentNullException(nameof(service));
             _clipboard = clipboard;
             _syncContext = SynchronizationContext.Current;
+
+            _logRunner = new LogRunner();
+            _cmdRunner = new CommandRunner();
         }
 
         /// <summary>
@@ -565,52 +563,31 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// <param name="args">The command and its arguments (argv form).</param>
         private async Task ExecuteAndLogAsync(string[] args)
         {
-            //cancel any existing exec task
-            _execCts?.Cancel();
-            _execCts = new CancellationTokenSource();
-            var ct = _execCts.Token;
-
-            var containerInfo = await _service.InspectAsync(ContainerId, ct);
-
-            //Whether to use TTY mode based on container settings
-            bool useTty = containerInfo.Tty;
-
-            //add command to console on UI thread
             EnqueueLine($"> {string.Join(' ', args)}", false);
 
-            //Execute with streaming output in background (fire-and-forget style)
-            _execTask = Task.Run(async () =>
-            {
-                try
-                {
-                    var (output, exitCodeTask) = await _service.StreamExecAsync(ContainerId, args, tty: useTty, ct: ct);
-
-                    //Stream the output line by line
-                    await foreach (var (isErr, text) in output.ReadAllAsync(ct))
-                    {
-                        if (text is null) continue;
-                        EnqueueLine(text, isErr);
-                    }
-
-                    //Get the exit code after the stream completes
-                    var exitCode = await exitCodeTask;
-                    EnqueueLine($"[exit] {exitCode}", false, true);
-                }
-                catch (OperationCanceledException)
-                {
-                    EnqueueLine("[exec] canceled", false, true);
-                }
-                catch (Exception ex)
-                {
-                    EnqueueLine($"[exec-error] {ex.Message}", true, true);
-                }
-                finally
-                {
-                    SetOnUiThread(() => IsCommandRunning = false);
-                }
-            }, ct);
-
             SetOnUiThread(() => IsCommandRunning = true);
+            try
+            {
+                await foreach (var (line, isErr) in _cmdRunner.RunAsync(_service, ContainerId, args))
+                {
+                    EnqueueLine(isErr, line);
+                }
+
+                var exitCode = _cmdRunner.ExitCode;
+                EnqueueLine($"[exit] {exitCode}", false, true);
+            }
+            catch (OperationCanceledException)
+            {
+                EnqueueLine("[exec] canceled", false, true);
+            }
+            catch (Exception ex)
+            {
+                EnqueueLine($"[exec-error] {ex.Message}", true, true);
+            }
+            finally
+            {
+                SetOnUiThread(() => IsCommandRunning = false);
+            }
         }
 
         /// <summary>
@@ -624,26 +601,8 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [RelayCommand(CanExecute = nameof(CanStopExec))]
         private async Task StopExecAsync()
         {
-            _execCts?.Cancel();
-
-            if (_execTask is not null)
-            {
-                try
-                {
-                    // Await with a timeout to prevent hanging during shutdown
-                    await _execTask.WaitAsync(TimeSpan.FromSeconds(2));
-                }
-                catch (OperationCanceledException) { }
-                catch (TimeoutException) { }
-                finally
-                {
-                    _execTask = null;
-                    _execCts?.Dispose();
-                    _execCts = null;
-
-                    SetOnUiThread(() => IsCommandRunning = false);
-                }
-            }
+            await _cmdRunner.StopAsync();
+            SetOnUiThread(() => IsCommandRunning = false);
         }
 
         #endregion
@@ -661,47 +620,27 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [RelayCommand(CanExecute = nameof(CanStartLogs))]
         private async Task StartLogsAsync()
         {
-            //Stop existing logs if it is currently running
-            await StopLogsAsync();
+            SetOnUiThread(() => IsLogsRunning = true);
 
-            _logsCts = new();
-            var ct = _logsCts.Token;
-
-            var containerInfo = await _service.InspectAsync(ContainerId, ct);
-
-            //Whether to use TTY mode based on container settings
-            bool useTty = containerInfo.Tty;
-
-            _logStreamTask = Task.Run(async () =>
+            try
             {
-                try
+                await foreach (var (line, isErr) in _logRunner.RunAsync(_service, ContainerId))
                 {
-                    var reader = await _service.StreamLogsAsync(
-                        ContainerId,
-                        follow: true,
-                        tail: Tail,
-                        tty: useTty,
-                        ct: ct);
-
-                    await foreach (var (isErr, text) in reader.ReadAllAsync(ct))
-                    {
-                        if (text is null) continue;
-                        EnqueueLine(text, isErr);
-                    }
-
-                    _logsCts?.Token.ThrowIfCancellationRequested();
+                    EnqueueLine(isErr, line);
                 }
-                catch (OperationCanceledException)
-                {
-                    EnqueueLine("[logs] canceled", false);
-                }
-                catch (Exception ex)
-                {
-                    EnqueueLine($"[logs-error] {ex.Message}", true, true);
-                }
-            }, ct);
-
-            IsLogsRunning = true;
+            }
+            catch (OperationCanceledException)
+            {
+                EnqueueLine("[logs] canceled", false);
+            }
+            catch (Exception ex)
+            {
+                EnqueueLine($"[logs-error] {ex.Message}", true, true);
+            }
+            finally
+            {
+                SetOnUiThread(() => IsLogsRunning = false);
+            }
         }
 
         /// <summary>
@@ -715,26 +654,8 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [RelayCommand(CanExecute = nameof(CanStopLogs))]
         private async Task StopLogsAsync()
         {
-            _logsCts?.Cancel();
-
-            if (_logStreamTask is not null)
-            {
-                try
-                {
-                    //await with a timeout to prevent hanging during shutdown
-                    await _logStreamTask.WaitAsync(TimeSpan.FromSeconds(2));
-                }
-                catch (OperationCanceledException) { }
-                catch (TimeoutException) { }
-                finally
-                {
-                    _logStreamTask = null;
-                    _logsCts?.Dispose();
-                    _logsCts = null;
-
-                    IsLogsRunning = false;
-                }
-            }
+            await _logRunner.StopAsync();
+            SetOnUiThread(() => IsLogsRunning = false);
         }
 
         #endregion
