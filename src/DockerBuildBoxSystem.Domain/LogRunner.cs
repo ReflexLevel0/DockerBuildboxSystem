@@ -56,9 +56,9 @@ namespace DockerBuildBoxSystem.Domain
 
             try
             {
-                await foreach (var item in _reader.ReadAllAsync(linked.Token))
+                await foreach (var (isStdErr, line) in _reader.ReadAllAsync(linked.Token))
                 {
-                    yield return item;
+                    yield return (isStdErr, line);
                 }
             }
             finally

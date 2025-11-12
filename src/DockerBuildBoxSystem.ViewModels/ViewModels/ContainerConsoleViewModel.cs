@@ -363,9 +363,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
             try
             {
-                await foreach (var (line, isErr) in _cmdRunner.RunAsync(_service, ContainerId, args))
+                await foreach (var (isErr, line) in _cmdRunner.RunAsync(_service, ContainerId, args))
                 {
-                    UIHandler.EnqueueLine(isErr, line);
+                    UIHandler.EnqueueLine(line, isErr);
                 }
 
                 var exitCode = await _cmdRunner.ExitCode;
@@ -412,9 +412,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         {
             try
             {
-                await foreach (var (line, isErr) in _logRunner.RunAsync(_service, ContainerId))
+                await foreach (var (isErr, line) in _logRunner.RunAsync(_service, ContainerId))
                 {
-                    UIHandler.EnqueueLine(isErr, line);
+                    UIHandler.EnqueueLine(line, isErr);
                 }
             }
             catch (OperationCanceledException)
