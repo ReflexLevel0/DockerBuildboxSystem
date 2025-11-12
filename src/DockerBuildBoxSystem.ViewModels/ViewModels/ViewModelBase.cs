@@ -22,6 +22,8 @@ public abstract partial class ViewModelBase : ObservableObject, IAsyncDisposable
     [ObservableProperty]
     private bool isActivated;
 
+    protected readonly SynchronizationContext? syncContext;
+
     public virtual Task OnActivatedAsync() => Task.CompletedTask;
     public virtual Task OnDeactivatedAsync() => Task.CompletedTask;
 
@@ -33,5 +35,36 @@ public abstract partial class ViewModelBase : ObservableObject, IAsyncDisposable
     {
         GC.SuppressFinalize(this);
         return ValueTask.CompletedTask;
+    }
+
+
+
+    /// <summary>
+    /// Executes an action on the UI thread IF a synchronization context is available, otherwise executes it inline.
+    /// </summary>
+    protected void SetOnUiThread(Action action)
+    {
+        if (syncContext == null || SynchronizationContext.Current == syncContext)
+        {
+            action();
+            return;
+        }
+
+        syncContext.Post(_ =>
+        {
+            try
+            {
+                action();
+            }
+            catch (InvalidOperationException)
+            {
+
+            }
+        }, null);
+    }
+
+    public ViewModelBase()
+    {
+        syncContext = SynchronizationContext.Current;
     }
 }

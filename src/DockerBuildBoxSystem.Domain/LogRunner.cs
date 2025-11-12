@@ -16,7 +16,19 @@ namespace DockerBuildBoxSystem.Domain
         private CancellationTokenSource? _logsCts = new();
         private ChannelReader<(bool, string)>? _reader;
 
-        public bool IsRunning { get; private set; }
+        private bool _isRunning;
+        public bool IsRunning
+        {
+            get => _isRunning;
+            private set
+            {
+                if (_isRunning == value) return;
+                _isRunning = value;
+                RunningChanged?.Invoke(this, value);
+            }
+        }
+
+        public event EventHandler<bool>? RunningChanged;
 
         public async IAsyncEnumerable<(bool IsStdErr, string Line)> RunAsync(IContainerService svc, 
             string containerId,
