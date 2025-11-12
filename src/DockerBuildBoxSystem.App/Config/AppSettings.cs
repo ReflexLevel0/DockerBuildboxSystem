@@ -16,6 +16,7 @@ public class ApplicationSettings
     public string Name { get; set; } = "Docker BuildBox System";
     public string Version { get; set; } = "1.0.0";
     public string Environment { get; set; } = "Development";
+    public string? SourceFolderPath { get; set; } = "";
 }
 
 /// <summary>

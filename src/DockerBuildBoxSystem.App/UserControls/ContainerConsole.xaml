@@ -18,8 +18,26 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- Container Selector -->
         <Grid Grid.Row="0" Margin="6">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBox Grid.Column="0"
+                     Text="{Binding SourcePath, UpdateSourceTrigger=PropertyChanged}"
+                     VerticalAlignment="Center"
+                     Margin="0,0,6,0"
+                     MinWidth="200"
+                     ToolTip="Source folder path"/>
+            <Button Grid.Column="1"
+                    Content="Choose"
+                    Command="{Binding SelectSourcePathCommand}"
+                    Padding="8,4"
+                    MinWidth="70"/>
+        </Grid>
+
+        <!-- Container Selector -->
+        <Grid Grid.Row="1" Margin="6">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />

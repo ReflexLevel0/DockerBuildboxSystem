@@ -3,14 +3,9 @@ using CommunityToolkit.Mvvm.Input;
 using DockerBuildBoxSystem.Contracts;
 using DockerBuildBoxSystem.ViewModels.Common;
 using DockerBuildBoxSystem.Models;
-using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Linq;
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
 using DockerBuildBoxSystem.Domain;
 
 namespace DockerBuildBoxSystem.ViewModels.ViewModels
@@ -146,6 +141,80 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private bool _autoStartLogs = true;
 
         /// <summary>
+        /// The selected source path from the folder picker.
+        /// </summary>
+        [ObservableProperty]
+        private string? _sourcePath;
+
+        partial void OnSourcePathChanged(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return;
+            // fire and forget persistence
+            _ = PersistSourcePathAsync(value);
+        }
+
+        private async Task PersistSourcePathAsync(string path)
+        {
+            try
+            {
+                var configDir = Path.Combine(AppContext.BaseDirectory, "Config");
+                Directory.CreateDirectory(configDir);
+                var filePath = Path.Combine(configDir, "appsettings.json");
+
+                // Load existing JSON (if any) using JsonNode for easy mutation
+                System.Text.Json.Nodes.JsonNode? rootNode = null;
+                if (File.Exists(filePath))
+                {
+                    var existing = await File.ReadAllTextAsync(filePath);
+                    try { rootNode = System.Text.Json.Nodes.JsonNode.Parse(existing); } catch { rootNode = null; }
+                }
+                rootNode ??= new System.Text.Json.Nodes.JsonObject();
+                var appNode = rootNode["Application"] as System.Text.Json.Nodes.JsonObject ?? new System.Text.Json.Nodes.JsonObject();
+                rootNode["Application"] = appNode;
+                appNode["SourceFolderPath"] = path;
+
+                var json = rootNode.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+                await File.WriteAllTextAsync(filePath, json);
+                EnqueueLine($"[info] Saved source path to settings: {path}", false);
+            }
+            catch (Exception ex)
+            {
+                EnqueueLine($"[persist-sourcepath-error] {ex.Message}", true, true);
+            }
+        }
+
+        /// <summary>
+        /// Opens a folder picker (must run on UI thread) and assigns the selected path.
+        /// Removed background Task.Run to ensure the dialog actually shows.
+        /// </summary>
+        [RelayCommand(AllowConcurrentExecutions = false)]
+        private async Task SelectSourcePath()
+        {
+            try
+            {
+                using var dialog = new System.Windows.Forms.FolderBrowserDialog
+                {
+                    Description = "Select a source folder",
+                    UseDescriptionForTitle = true,
+                    ShowNewFolderButton = true
+                };
+
+                var result = dialog.ShowDialog(); // Runs on UI thread
+                if (result == System.Windows.Forms.DialogResult.OK && !string.IsNullOrWhiteSpace(dialog.SelectedPath))
+                {
+                    SourcePath = dialog.SelectedPath;
+                }
+            }
+            catch (Exception ex)
+            {
+                // Log to console output collection for visibility
+                EnqueueLine($"[folder-picker-error] {ex.Message}", true, true);
+            }
+
+            await Task.CompletedTask; // Maintain async signature for RelayCommand
+        }
+
+        /// <summary>
         /// Repreents a batch for the UI, comprised of two subsets: general lines that are posted to the UI, and important lines
         /// that might need some special handling (e.g., auto-scroll in the view). Only defined internally 
         /// </summary>
@@ -177,6 +246,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             // Start the global UI update task
             StartUiUpdateTask();
 
+            // Load persisted source folder path if available
+            await LoadSourcePathFromConfigAsync();
+
             // Load available containers on initialization
             await RefreshContainersCommand.ExecuteAsync(null);
 
@@ -187,6 +259,39 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             if (AutoStartLogs && !string.IsNullOrWhiteSpace(ContainerId))
             {
                 await StartLogsCommand.ExecuteAsync(null);
+            }
+        }
+
+        /// <summary>
+        /// Reads the persisted SourceFolderPath from appsettings.json and assigns it to SourcePath if present.
+        /// </summary>
+        private async Task LoadSourcePathFromConfigAsync()
+        {
+            try
+            {
+                // Only load if not already set (avoid overriding runtime assignment before init finishes)
+                if (!string.IsNullOrWhiteSpace(SourcePath)) return;
+
+                var configDir = Path.Combine(AppContext.BaseDirectory, "Config");
+                var filePath = Path.Combine(configDir, "appsettings.json");
+                if (!File.Exists(filePath)) return;
+
+                var json = await File.ReadAllTextAsync(filePath);
+                using var doc = JsonDocument.Parse(json);
+                if (doc.RootElement.TryGetProperty("Application", out var appElem) &&
+                    appElem.TryGetProperty("SourceFolderPath", out var pathElem))
+                {
+                    var persisted = pathElem.GetString();
+                    if (!string.IsNullOrWhiteSpace(persisted))
+                    {
+                        SourcePath = persisted;
+                        EnqueueLine($"[info] Loaded source path from settings: {persisted}", false);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                EnqueueLine($"[load-sourcepath-error] {ex.Message}", true);
             }
         }
 
