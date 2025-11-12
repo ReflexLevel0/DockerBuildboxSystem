@@ -2,6 +2,7 @@ using System.Threading.Channels;
 using DockerBuildBoxSystem.Contracts;
 using DockerBuildBoxSystem.Models;
 using DockerBuildBoxSystem.ViewModels.ViewModels;
+using DockerBuildBoxSystem.ViewModels.Common;
 using NSubstitute;
 using static DockerBuildBoxSystem.TestUtils.ChannelTestUtil;
 
