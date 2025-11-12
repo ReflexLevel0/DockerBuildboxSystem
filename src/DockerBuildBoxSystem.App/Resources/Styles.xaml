@@ -37,7 +37,6 @@
                         <Border x:Name="HoverSquare"
                             Width="{Binding ActualHeight, RelativeSource={RelativeSource TemplatedParent}}"
                             Height="{Binding ActualHeight, RelativeSource={RelativeSource TemplatedParent}}"
-                            CornerRadius="6"
                             Background="Transparent"
                             HorizontalAlignment="Center"
                             VerticalAlignment="Center"/>

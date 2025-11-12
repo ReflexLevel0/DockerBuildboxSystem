@@ -851,6 +851,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             }
         }
 
+
         /// <summary>
         /// Retrieves the platform selection from the dropdown options.
         /// </summary>
