@@ -121,6 +121,7 @@
                         <ComboBox ItemsSource="{Binding Values}"
                                   SelectedItem="{Binding SelectedValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                   Width="100" Height="25"
+                                  IsEnabled="{Binding DataContext.CanUseUserControls, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                   Padding="6"/>
                     </StackPanel>
 
@@ -136,13 +137,15 @@
                                  Height="25"
                                  Padding="6"
                                  FontFamily="Consolas"
-                                 FontSize="13"/>
+                                 FontSize="13"
+                                 IsEnabled="{Binding DataContext.CanUseUserControls, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
                         <!--Button to retrieve input from textbox-->
                         <Button Content="Send"
                                 Width="40"
                                 Height="25"
                                 Margin="4,0,0,0"
                                 Command="{Binding DataContext.SubmitTextCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                IsEnabled="{Binding DataContext.CanUseUserControls, RelativeSource={RelativeSource AncestorType=UserControl}}"
                             />
                     </StackPanel>
                 </DataTemplate>
