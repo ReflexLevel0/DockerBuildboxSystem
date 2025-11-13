@@ -88,7 +88,10 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [NotifyCanExecuteChangedFor(nameof(RestartContainerCommand))]
         [NotifyCanExecuteChangedFor(nameof(SendCommand))]
         [NotifyCanExecuteChangedFor(nameof(RunUserCommandCommand))]
+        [NotifyPropertyChangedFor(nameof(CanUseUserControls))]
         private string _containerId = "";
+
+        public bool CanUseUserControls => CanSend();
 
         /// <summary>
         /// How many lines to tail when starting logs ("all" or a number).
@@ -111,6 +114,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [NotifyCanExecuteChangedFor(nameof(SendCommand))]
         [NotifyCanExecuteChangedFor(nameof(RunUserCommandCommand))]
         [NotifyCanExecuteChangedFor(nameof(StopExecCommand))]
+        [NotifyPropertyChangedFor(nameof(CanUseUserControls))]
         private bool _isCommandRunning;
 
         /// <summary>
@@ -122,6 +126,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [NotifyCanExecuteChangedFor(nameof(RestartContainerCommand))]
         [NotifyCanExecuteChangedFor(nameof(SendCommand))]
         [NotifyCanExecuteChangedFor(nameof(RunUserCommandCommand))]
+        [NotifyPropertyChangedFor(nameof(CanUseUserControls))]
         private ContainerInfo? _selectedContainer;
 
         /// <summary>
