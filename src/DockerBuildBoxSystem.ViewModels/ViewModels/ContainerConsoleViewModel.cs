@@ -118,18 +118,18 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             _cmdRunner.RunningChanged += (_, __) =>
                 SetOnUiThread(() =>
                 {
-                    OnPropertyChanged(nameof(IsLogsRunning));
-                    StartLogsCommand.NotifyCanExecuteChanged();
-                    StopLogsCommand.NotifyCanExecuteChanged();
+                    OnPropertyChanged(nameof(IsCommandRunning));
+                    SendCommand.NotifyCanExecuteChanged();
+                    RunUserCommandCommand.NotifyCanExecuteChanged();
+                    StopExecCommand.NotifyCanExecuteChanged();
                 });
 
             _logRunner.RunningChanged += (_, __) =>
                 SetOnUiThread(() =>
                 {
-                    OnPropertyChanged(nameof(IsCommandRunning));
-                    SendCommand.NotifyCanExecuteChanged();
-                    RunUserCommandCommand.NotifyCanExecuteChanged();
-                    StopExecCommand.NotifyCanExecuteChanged();
+                    OnPropertyChanged(nameof(IsLogsRunning));
+                    StartLogsCommand.NotifyCanExecuteChanged();
+                    StopLogsCommand.NotifyCanExecuteChanged();
                 });
 
             UIHandler = new UILineBuffer(Lines);
