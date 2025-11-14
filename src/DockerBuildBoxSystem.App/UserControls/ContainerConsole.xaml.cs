@@ -1,4 +1,5 @@
-﻿using DockerBuildBoxSystem.ViewModels.ViewModels;
+﻿using DockerBuildBoxSystem.ViewModels.Common;
+using DockerBuildBoxSystem.ViewModels.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
 using System.Collections.Specialized;
 using System.ComponentModel;
@@ -60,11 +61,10 @@ namespace DockerBuildBoxSystem.App.UserControls
                 DataContext = _viewModel;
 
             //attach auto-scroll behavior
-            _viewModel.ImportantLineArrived += ViewModelOnImportantLineArrived;
-            _viewModel.OutputChunk += _viewModel_OutputChunk;
-            _viewModel.OutputCleared += _viewModel_OutputCleared;
+            _viewModel.UIHandler.ImportantLineArrived += ViewModelOnImportantLineArrived;
+            _viewModel.UIHandler.OutputChunk += _viewModel_OutputChunk;
+            _viewModel.UIHandler.OutputCleared += _viewModel_OutputCleared;
         }
-
         private void _viewModel_OutputCleared(object? sender, EventArgs e)
         {
             TerminalOutput.Clear();
@@ -81,7 +81,7 @@ namespace DockerBuildBoxSystem.App.UserControls
                 return;
 
             //Only detach view-specific behavior
-            _viewModel.ImportantLineArrived -= ViewModelOnImportantLineArrived;
+            _viewModel.UIHandler.ImportantLineArrived -= ViewModelOnImportantLineArrived;
         }
 
 
@@ -96,7 +96,7 @@ namespace DockerBuildBoxSystem.App.UserControls
             try
             {
                 //detach event handlers
-                _viewModel.ImportantLineArrived -= ViewModelOnImportantLineArrived;
+                _viewModel.UIHandler.ImportantLineArrived -= ViewModelOnImportantLineArrived;
 
                 //dispose the ViewModel
                 await _viewModel.DisposeAsync();
