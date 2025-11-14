@@ -8,7 +8,7 @@
 
   <ItemGroup>
     <!-- https://github.com/dotnet/Docker.DotNet/issues/628#issuecomment-2810547338 -->
-    <PackageReference Include="Docker.DotNet.Enhanced" Version="*" />
+    <PackageReference Include="Docker.DotNet.Enhanced" Version="3.127.0" />
   </ItemGroup>
 
   <ItemGroup>
