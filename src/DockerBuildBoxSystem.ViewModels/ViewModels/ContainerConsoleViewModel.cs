@@ -152,7 +152,11 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             await RefreshContainersCommand.ExecuteAsync(null);
 
             // Load user-defined commands
-            await LoadUserCommandsAsync();
+            UserCommands.Clear();
+            foreach(var command in await _userCommandService.LoadAsync())
+            {
+                UserCommands.Add(command);
+            }
 
             // Optionally auto-start logs if ContainerId is set
             if (AutoStartLogs && !string.IsNullOrWhiteSpace(ContainerId))
@@ -470,43 +474,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         #endregion
 
         #region Helpers
-
-        /// <summary>
-        /// Asynchronously loads user-defined commands from a JSON configuration file.
-        /// </summary>
-        /// <remarks>If the specified configuration file does not exist, a default set of commands is
-        /// created, serialized to the file, and then loaded. The commands are deserialized into a list of <see
-        /// cref="UserCommand"/> objects and added to the <c>UserCommands</c> collection.</remarks>
-        /// <param name="filename">The name of the configuration file to load. Defaults to "commands.json".</param>
-        /// <returns>A task that represents the asynchronous operation.</returns>
-        private async Task LoadUserCommandsAsync(string filename = "commands.json")
-        {
-            // Determine the path to the configuration file
-            var configPath = Path.Combine(AppContext.BaseDirectory, "Config", filename);
-            // If the file does not exist, create it with default commands
-            if (!File.Exists(configPath))
-            {
-                var defaultCmds = new[]
-                {
-                    new UserCommand { Label = "List /", Command = ["ls", "/"] },
-                    new UserCommand { Label = "Check Disk", Command = ["df", "-h"] },
-                };
-                Directory.CreateDirectory(Path.GetDirectoryName(configPath)!);
-                await File.WriteAllTextAsync(configPath,
-                    JsonSerializer.Serialize(defaultCmds, new JsonSerializerOptions { WriteIndented = true }));
-            }
-            // Read and deserialize the commands from the configuration file
-            var json = await File.ReadAllTextAsync(configPath);
-            var cmds = JsonSerializer.Deserialize<List<UserCommand>>(json) ?? new List<UserCommand>();
-            UserCommands.Clear();
-            // Add each command to the UserCommands collection
-            foreach (var cmd in cmds)
-            {
-                UserCommands.Add(cmd);
-            }
-        }
-
-
         public async Task AddCommandAsync(UserCommand newCmd)
         {
             await _userCommandService.AddAsync(newCmd);
