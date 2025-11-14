@@ -1,10 +1,13 @@
 ﻿using DockerBuildBoxSystem.Contracts;
 using DockerBuildBoxSystem.Models;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Data.Common;
+using System.Text;
 using System.Threading;
+using System.Threading.Tasks.Dataflow;
 
 namespace DockerBuildBoxSystem.ViewModels.Common
 {
@@ -26,6 +29,16 @@ namespace DockerBuildBoxSystem.ViewModels.Common
         /// that might need some special handling (e.g., auto-scroll in the view). Only defined internally 
         /// </summary>
         public sealed record UiBatch(IReadOnlyList<ConsoleLine> Lines, IReadOnlyList<ConsoleLine> Important);
+
+        public event EventHandler<string>? OutputChunk;
+        public event EventHandler? OutputCleared;
+
+        private readonly StringBuilder _buffer = new();
+        private readonly object _bufferLock = new();
+        public string Output
+        {
+            get { lock (_bufferLock) return _buffer.ToString(); }
+        }
 
         /// <summary>
         /// Lines currently displayed in the console UI.
@@ -198,30 +211,22 @@ namespace DockerBuildBoxSystem.ViewModels.Common
             var lines = batch.Lines;
             if (lines.Count == 0) return;
 
-            if (_lines is ContainerObservableCollection<ConsoleLine> contLines)
+            // Append new lines to aggregated output
+            var chunk = new StringBuilder();
+            foreach (var line in lines)
             {
-                contLines.AddRange(lines);
-            }
-            else
-            {
-                foreach (var line in lines)
-                {
-                    _lines.Add(line);
-                }
+                chunk.Append(line.Text);
             }
 
-            //Trim the UI by removing old lines - why? keep it responsive! otherwise... lags
-            if (_lines.Count > MaxConsoleLines)
+            // Update bound Output once per batch
+            OutputChunk?.Invoke(this, chunk.ToString());
+
+            lock (_bufferLock)
             {
-                var toRemove = _lines.Count - MaxConsoleLines;
-                //remove from the start
-                for (int i = 0; i < toRemove; i++)
-                {
-                    _lines.RemoveAt(0);
-                }
+                _buffer.Append(chunk);
             }
 
-            //nnbotify only for the important lines captured during batching
+            // Notify only for important lines captured during batching
             foreach (var l in batch.Important)
             {
                 ImportantLineArrived?.Invoke(this, l);
@@ -259,6 +264,8 @@ namespace DockerBuildBoxSystem.ViewModels.Common
 
             if (_uiContext is null) DoClear();
             else _uiContext.Post(_ => DoClear(), null);
+
+            OutputCleared?.Invoke(this, EventArgs.Empty);
         }
 
         public async Task CopyAsync(IClipboardService clipboard)
