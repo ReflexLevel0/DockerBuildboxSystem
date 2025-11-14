@@ -168,6 +168,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [RelayCommand]
         private async Task RefreshContainersAsync()
         {
+            var selectedContainerId = SelectedContainer?.Id;
             IsLoadingContainers = true;
             try
             {
@@ -178,6 +179,10 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 Containers.Clear();
                 foreach (var container in containers)
                 {
+                    if(string.Compare(container.Id, selectedContainerId) == 0)
+                    {
+                        SelectedContainer = container;
+                    }
                     Containers.Add(container);
                 }
             }
