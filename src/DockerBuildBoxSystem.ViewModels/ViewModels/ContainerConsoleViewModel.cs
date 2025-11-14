@@ -341,7 +341,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// <summary>
         /// Sends the current input text as a command to the container.
         /// </summary>
-        [RelayCommand(CanExecute = nameof(CanSend))]
+        [RelayCommand(CanExecute = nameof(CanSend), AllowConcurrentExecutions = true)]
         private async Task SendAsync()
         {
             var raw = (Input ?? string.Empty);
