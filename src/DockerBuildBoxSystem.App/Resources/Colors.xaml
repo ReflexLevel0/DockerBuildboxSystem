@@ -4,6 +4,8 @@
     <!-- Primary Colors -->
     <Color x:Key="PrimaryColor">#FFFFFF</Color>
     <Color x:Key="TitleTextColor">#313373</Color>
+    <Color x:Key="SuccessColor">LimeGreen</Color>
+    <Color x:Key="ErrorColor">Red</Color>
 
     <!-- Container Terminal Colors -->
     <Color x:Key="ContainerBackgroundColor">#111</Color>
