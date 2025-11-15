@@ -37,7 +37,7 @@
                 Background="Transparent"
                 BorderBrush="Transparent"
                 BorderThickness="0"
-                Command="{Binding DataContext.SelectSourcePathCommand, ElementName=ContainerConsoleControl}"
+                Command="{Binding SelectSourcePathCommand}"
                 Focusable="False"
                 ToolTip="Choose source folder">
                 <TextBlock
@@ -51,7 +51,7 @@
                 MinWidth="500"
                 Margin="2,2,6,2"
                 VerticalAlignment="Center"
-                Text="{Binding DataContext.SourcePath, ElementName=ContainerConsoleControl, UpdateSourceTrigger=PropertyChanged}"
+                Text="{Binding SourcePath, UpdateSourceTrigger=PropertyChanged}"
                 ToolTip="Source folder path" />
 
 

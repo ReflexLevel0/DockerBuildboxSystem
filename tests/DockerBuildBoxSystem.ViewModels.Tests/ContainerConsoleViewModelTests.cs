@@ -2,6 +2,7 @@ using System.Threading.Channels;
 using DockerBuildBoxSystem.Contracts;
 using DockerBuildBoxSystem.Models;
 using DockerBuildBoxSystem.ViewModels.ViewModels;
+using DockerBuildBoxSystem.ViewModels.Common;
 using NSubstitute;
 using static DockerBuildBoxSystem.TestUtils.ChannelTestUtil;
 
@@ -68,9 +69,10 @@ public class ContainerConsoleViewModelTests
             .InspectAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(ci => Task.FromResult(new ContainerInfo { Id = ci.ArgAt<string>(0), Names = ["n"], Tty = false }));
 
+        // Use a cancellable reader that doesn't complete immediately, so we can verify IsLogsRunning is true
         ContainerService
             .StreamLogsAsync(Arg.Any<string>(), true, Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
-            .Returns(ci => Task.FromResult(CreateCompletedReader([(false, "sup")])));
+            .Returns(ci => Task.FromResult(CreateCancellableReader([(false, "sup")])));
 
         var vm = CreateViewModel(ContainerService);
         await vm.InitializeCommand.ExecuteAsync(null);
@@ -80,11 +82,18 @@ public class ContainerConsoleViewModelTests
 
         //Act
         //Wait until line appears., with timeout after 2 seconds...
+        var logsStarted = await WaitUntilAsync(() => vm.IsLogsRunning, TimeSpan.FromSeconds(2));
+        Assert.True(logsStarted, "Logs should have started!");
+
+        //wait until line appears, with timeout after 2 seconds...
         var ok = await WaitUntilAsync(() => vm.Lines.Any(l => l.Text == "sup"), TimeSpan.FromSeconds(2));
 
         //Assert
-        Assert.True(ok);
-        Assert.True(vm.IsLogsRunning);
+        Assert.True(ok, "Line 'sup' should have appeared!");
+        Assert.True(vm.IsLogsRunning, "Logs should still be running!");
+     
+        //cleanup
+        await vm.StopLogsCommand.ExecuteAsync(null);
     }
 
     /// <summary>
@@ -170,9 +179,11 @@ public class ContainerConsoleViewModelTests
         vm.ContainerId = "abc";
 
         //Act & Assert
-        await vm.StartLogsCommand.ExecuteAsync(null);
+        _ = vm.StartLogsCommand.ExecuteAsync(null);
 
-        Assert.True(vm.IsLogsRunning == true);
+        //wait for logs to actually start streaming
+        var logsStarted = await WaitUntilAsync(() => vm.IsLogsRunning == true, TimeSpan.FromSeconds(2));
+        Assert.True(logsStarted, "Logs should have started");
 
         await vm.StopLogsCommand.ExecuteAsync(null);
 

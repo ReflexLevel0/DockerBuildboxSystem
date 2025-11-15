@@ -1,25 +1,20 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DockerBuildBoxSystem.Contracts;
-using DockerBuildBoxSystem.ViewModels.Common;
+using DockerBuildBoxSystem.Domain;
 using DockerBuildBoxSystem.Models;
+using DockerBuildBoxSystem.ViewModels.Common;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
+using System.Linq;
+using System.Text;
 using System.Text.Json;
-using DockerBuildBoxSystem.Domain;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace DockerBuildBoxSystem.ViewModels.ViewModels
 {
-    #region UI/Presentation DTOs
-    /// <summary>
-    /// Represents a console line, containing metadata
-    /// </summary>
-    /// <param name="Timestamp">The time at which the line was produced.</param>
-    /// <param name="Text">The line text.</param>
-    /// <param name="IsError">True if the line represents an error output.</param>
-    /// <param name="IsImportant">True if the line is considered important (e.g., should trigger auto-scroll).</param>
-    public sealed record ConsoleLine(DateTime Timestamp, string Text, bool IsError, bool IsImportant = false);
-    #endregion
 
     /// <summary>
     /// ViewModel for a container console that streams logs and executes commands inside Docker containers.
@@ -28,34 +23,13 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
     {
         private readonly IContainerService _service;
         private readonly IClipboardService? _clipboard;
+        private readonly ILogRunner _logRunner;
+        private readonly ICommandRunner _cmdRunner;
 
-        //logs streaming
-        private CancellationTokenSource? _logsCts;
-        private Task? _logStreamTask;
-
-        //exec streaming
-        private CancellationTokenSource? _execCts;
-        private Task? _execTask;
-
-        //To ensure UI is responsive
-        private const int MaxConsoleLines = 2000;
-        private const int MaxLinesPerTick = 200;
-
-        //global UI update
-        private readonly ConcurrentQueue<ConsoleLine> _outputQueue = new();
-        private CancellationTokenSource? _uiUpdateCts;
-        private Task? _uiUpdateTask;
-        private readonly SynchronizationContext? _syncContext;
+        public readonly UILineBuffer UIHandler;
 
         // Manage user commands
         private readonly UserCommandService _userCommandService = new();
-
-        /// <summary>
-        /// Raised whenever an important line is added to the UI, ex a error line that needs attention.
-        /// Used for view-specific behaviors (e.g., auto-scroll).
-        /// </summary>
-        public event EventHandler<ConsoleLine>? ImportantLineArrived;
-
         /// <summary>
         /// Lines currently displayed in the console UI.
         /// </summary>
@@ -89,27 +63,14 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private string _containerId = "";
 
         /// <summary>
-        /// How many lines to tail when starting logs ("all" or a number).
-        /// </summary>
-        [ObservableProperty]
-        private string _tail = "50";
-
-        /// <summary>
         /// True while logs are currently being streamed.
         /// </summary>
-        [ObservableProperty]
-        [NotifyCanExecuteChangedFor(nameof(StartLogsCommand))]
-        [NotifyCanExecuteChangedFor(nameof(StopLogsCommand))]
-        private bool _isLogsRunning;
+        public bool IsLogsRunning => _logRunner.IsRunning;
 
         /// <summary>
         /// True while a command is being executed.
         /// </summary>
-        [ObservableProperty]
-        [NotifyCanExecuteChangedFor(nameof(SendCommand))]
-        [NotifyCanExecuteChangedFor(nameof(RunUserCommandCommand))]
-        [NotifyCanExecuteChangedFor(nameof(StopExecCommand))]
-        private bool _isCommandRunning;
+        public bool IsCommandRunning => _cmdRunner.IsRunning;
 
         /// <summary>
         /// The selected container info object.
@@ -141,96 +102,36 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private bool _autoStartLogs = true;
 
         /// <summary>
-        /// The selected source path from the folder picker.
-        /// </summary>
-        [ObservableProperty]
-        private string? _sourcePath;
-
-        partial void OnSourcePathChanged(string? value)
-        {
-            if (string.IsNullOrWhiteSpace(value)) return;
-            // fire and forget persistence
-            _ = PersistSourcePathAsync(value);
-        }
-
-        private async Task PersistSourcePathAsync(string path)
-        {
-            try
-            {
-                var configDir = Path.Combine(AppContext.BaseDirectory, "Config");
-                Directory.CreateDirectory(configDir);
-                var filePath = Path.Combine(configDir, "appsettings.json");
-
-                // Load existing JSON (if any) using JsonNode for easy mutation
-                System.Text.Json.Nodes.JsonNode? rootNode = null;
-                if (File.Exists(filePath))
-                {
-                    var existing = await File.ReadAllTextAsync(filePath);
-                    try { rootNode = System.Text.Json.Nodes.JsonNode.Parse(existing); } catch { rootNode = null; }
-                }
-                rootNode ??= new System.Text.Json.Nodes.JsonObject();
-                var appNode = rootNode["Application"] as System.Text.Json.Nodes.JsonObject ?? new System.Text.Json.Nodes.JsonObject();
-                rootNode["Application"] = appNode;
-                appNode["SourceFolderPath"] = path;
-
-                var json = rootNode.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
-                await File.WriteAllTextAsync(filePath, json);
-                EnqueueLine($"[info] Saved source path to settings: {path}", false);
-            }
-            catch (Exception ex)
-            {
-                EnqueueLine($"[persist-sourcepath-error] {ex.Message}", true, true);
-            }
-        }
-
-        /// <summary>
-        /// Opens a folder picker (must run on UI thread) and assigns the selected path.
-        /// Removed background Task.Run to ensure the dialog actually shows.
-        /// </summary>
-        [RelayCommand(AllowConcurrentExecutions = false)]
-        private async Task SelectSourcePath()
-        {
-            try
-            {
-                using var dialog = new System.Windows.Forms.FolderBrowserDialog
-                {
-                    Description = "Select a source folder",
-                    UseDescriptionForTitle = true,
-                    ShowNewFolderButton = true
-                };
-
-                var result = dialog.ShowDialog(); // Runs on UI thread
-                if (result == System.Windows.Forms.DialogResult.OK && !string.IsNullOrWhiteSpace(dialog.SelectedPath))
-                {
-                    SourcePath = dialog.SelectedPath;
-                }
-            }
-            catch (Exception ex)
-            {
-                // Log to console output collection for visibility
-                EnqueueLine($"[folder-picker-error] {ex.Message}", true, true);
-            }
-
-            await Task.CompletedTask; // Maintain async signature for RelayCommand
-        }
-
-        /// <summary>
-        /// Repreents a batch for the UI, comprised of two subsets: general lines that are posted to the UI, and important lines
-        /// that might need some special handling (e.g., auto-scroll in the view). Only defined internally 
-        /// </summary>
-        private sealed record UiBatch(IReadOnlyList<ConsoleLine> Lines, IReadOnlyList<ConsoleLine> Important);
-
-        /// <summary>
         /// Initializes a new instance of the <see cref="ContainerConsoleViewModel"/> class.
         /// </summary>
         /// <param name="service">The container service used to interact with containers, ex Docker.</param>
         /// <param name="clipboard">Optional clipboard service for copying the text output.</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="service"/> is null.</exception>
-        public ContainerConsoleViewModel(IContainerService service, IClipboardService? clipboard = null)
+        public ContainerConsoleViewModel(IContainerService service, IClipboardService? clipboard = null) : base()
         {
             _service = service ?? throw new ArgumentNullException(nameof(service));
             _clipboard = clipboard;
-            _syncContext = SynchronizationContext.Current;
+
+            _logRunner = new LogRunner();
+            _cmdRunner = new CommandRunner();
+            _cmdRunner.RunningChanged += (_, __) =>
+                SetOnUiThread(() =>
+                {
+                    OnPropertyChanged(nameof(IsCommandRunning));
+                    SendCommand.NotifyCanExecuteChanged();
+                    RunUserCommandCommand.NotifyCanExecuteChanged();
+                    StopExecCommand.NotifyCanExecuteChanged();
+                });
+
+            _logRunner.RunningChanged += (_, __) =>
+                SetOnUiThread(() =>
+                {
+                    OnPropertyChanged(nameof(IsLogsRunning));
+                    StartLogsCommand.NotifyCanExecuteChanged();
+                    StopLogsCommand.NotifyCanExecuteChanged();
+                });
+
+            UIHandler = new UILineBuffer(Lines);
         }
 
         /// <summary>
@@ -244,10 +145,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private async Task InitializeAsync()
         {
             // Start the global UI update task
-            StartUiUpdateTask();
-
-            // Load persisted source folder path if available
-            await LoadSourcePathFromConfigAsync();
+            UIHandler.Start();
 
             // Load available containers on initialization
             await RefreshContainersCommand.ExecuteAsync(null);
@@ -262,211 +160,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             }
         }
 
-        /// <summary>
-        /// Reads the persisted SourceFolderPath from appsettings.json and assigns it to SourcePath if present.
-        /// </summary>
-        private async Task LoadSourcePathFromConfigAsync()
-        {
-            try
-            {
-                // Only load if not already set (avoid overriding runtime assignment before init finishes)
-                if (!string.IsNullOrWhiteSpace(SourcePath)) return;
-
-                var configDir = Path.Combine(AppContext.BaseDirectory, "Config");
-                var filePath = Path.Combine(configDir, "appsettings.json");
-                if (!File.Exists(filePath)) return;
-
-                var json = await File.ReadAllTextAsync(filePath);
-                using var doc = JsonDocument.Parse(json);
-                if (doc.RootElement.TryGetProperty("Application", out var appElem) &&
-                    appElem.TryGetProperty("SourceFolderPath", out var pathElem))
-                {
-                    var persisted = pathElem.GetString();
-                    if (!string.IsNullOrWhiteSpace(persisted))
-                    {
-                        SourcePath = persisted;
-                        EnqueueLine($"[info] Loaded source path from settings: {persisted}", false);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                EnqueueLine($"[load-sourcepath-error] {ex.Message}", true);
-            }
-        }
-
-        #region UI Update Mechanism
-
-        /// <summary>
-        /// Starts the global UI update task that processes the output queue.
-        /// Separated to avoid multiple concurrent UI updates.
-        /// </summary>
-        private void StartUiUpdateTask()
-        {
-            if (_uiUpdateTask != null)
-                return; //if it is already running
-
-            _uiUpdateCts = new CancellationTokenSource();
-            var ct = _uiUpdateCts.Token;
-
-            var uiTimer = new PeriodicTimer(TimeSpan.FromMilliseconds(50));
-
-            _uiUpdateTask = Task.Run(async () =>
-            {
-                try
-                {
-                    while (await uiTimer.WaitForNextTickAsync(ct))
-                    {
-                        //Restrict the number of lines per tick
-                        //If we dequeue everything at once it might overwhelm the UI
-                        var batch = new List<ConsoleLine>(MaxLinesPerTick);
-                        var important = new List<ConsoleLine>();
-                        while (batch.Count < MaxLinesPerTick && _outputQueue.TryDequeue(out var line))
-                        {
-                            batch.Add(line);
-                            if (line.IsImportant)
-                                important.Add(line);
-                        }
-
-                        if (batch.Count > 0)
-                        {
-                            PostBatchToUI(new UiBatch(batch, important));
-                        }
-                    }
-                }
-                catch (OperationCanceledException)
-                {
-                    //If operation is canceled, flush any remaining items
-                    while (!_outputQueue.IsEmpty)
-                    {
-                        var batch = new List<ConsoleLine>(MaxLinesPerTick);
-                        var important = new List<ConsoleLine>();
-                        while (batch.Count < MaxLinesPerTick && _outputQueue.TryDequeue(out var line))
-                        {
-                            batch.Add(line);
-                            if (line.IsImportant)
-                                important.Add(line);
-                        }
-                        if (batch.Count == 0) break;
-                        PostBatchToUI(new UiBatch(batch, important));
-                    }
-                }
-                finally
-                {
-                    uiTimer.Dispose();
-                }
-            }, ct);
-        }
-
-        /// <summary>
-        /// Posts a batch to the UI thread (OR directly if no synchronization context is available).
-        /// </summary>
-        /// <param name="batch">The batch of console lines to append to the UI.</param>
-        private void PostBatchToUI(UiBatch batch)
-        {
-            if (batch.Lines.Count == 0) return;
-
-            if (_syncContext != null)
-            {
-                _syncContext.Post(state =>
-                {
-                    var b = (UiBatch)state!;
-                    AddLinesToUI(b);
-                }, batch);
-            }
-            else
-            {
-                AddLinesToUI(batch);
-            }
-        }
-
-        /// <summary>
-        /// Appends a batch of lines to the bound collection.
-        /// Trims the collection to keep the UI responsive.
-        /// Triggers <see cref="ImportantLineArrived"/> for any important lines in the batch.
-        /// </summary>
-        /// <param name="batch">The batch of lines to add.</param>
-        private void AddLinesToUI(UiBatch batch)
-        {
-            var lines = batch.Lines;
-            if (lines.Count == 0) return;
-
-            if (Lines is ContainerObservableCollection<ConsoleLine> contLines)
-            {
-                contLines.AddRange(lines);
-            }
-            else
-            {
-                foreach (var line in lines)
-                {
-                    Lines.Add(line);
-                }
-            }
-
-            //Trim the UI by removing old lines - why? keep it responsive! otherwise... lags
-            if (Lines.Count > MaxConsoleLines)
-            {
-                var toRemove = Lines.Count - MaxConsoleLines;
-                //remove from the start
-                for (int i = 0; i < toRemove; i++)
-                {
-                    Lines.RemoveAt(0);
-                }
-            }
-
-            //nnbotify only for the important lines captured during batching
-            foreach (var l in batch.Important)
-            {
-                ImportantLineArrived?.Invoke(this, l);
-            }
-        }
-
-        /// <summary>
-        /// Stops the UI update task.
-        /// </summary>
-        private async Task StopUiUpdateTaskAsync()
-        {
-            _uiUpdateCts?.Cancel();
-
-            if (_uiUpdateTask != null)
-            {
-                try
-                {
-                    await _uiUpdateTask.WaitAsync(TimeSpan.FromSeconds(2));
-                }
-                catch (OperationCanceledException) { }
-                catch (TimeoutException) { }
-                finally
-                {
-                    _uiUpdateTask = null;
-                    _uiUpdateCts?.Dispose();
-                    _uiUpdateCts = null;
-                }
-            }
-        }
-
-        /// <summary>
-        /// Enqueues a line to be added to the console output on the UI thread.
-        /// </summary>
-        /// <param name="line">The console line to enqueue.</param>
-        private void EnqueueLine(ConsoleLine line)
-        {
-            _outputQueue.Enqueue(line);
-        }
-
-        /// <summary>
-        /// Creates and enqueues a console line with the provided text and flags.
-        /// </summary>
-        /// <param name="text">Text to append.</param>
-        /// <param name="isError">Whether the line is an error.</param>
-        /// <param name="isImportant">Whether the line is important.</param>
-        private void EnqueueLine(string text, bool isError, bool isImportant = false)
-        {
-            EnqueueLine(new ConsoleLine(DateTime.Now, text, isError, isImportant));
-        }
-
-        #endregion
-
         #region Container Management
         /// <summary>
         /// Refreshes the list of containers from the container service.
@@ -474,6 +167,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [RelayCommand]
         private async Task RefreshContainersAsync()
         {
+            var selectedContainerId = SelectedContainer?.Id;
             IsLoadingContainers = true;
             try
             {
@@ -484,12 +178,16 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 Containers.Clear();
                 foreach (var container in containers)
                 {
+                    if(string.Compare(container.Id, selectedContainerId) == 0)
+                    {
+                        SelectedContainer = container;
+                    }
                     Containers.Add(container);
                 }
             }
             catch (Exception ex)
             {
-                EnqueueLine($"[container-list-error] {ex.Message}", true);
+                UIHandler.EnqueueLine($"[container-list-error] {ex.Message}", true);
             }
             finally
             {
@@ -506,7 +204,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             if (value != null)
             {
                 ContainerId = value.Id;
-                EnqueueLine($"[info] Selected container: {value.Names.FirstOrDefault() ?? value.Id}", false);
+                UIHandler.EnqueueLine($"[info] Selected container: {value.Names.FirstOrDefault() ?? value.Id}", false);
 
                 //auto start logs if enabled
                 if (AutoStartLogs && !string.IsNullOrWhiteSpace(ContainerId))
@@ -523,12 +221,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// </summary>
         /// <param name="value">The new value of the "Show All Containers" setting.
         /// <see langword="true"/> if all containers should be shown; otherwise, <see langword="false"/>.</param>
-        partial void OnShowAllContainersChanged(bool value)
-        {
-            //auto refresh when this changes
-            _ = RefreshContainersCommand.ExecuteAsync(null);
-        }
-
+        partial void OnShowAllContainersChanged(bool value) => RefreshContainersCommand.ExecuteAsync(null);
         
         private bool CanStartContainer() => !string.IsNullOrWhiteSpace(ContainerId) && (SelectedContainer?.IsRunning == false);
 
@@ -541,20 +234,20 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             if (string.IsNullOrWhiteSpace(ContainerId)) return;
             try
             {
-                EnqueueLine($"[info] Starting container: {ContainerId}", false);
+                UIHandler.EnqueueLine($"[info] Starting container: {ContainerId}", false);
                 var status = await _service.StartAsync(ContainerId);
                 if(status)
                 {
-                    EnqueueLine($"[info] Started container: {ContainerId}", false);
+                    UIHandler.EnqueueLine($"[info] Started container: {ContainerId}", false);
                 }
                 else
                 {
-                    EnqueueLine($"[start-container] Container did not start: {ContainerId}", true);
+                    UIHandler.EnqueueLine($"[start-container] Container did not start: {ContainerId}", true);
                 }
             }
             catch (Exception ex)
             {
-                EnqueueLine($"[start-container-error] {ex.Message}", true);
+                UIHandler.EnqueueLine($"[start-container-error] {ex.Message}", true);
             }
             finally
             {
@@ -573,13 +266,13 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             if (string.IsNullOrWhiteSpace(ContainerId)) return;
             try
             {
-                EnqueueLine($"[info] Stopping container: {ContainerId}", false);
+                UIHandler.EnqueueLine($"[info] Stopping container: {ContainerId}", false);
                 await _service.StopAsync(ContainerId, timeout: TimeSpan.FromSeconds(10));
-                EnqueueLine($"[info] Stopped container: {ContainerId}", false);
+                UIHandler.EnqueueLine($"[info] Stopped container: {ContainerId}", false);
             }
             catch (Exception ex)
             {
-                EnqueueLine($"[stop-container-error] {ex.Message}", true);
+                UIHandler.EnqueueLine($"[stop-container-error] {ex.Message}", true);
             }
             finally
             {
@@ -598,13 +291,13 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             if (string.IsNullOrWhiteSpace(ContainerId)) return;
             try
             {
-                EnqueueLine($"[info] Restarting container: {ContainerId}", false);
+                UIHandler.EnqueueLine($"[info] Restarting container: {ContainerId}", false);
                 await _service.RestartAsync(ContainerId, timeout: TimeSpan.FromSeconds(10));
-                EnqueueLine($"[info] Restarted container: {ContainerId}", false);
+                UIHandler.EnqueueLine($"[info] Restarted container: {ContainerId}", false);
             }
             catch (Exception ex)
             {
-                EnqueueLine($"[restart-container-error] {ex.Message}", true);
+                UIHandler.EnqueueLine($"[restart-container-error] {ex.Message}", true);
             }
             finally
             {
@@ -619,7 +312,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// <summary>
         /// Determines whether sending commands is currently allowed.
         /// </summary>
-        private bool CanSend() => !string.IsNullOrWhiteSpace(ContainerId) && !IsCommandRunning && (SelectedContainer?.IsRunning == true);
+        private bool CanSend() => !string.IsNullOrWhiteSpace(ContainerId) && !_cmdRunner.IsRunning && (SelectedContainer?.IsRunning == true);
 
         /// <summary>
         /// Executes the specified user command asynchronously within the selected container.
@@ -638,7 +331,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             // Check if the user command or selected container is null
             if (userCmd is null || SelectedContainer is null)
             {
-                EnqueueLine("[user-cmd] No command or container selected.", true);
+                UIHandler.EnqueueLine("[user-cmd] No command or container selected.", true);
                 return;
             }
 
@@ -662,7 +355,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// <summary>
         /// Executes a command string by splitting it as a argv array.
         /// </summary>
-        private async Task ExecuteAndLogAsync(string cmd) => await ExecuteAndLogAsync(SplitShellLike(cmd));
+        private async Task ExecuteAndLogAsync(string cmd) => await ExecuteAndLogAsync(ShellSplitter.SplitShellLike(cmd));
 
         /// <summary>
         /// Executes a command inside the selected container and streams output to the console UI.
@@ -670,58 +363,32 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// <param name="args">The command and its arguments (argv form).</param>
         private async Task ExecuteAndLogAsync(string[] args)
         {
-            //cancel any existing exec task
-            _execCts?.Cancel();
-            _execCts = new CancellationTokenSource();
-            var ct = _execCts.Token;
+            UIHandler.EnqueueLine($"> {string.Join(' ', args)}", false);
 
-            var containerInfo = await _service.InspectAsync(ContainerId, ct);
-
-            //Whether to use TTY mode based on container settings
-            bool useTty = containerInfo.Tty;
-
-            //add command to console on UI thread
-            EnqueueLine($"> {string.Join(' ', args)}", false);
-
-            //Execute with streaming output in background (fire-and-forget style)
-            _execTask = Task.Run(async () =>
+            try
             {
-                try
+                await foreach (var (isErr, line) in _cmdRunner.RunAsync(_service, ContainerId, args))
                 {
-                    var (output, exitCodeTask) = await _service.StreamExecAsync(ContainerId, args, tty: useTty, ct: ct);
+                    UIHandler.EnqueueLine(line, isErr);
+                }
 
-                    //Stream the output line by line
-                    await foreach (var (isErr, text) in output.ReadAllAsync(ct))
-                    {
-                        if (text is null) continue;
-                        EnqueueLine(text, isErr);
-                    }
-
-                    //Get the exit code after the stream completes
-                    var exitCode = await exitCodeTask;
-                    EnqueueLine($"[exit] {exitCode}", false, true);
-                }
-                catch (OperationCanceledException)
-                {
-                    EnqueueLine("[exec] canceled", false, true);
-                }
-                catch (Exception ex)
-                {
-                    EnqueueLine($"[exec-error] {ex.Message}", true, true);
-                }
-                finally
-                {
-                    SetOnUiThread(() => IsCommandRunning = false);
-                }
-            }, ct);
-
-            SetOnUiThread(() => IsCommandRunning = true);
+                var exitCode = await _cmdRunner.ExitCode;
+                UIHandler.EnqueueLine($"[exit] {exitCode}", false, true);
+            }
+            catch (OperationCanceledException)
+            {
+                UIHandler.EnqueueLine("[exec] canceled", false, true);
+            }
+            catch (Exception ex)
+            {
+                UIHandler.EnqueueLine($"[exec-error] {ex.Message}", true, true);
+            }
         }
 
         /// <summary>
         /// Determines whether command execution can be stopped.
         /// </summary>
-        private bool CanStopExec() => IsCommandRunning;
+        private bool CanStopExec() => _cmdRunner.IsRunning;
 
         /// <summary>
         /// Stops the current command execution task, if it is running.
@@ -729,26 +396,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [RelayCommand(CanExecute = nameof(CanStopExec))]
         private async Task StopExecAsync()
         {
-            _execCts?.Cancel();
-
-            if (_execTask is not null)
-            {
-                try
-                {
-                    // Await with a timeout to prevent hanging during shutdown
-                    await _execTask.WaitAsync(TimeSpan.FromSeconds(2));
-                }
-                catch (OperationCanceledException) { }
-                catch (TimeoutException) { }
-                finally
-                {
-                    _execTask = null;
-                    _execCts?.Dispose();
-                    _execCts = null;
-
-                    SetOnUiThread(() => IsCommandRunning = false);
-                }
-            }
+            await _cmdRunner.StopAsync();
         }
 
         #endregion
@@ -766,47 +414,21 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [RelayCommand(CanExecute = nameof(CanStartLogs))]
         private async Task StartLogsAsync()
         {
-            //Stop existing logs if it is currently running
-            await StopLogsAsync();
-
-            _logsCts = new();
-            var ct = _logsCts.Token;
-
-            var containerInfo = await _service.InspectAsync(ContainerId, ct);
-
-            //Whether to use TTY mode based on container settings
-            bool useTty = containerInfo.Tty;
-
-            _logStreamTask = Task.Run(async () =>
+            try
             {
-                try
+                await foreach (var (isErr, line) in _logRunner.RunAsync(_service, ContainerId))
                 {
-                    var reader = await _service.StreamLogsAsync(
-                        ContainerId,
-                        follow: true,
-                        tail: Tail,
-                        tty: useTty,
-                        ct: ct);
-
-                    await foreach (var (isErr, text) in reader.ReadAllAsync(ct))
-                    {
-                        if (text is null) continue;
-                        EnqueueLine(text, isErr);
-                    }
-
-                    _logsCts?.Token.ThrowIfCancellationRequested();
+                    UIHandler.EnqueueLine(line, isErr);
                 }
-                catch (OperationCanceledException)
-                {
-                    EnqueueLine("[logs] canceled", false);
-                }
-                catch (Exception ex)
-                {
-                    EnqueueLine($"[logs-error] {ex.Message}", true, true);
-                }
-            }, ct);
-
-            IsLogsRunning = true;
+            }
+            catch (OperationCanceledException)
+            {
+                UIHandler.EnqueueLine("[logs] canceled", false);
+            }
+            catch (Exception ex)
+            {
+                UIHandler.EnqueueLine($"[logs-error] {ex.Message}", true, true);
+            }
         }
 
         /// <summary>
@@ -820,26 +442,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [RelayCommand(CanExecute = nameof(CanStopLogs))]
         private async Task StopLogsAsync()
         {
-            _logsCts?.Cancel();
-
-            if (_logStreamTask is not null)
-            {
-                try
-                {
-                    //await with a timeout to prevent hanging during shutdown
-                    await _logStreamTask.WaitAsync(TimeSpan.FromSeconds(2));
-                }
-                catch (OperationCanceledException) { }
-                catch (TimeoutException) { }
-                finally
-                {
-                    _logStreamTask = null;
-                    _logsCts?.Dispose();
-                    _logsCts = null;
-
-                    IsLogsRunning = false;
-                }
-            }
+            await _logRunner.StopAsync();
         }
 
         #endregion
@@ -852,7 +455,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [RelayCommand]
         private Task ClearAsync()
         {
-            Lines.Clear();
+            UIHandler.ClearAsync();
             return Task.CompletedTask;
         }
 
@@ -862,11 +465,10 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [RelayCommand]
         private async Task CopyAsync()
         {
-            var text = string.Join(Environment.NewLine, Lines.Select(l => $"{l.Timestamp:HH:mm:ss} {l.Text}"));
-            if (_clipboard is not null)
-            {
-                await _clipboard.SetTextAsync(text);
-            }
+            if(_clipboard is null)
+                return;
+
+            await UIHandler.CopyAsync(_clipboard);
         }
 
         #endregion
@@ -921,39 +523,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             UserCommands.RemoveAt(index);
         }
 
-        /// <summary>
-        /// Splits a shell-like command string into argv tokens (very simple splitting by spaces
-        /// </summary>
-        /// <param name="cmd">The command string.</param>
-        /// <returns>The argv array.</returns>
-        private static string[] SplitShellLike(string cmd)
-        {
-            //simple split
-            return cmd.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        }
-
-        /// <summary>
-        /// Executes an action on the UI thread IF a synchronization context is available, otherwise executes it inline.
-        /// </summary>
-        private void SetOnUiThread(Action action)
-        {
-            if (_syncContext == null || SynchronizationContext.Current == _syncContext)
-            {
-                action();
-                return;
-            }
-
-            _syncContext.Post(_ =>
-            {
-                try { 
-                    action(); 
-                }
-                catch (InvalidOperationException) { 
-                
-                }
-            }, null);
-        }
-
         #endregion
 
         #region Cleanup
@@ -965,7 +534,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         {
             await StopLogsAsync();
             await StopExecAsync();
-            await StopUiUpdateTaskAsync();
+            await UIHandler.StopAsync();
             await base.DisposeAsync();
         }
 
