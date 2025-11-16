@@ -358,35 +358,38 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// <summary>
         /// Executes a command string by splitting it as a argv array.
         /// </summary>
-        private async Task ExecuteAndLogAsync(string cmd) => await ExecuteAndLogAsync(ShellSplitter.SplitShellLike(cmd));
+        private async Task ExecuteAndLogAsync(string cmd) => await ExecuteAndLog(ShellSplitter.SplitShellLike(cmd));
 
         /// <summary>
         /// Executes a command inside the selected container and streams output to the console UI.
         /// </summary>
         /// <param name="args">The command and its arguments (argv form).</param>
-        private async Task ExecuteAndLogAsync(string[] args)
+        private Task ExecuteAndLog(string[] args)
         {
             //add command to console on UI thread
             PostLogMessage($"> {string.Join(' ', args)}", false);
 
-            try
+            return Task.Run(async () =>
             {
-                await foreach (var (isErr, line) in _cmdRunner.RunAsync(_service, ContainerId, args))
+                try
                 {
-                    UIHandler.EnqueueLine(line, isErr);
-                }
+                    await foreach (var (isErr, line) in _cmdRunner.RunAsync(_service, ContainerId, args).ConfigureAwait(false))
+                    {
+                        UIHandler.EnqueueLine(line, isErr);
+                    }
 
-                var exitCode = await _cmdRunner.ExitCode;
-                PostLogMessage($"[exit] {exitCode}", false, true);
-            }
-            catch (OperationCanceledException)
-            {
-                PostLogMessage("[exec] canceled", false, true);
-            }
-            catch (Exception ex)
-            {
-                PostLogMessage($"[exec-error] {ex.Message}", true, true);
-            }
+                    var exitCode = await _cmdRunner.ExitCode.ConfigureAwait(false);
+                    PostLogMessage($"[exit] {exitCode}", false, true);
+                }
+                catch (OperationCanceledException)
+                {
+                    PostLogMessage("[exec] canceled", false, true);
+                }
+                catch (Exception ex)
+                {
+                    PostLogMessage($"[exec-error] {ex.Message}", true, true);
+                }
+            });
         }
 
         /// <summary>
@@ -416,23 +419,27 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// Starts streaming container logs, following container TTY settings.
         /// </summary>
         [RelayCommand(CanExecute = nameof(CanStartLogs))]
-        private async Task StartLogsAsync()
+        private Task StartLogs()
         {
-            try
+            return Task.Run(async () =>
             {
-                await foreach (var (isErr, line) in _logRunner.RunAsync(_service, ContainerId))
+                try
                 {
-                    PostLogMessage(line, isErr);
+                    await foreach (var (isErr, line) in _logRunner.RunAsync(_service, ContainerId).ConfigureAwait(false))
+                    {
+                        PostLogMessage(line, isErr);
+                    }
                 }
-            }
-            catch (OperationCanceledException)
-            {
-                PostLogMessage("[logs] canceled", false);
-            }
-            catch (Exception ex)
-            {
-                PostLogMessage($"[logs-error] {ex.Message}", true, true);
-            }
+                catch (OperationCanceledException)
+                {
+                    PostLogMessage("[logs] canceled", false);
+                }
+                catch (Exception ex)
+                {
+                    PostLogMessage($"[logs-error] {ex.Message}", true, true);
+                }
+
+            });
         }
 
         /// <summary>
@@ -536,7 +543,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 return;
 
             var args = ShellSplitter.SplitShellLike(raw);
-            await ExecuteAndLogAsync(args);
+            await ExecuteAndLog(args);
         }
 
         private void PostLogMessage(string message, bool isError, bool isImportant = false) => UIHandler.EnqueueLine(message + "\r\n", isError, isImportant);

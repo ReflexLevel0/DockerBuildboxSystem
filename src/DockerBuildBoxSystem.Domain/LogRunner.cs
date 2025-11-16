@@ -42,7 +42,7 @@ namespace DockerBuildBoxSystem.Domain
 
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(_logsCts.Token, ct);
 
-            var containerInfo = await svc.InspectAsync(containerId, linked.Token);
+            var containerInfo = await svc.InspectAsync(containerId, linked.Token).ConfigureAwait(false);
 
             //Whether to use TTY mode based on container settings
             bool useTty = containerInfo.Tty;
@@ -51,12 +51,12 @@ namespace DockerBuildBoxSystem.Domain
                 containerId,
                 follow: true,
                 tty: useTty,
-                ct: linked.Token);
+                ct: linked.Token).ConfigureAwait(false);
             IsRunning = true;
 
             try
             {
-                await foreach (var (isStdErr, line) in _reader.ReadAllAsync(linked.Token))
+                await foreach (var (isStdErr, line) in _reader.ReadAllAsync(linked.Token).ConfigureAwait(false))
                 {
                     yield return (isStdErr, line);
                 }

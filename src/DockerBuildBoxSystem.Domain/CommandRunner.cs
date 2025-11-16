@@ -44,7 +44,7 @@ namespace DockerBuildBoxSystem.Domain
             if(args is null || args.Length == 0)
                 yield break;
 
-            await StopAsync();
+            await StopAsync().ConfigureAwait(false);
 
             _execCts?.Cancel();
             _execCts?.Dispose();
@@ -52,15 +52,15 @@ namespace DockerBuildBoxSystem.Domain
 
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(_execCts.Token, ct);
 
-            var containerInfo = await svc.InspectAsync(containerId, linked.Token);
+            var containerInfo = await svc.InspectAsync(containerId, linked.Token).ConfigureAwait(false);
 
-            _reader = await svc.StreamExecAsync(containerId, args, containerInfo.Tty || _forceTtyExec, linked.Token);
+            _reader = await svc.StreamExecAsync(containerId, args, containerInfo.Tty || _forceTtyExec, linked.Token).ConfigureAwait(false);
 
             IsRunning = true;
 
             try
             {
-                await foreach (var item in _reader.Value.Output.ReadAllAsync(linked.Token))
+                await foreach (var item in _reader.Value.Output.ReadAllAsync(linked.Token).ConfigureAwait(false))
                 {
                     yield return item;
                 }
@@ -77,7 +77,7 @@ namespace DockerBuildBoxSystem.Domain
 
             try
             {
-                await InputWriter!.WriteAsync(raw);
+                await InputWriter!.WriteAsync(raw).ConfigureAwait(false);
                 return true;
             }
             catch (Exception ex)
