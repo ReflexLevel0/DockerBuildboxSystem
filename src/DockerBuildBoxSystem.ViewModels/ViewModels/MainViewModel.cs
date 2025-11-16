@@ -149,6 +149,9 @@ public partial class MainViewModel : ViewModelBase
         _ = PersistSourcePathAsync(value);
     }
 
+    /// <summary>
+    /// Writes the persisted SourceFolderPath to appsettings.json.
+    /// </summary>
     private static async Task PersistSourcePathAsync(string path)
     {
         try
