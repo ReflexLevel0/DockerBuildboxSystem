@@ -206,7 +206,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         {
             if (value != null)
             {
+                //stop any running operations from previous container
                 _ = StopLogsAsync();
+                _ = StopExecAsync();
                 UIHandler.DiscardPending();
 
                 ContainerId = value.Id;
