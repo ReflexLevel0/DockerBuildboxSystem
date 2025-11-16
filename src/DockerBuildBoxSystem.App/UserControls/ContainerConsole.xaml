@@ -120,6 +120,7 @@
                      Style="{StaticResource TerminalTextBoxStyle}" 
                      IsReadOnly="True" 
                      AcceptsReturn="True" 
+                     IsUndoEnabled="False"
                      HorizontalScrollBarVisibility="Auto"
                      VerticalScrollBarVisibility="Auto"
                      Background="{StaticResource ContainerBackgroundBrush}"/>

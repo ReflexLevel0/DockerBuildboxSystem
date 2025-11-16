@@ -206,12 +206,15 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         {
             if (value != null)
             {
+                _ = StopLogsAsync();
+                UIHandler.DiscardPending();
+
                 ContainerId = value.Id;
-                PostLogMessage($"[info] Selected container: {value.Names.FirstOrDefault() ?? value.Id}", false);
+                PostLogMessage($"[info] Selected container: {value.Names.FirstOrDefault() ?? value.Id}", false, true);
 
                 //auto start logs if enabled
                 if (AutoStartLogs && !string.IsNullOrWhiteSpace(ContainerId))
-                    _ = StartLogsCommand.ExecuteAsync(null);
+                    _ = StartLogs();
             }
             else
             {
