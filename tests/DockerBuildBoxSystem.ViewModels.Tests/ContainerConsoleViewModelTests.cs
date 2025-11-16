@@ -86,7 +86,7 @@ public class ContainerConsoleViewModelTests
         Assert.True(logsStarted, "Logs should have started!");
 
         //wait until line appears, with timeout after 2 seconds...
-        var ok = await WaitUntilAsync(() => vm.Lines.Any(l => l.Text == "sup"), TimeSpan.FromSeconds(2));
+        var ok = await WaitUntilAsync(() => vm.UIHandler.Output.Contains("sup"), TimeSpan.FromSeconds(2));
 
         //Assert
         Assert.True(ok, "Line 'sup' should have appeared!");
