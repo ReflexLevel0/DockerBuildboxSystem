@@ -308,9 +308,11 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         {
             try
             {
-                UIHandler.EnqueueLine($"[info] Auto-stopping previous container: {id}", false);
+                var prev = Containers.FirstOrDefault(c => c.Id == id);
+                var nameOrId = prev?.Names.FirstOrDefault() ?? id;
+                UIHandler.EnqueueLine($"[info] Auto-stopping previous container: {nameOrId}", false);
                 await _service.StopAsync(id, timeout: TimeSpan.FromSeconds(10));
-                UIHandler.EnqueueLine($"[info] Auto-stopped container: {id}", false);
+                UIHandler.EnqueueLine($"[info] Auto-stopped container: {nameOrId}", false);
             }
             catch (Exception ex)
             {
