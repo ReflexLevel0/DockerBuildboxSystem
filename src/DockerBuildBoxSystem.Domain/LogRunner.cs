@@ -47,6 +47,13 @@ namespace DockerBuildBoxSystem.Domain
             //Whether to use TTY mode based on container settings
             bool useTty = containerInfo.Tty;
 
+            // if useTty is true, skip log streaming as TTY containers handle logs differently
+            // Only for UI purposes
+            if (useTty)
+            {
+                yield break;
+            }
+
             _reader = await svc.StreamLogsAsync(
                 containerId,
                 follow: true,
