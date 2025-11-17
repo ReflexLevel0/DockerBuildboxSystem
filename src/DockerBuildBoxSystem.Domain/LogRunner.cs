@@ -17,7 +17,7 @@ namespace DockerBuildBoxSystem.Domain
         private CancellationTokenSource? _logsCts = new();
         private ChannelReader<(bool, string)>? _reader;
 
-        // ANSI escape code 
+        // ANSI escape code, RegexOptions.Compiled for better performance compiling regex 
         private static readonly Regex AnsiRegex =
             new(@"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])|\a|\r", RegexOptions.Compiled);
 
