@@ -1,6 +1,8 @@
-﻿using System.Windows;
+﻿using DockerBuildBoxSystem.ViewModels.Main;
 using System.ComponentModel;
-using DockerBuildBoxSystem.ViewModels.Main;
+using System.Diagnostics.CodeAnalysis;
+using System.IO;
+using System.Windows;
 
 namespace DockerBuildBoxSystem.App;
 
@@ -35,6 +37,12 @@ public partial class MainWindow : Window
         Closing += OnWindowClosing;
     }
 
+    private void Window_DragEnter(object sender, DragEventArgs e) => HandleDragEnter(e);
+    private void Window_Drop(object sender, DragEventArgs e) => HandleDrop(e);
+    private void Window_DragLeave(object sender, DragEventArgs e)
+    {
+    }
+
     private async void OnWindowClosing(object? sender, CancelEventArgs e)
     {
         if (_isClosing)
@@ -64,4 +72,47 @@ public partial class MainWindow : Window
             });
         }
     }
+
+    #region Helpers
+    /// <summary>
+    /// When the user drags something into the window, for instance a folder.
+    /// </summary>
+    /// <param name="e">Contains relevant information for drag-and-drop events</param>
+    private void HandleDragEnter(DragEventArgs e)
+    {
+        e.Effects = HasFolder(e, out _) ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// Handles the drop operation when the user drops something to the window.
+    /// </summary>
+    /// <param name="e">Contains relevant information for drag-and-drop events</param>
+    private void HandleDrop(DragEventArgs e)
+    {
+        if (!HasFolder(e, out string? firstFolder))
+            return;
+
+        _viewModel.HandleFolderDrop(firstFolder);
+    }
+
+    /// <summary>
+    /// Determines whether the drag-and-drop event contains a valid folder path.
+    /// </summary>
+    /// <param name="e">Contains relevant information for drag-and-drop events</param>
+    /// <param name="folder">Contains the first valid folder path if one exists, otherwise <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> if the drag-and-drop event contains a valid folder path, otherwise <see
+    /// langword="false"/>.</returns>
+    private bool HasFolder(DragEventArgs e, [NotNullWhen(true)] out string? folder)
+    {
+        folder = null;
+
+        if (e.Data?.GetData(DataFormats.FileDrop) is not string[] paths || paths.Length == 0)
+            return false;
+
+        folder = paths.FirstOrDefault(Directory.Exists);
+        return folder is not null;
+    }
+
+    #endregion
 }

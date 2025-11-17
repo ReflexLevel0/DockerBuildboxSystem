@@ -116,7 +116,7 @@ public partial class App : Application
         services.AddSingleton<IContainerService, DockerService>();
         
         //register UI services
-        services.AddSingleton<Services.IDialogService, Services.DialogService>();
+        services.AddSingleton<IDialogService, Services.DialogService>();
         services.AddSingleton<Services.IViewLocator, Services.ViewLocator>();
         services.AddSingleton<IClipboardService, Services.WPFClipboardService>();
     }

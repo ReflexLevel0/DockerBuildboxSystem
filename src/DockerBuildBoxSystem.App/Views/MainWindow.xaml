@@ -9,7 +9,11 @@
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:MainViewModel}"
         Title="{Binding Title}"
-        WindowStartupLocation="CenterScreen">
+        WindowStartupLocation="CenterScreen"
+        AllowDrop="True" 
+        DragEnter="Window_DragEnter" 
+        DragLeave="Window_DragLeave" 
+        Drop="Window_Drop">
     
     <Window.Resources>
     </Window.Resources>

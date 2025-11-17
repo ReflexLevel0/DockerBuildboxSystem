@@ -1,5 +1,6 @@
-using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using DockerBuildBoxSystem.Contracts;
 using DockerBuildBoxSystem.ViewModels.Common;
 using Microsoft.Extensions.Configuration;
 using System.Text.Json;
@@ -12,6 +13,7 @@ namespace DockerBuildBoxSystem.ViewModels.Main;
 public partial class MainViewModel : ViewModelBase
 {
     private readonly IConfiguration _configuration;
+    private readonly IDialogService _dialogService;
     // Suppress persisting SourcePath while we are loading the initial value
     private bool _isLoadingSourcePath;
 
@@ -25,14 +27,15 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     private string? _sourcePath;
 
-    public MainViewModel(IConfiguration configuration)
+    public MainViewModel(IConfiguration configuration, IDialogService dialogService)
     {
         _configuration = configuration;
-        
+
         //load title from configuration
         var appName = _configuration["Application:Name"] ?? "Docker BuildBox System";
         var version = _configuration["Application:Version"];
         Title = string.IsNullOrEmpty(version) ? appName : $"{appName} v{version}";
+        _dialogService = dialogService;
     }
 
     private bool CanRunWhenIdle() => !IsBusy;
@@ -210,5 +213,17 @@ public partial class MainViewModel : ViewModelBase
         }
 
         await Task.CompletedTask; // Maintain async signature for RelayCommand
+    }
+
+
+    public void HandleFolderDrop(string folderPath)
+    {
+        if (string.IsNullOrWhiteSpace(folderPath) || string.Equals(folderPath, SourcePath))
+            return;
+
+        if (!_dialogService.ShowConfirmation($"Are you sure you want to switch repository to the following directory:\n{folderPath}"))
+            return;
+
+        SourcePath = folderPath;
     }
 }
