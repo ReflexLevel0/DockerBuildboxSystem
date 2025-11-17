@@ -5,6 +5,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 
@@ -15,6 +16,10 @@ namespace DockerBuildBoxSystem.Domain
         //logs streaming
         private CancellationTokenSource? _logsCts = new();
         private ChannelReader<(bool, string)>? _reader;
+
+        // ANSI escape code 
+        private static readonly Regex AnsiRegex =
+            new(@"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])|\a|\r", RegexOptions.Compiled);
 
         private bool _isRunning;
         public bool IsRunning
@@ -47,13 +52,6 @@ namespace DockerBuildBoxSystem.Domain
             //Whether to use TTY mode based on container settings
             bool useTty = containerInfo.Tty;
 
-            // if useTty is true, skip log streaming as TTY containers handle logs differently
-            // Only for UI purposes
-            if (useTty)
-            {
-                yield break;
-            }
-
             _reader = await svc.StreamLogsAsync(
                 containerId,
                 follow: true,
@@ -65,7 +63,15 @@ namespace DockerBuildBoxSystem.Domain
             {
                 await foreach (var (isStdErr, line) in _reader.ReadAllAsync(linked.Token))
                 {
-                    yield return (isStdErr, line);
+                    if (line is null) continue;
+                    // Clean ANSI escape sequences
+                    var cleanLine = CleanAnsiFromLogs(line);
+
+                    // skip empty lines after cleaning
+                    if (string.IsNullOrWhiteSpace(cleanLine))
+                        continue;
+
+                    yield return (isStdErr, cleanLine);
                 }
             }
             finally
@@ -89,5 +95,14 @@ namespace DockerBuildBoxSystem.Domain
             _logsCts = null;
             return ValueTask.CompletedTask;
         }
+
+        /// <summary>
+        /// Removes ANSI escape sequences from the provided log content.
+        /// </summary>
+        /// <param name="logs">The log content as a string, which may contain ANSI escape sequences.</param>
+        /// <returns>A string with all ANSI escape sequences removed.</returns>
+        private static string CleanAnsiFromLogs(string logs)
+            => AnsiRegex.Replace(logs, "");
+
     }
 }
