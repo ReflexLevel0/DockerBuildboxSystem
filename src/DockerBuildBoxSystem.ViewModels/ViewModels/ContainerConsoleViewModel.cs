@@ -84,6 +84,15 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private ContainerInfo? _selectedContainer;
 
         /// <summary>
+        /// True while sync is being executed.
+        /// </summary>
+        [ObservableProperty]
+        [NotifyCanExecuteChangedFor(nameof(SendCommand))]
+        [NotifyCanExecuteChangedFor(nameof(RunUserCommandCommand))]
+        [NotifyCanExecuteChangedFor(nameof(StartSyncCommand))]
+        public bool _isSyncRunning;
+
+        /// <summary>
         /// If true, include stopped containers in the list.
         /// </summary>
         [ObservableProperty]
@@ -121,6 +130,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                     SendCommand.NotifyCanExecuteChanged();
                     RunUserCommandCommand.NotifyCanExecuteChanged();
                     StopExecCommand.NotifyCanExecuteChanged();
+                    StartSyncCommand.NotifyCanExecuteChanged();
                 });
 
             _logRunner.RunningChanged += (_, __) =>
@@ -312,7 +322,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// <summary>
         /// Determines whether sending commands is currently allowed.
         /// </summary>
-        private bool CanSend() => !string.IsNullOrWhiteSpace(ContainerId) && !_cmdRunner.IsRunning && (SelectedContainer?.IsRunning == true);
+        private bool CanSend() => !string.IsNullOrWhiteSpace(ContainerId) && !_cmdRunner.IsRunning && (SelectedContainer?.IsRunning == true) && !IsSyncRunning;
 
         /// <summary>
         /// Executes the specified user command asynchronously within the selected container.
@@ -471,6 +481,24 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             await UIHandler.CopyAsync(_clipboard);
         }
 
+        #endregion
+
+        #region Sync
+        private bool CanSync() => !IsSyncRunning && !IsCommandRunning;
+
+        [RelayCommand(CanExecute = nameof(CanSync))]
+        private async Task StartSyncAsync()
+        {
+            IsSyncRunning = true;
+            try
+            {
+                await Task.Delay(1000);
+            }
+            finally
+            {
+                IsSyncRunning = false;
+            }
+        }
         #endregion
 
         #region Helpers
