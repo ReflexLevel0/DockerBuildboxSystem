@@ -484,8 +484,15 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         #endregion
 
         #region Sync
-        private bool CanSync() => !IsSyncRunning && !IsCommandRunning;
+        /// <summary>
+        /// Determines whether sync can be started.
+        /// </summary>
+        private bool CanSync() => !string.IsNullOrWhiteSpace(ContainerId) && (SelectedContainer?.IsRunning == true) && !IsSyncRunning && !IsCommandRunning;
 
+        /// <summary>
+        /// Starts the sync operation.
+        /// </summary>
+        /// <remarks>Temporary implementation.</remarks>
         [RelayCommand(CanExecute = nameof(CanSync))]
         private async Task StartSyncAsync()
         {
@@ -498,6 +505,20 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             {
                 IsSyncRunning = false;
             }
+        }
+
+        /// <summary>
+        /// Determines whether sync operation can be stopped.
+        /// </summary>
+        private bool CanStopSync() => IsSyncRunning;
+
+        /// <summary>
+        /// Stops the current sync task, if it is running.
+        /// </summary>
+        [RelayCommand(CanExecute = nameof(CanStopLogs))]
+        private async Task StopSyncAsync()
+        {
+            IsSyncRunning = false;
         }
         #endregion
 
