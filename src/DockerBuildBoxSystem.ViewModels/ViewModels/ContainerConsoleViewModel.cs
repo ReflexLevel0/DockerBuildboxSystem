@@ -110,6 +110,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [ObservableProperty]
         private bool _autoStartLogs = true;
 
+        // Track previous selected container id to manage stop-on-switch behavior
+        private string? _previousContainerId;
+
         /// <summary>
         /// Initializes a new instance of the <see cref="ContainerConsoleViewModel"/> class.
         /// </summary>
@@ -211,10 +214,23 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// <param name="value">The newly selected container info or null.</param>
         partial void OnSelectedContainerChanged(ContainerInfo? value)
         {
-            if (value != null)
+            var newContainer = value;
+            var oldId = _previousContainerId ?? ContainerId; // fallback to current if previous not tracked yet
+
+            if (newContainer != null)
             {
-                ContainerId = value.Id;
-                UIHandler.EnqueueLine($"[info] Selected container: {value.Names.FirstOrDefault() ?? value.Id}", false);
+                // If switching to a DIFFERENT container and previous was running, stop it
+                if (!string.IsNullOrWhiteSpace(oldId) && oldId != newContainer.Id)
+                {
+                    var prev = Containers.FirstOrDefault(c => c.Id == oldId);
+                    if (prev?.IsRunning == true)
+                    {
+                        _ = StopContainerByIdAsync(oldId);
+                    }
+                }
+
+                ContainerId = newContainer.Id;
+                UIHandler.EnqueueLine($"[info] Selected container: {newContainer.Names.FirstOrDefault() ?? newContainer.Id}", false);
 
                 //auto start logs if enabled
                 if (AutoStartLogs && !string.IsNullOrWhiteSpace(ContainerId))
@@ -222,8 +238,10 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             }
             else
             {
-                ContainerId = "";
+                ContainerId = string.Empty;
             }
+
+            _previousContainerId = ContainerId; // update tracker (after change)
         }
 
         /// <summary>
@@ -291,6 +309,25 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         }
 
         private bool CanRestartContainer() => !string.IsNullOrWhiteSpace(ContainerId) && (SelectedContainer?.IsRunning == true);
+
+        /// <summary>
+        /// Stops a container by id (used when auto-stopping previous selection).
+        /// </summary>
+        private async Task StopContainerByIdAsync(string id)
+        {
+            try
+            {
+                var prev = Containers.FirstOrDefault(c => c.Id == id);
+                var nameOrId = prev?.Names.FirstOrDefault() ?? id;
+                UIHandler.EnqueueLine($"[info] Auto-stopping previous container: {nameOrId}", false);
+                await _service.StopAsync(id, timeout: TimeSpan.FromSeconds(10));
+                UIHandler.EnqueueLine($"[info] Auto-stopped container: {nameOrId}", false);
+            }
+            catch (Exception ex)
+            {
+                UIHandler.EnqueueLine($"[auto-stop-error] {ex.Message}", true);
+            }
+        }
 
         /// <summary>
         /// Restarts a running container.
