@@ -4,6 +4,7 @@ using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Data.Common;
+using System.Text.RegularExpressions;
 using System.Threading;
 
 namespace DockerBuildBoxSystem.ViewModels.Common
@@ -39,6 +40,10 @@ namespace DockerBuildBoxSystem.ViewModels.Common
 
         private CancellationTokenSource? _uiUpdateCts;
         private Task? _uiUpdateTask;
+
+        // ANSI escape code, RegexOptions.Compiled for better performance compiling regex 
+        private static readonly Regex AnsiRegex =
+            new(@"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])|\a|\r", RegexOptions.Compiled);
 
 
         //To ensure UI is responsive
@@ -239,13 +244,15 @@ namespace DockerBuildBoxSystem.ViewModels.Common
 
         /// <summary>
         /// Creates and enqueues a console line with the provided text and flags.
+        /// Cleans ANSI escape sequences from the text before enqueuing.
         /// </summary>
         /// <param name="text">Text to append.</param>
         /// <param name="isError">Whether the line is an error.</param>
         /// <param name="isImportant">Whether the line is important.</param>
         public void EnqueueLine(string text, bool isError, bool isImportant = false)
         {
-            EnqueueLine(new ConsoleLine(DateTime.Now, text, isError, isImportant));
+            var cleanText = CleanAnsi(text);
+            EnqueueLine(new ConsoleLine(DateTime.Now, cleanText, isError, isImportant));
         }
 
         public void ClearAsync()
@@ -290,5 +297,17 @@ namespace DockerBuildBoxSystem.ViewModels.Common
         {
             await StopAsync().ConfigureAwait(false);
         }
+
+        #region ANSI Cleaning
+        /// <summary>
+        /// Removes ANSI escape sequences from the specified string.
+        /// </summary>
+        /// <param name="s">The input string from which ANSI escape sequences will be removed. Cannot be <see langword="null"/>.</param>
+        /// <returns>A string with all ANSI escape sequences removed. If the input string is empty, an empty string is returned.</returns>
+        private static string CleanAnsi(string s)
+            => AnsiRegex.Replace(s, "");
+        #endregion
+
+
     }
 }
