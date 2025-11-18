@@ -17,10 +17,6 @@ namespace DockerBuildBoxSystem.Domain
         private CancellationTokenSource? _logsCts = new();
         private ChannelReader<(bool, string)>? _reader;
 
-        // ANSI escape code, RegexOptions.Compiled for better performance compiling regex 
-        private static readonly Regex AnsiRegex =
-            new(@"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])|\a|\r", RegexOptions.Compiled);
-
         private bool _isRunning;
         public bool IsRunning
         {
@@ -63,15 +59,7 @@ namespace DockerBuildBoxSystem.Domain
             {
                 await foreach (var (isStdErr, line) in _reader.ReadAllAsync(linked.Token))
                 {
-                    if (line is null) continue;
-                    // Clean ANSI escape sequences
-                    var cleanLine = CleanAnsiFromLogs(line);
-
-                    // skip empty lines after cleaning
-                    if (string.IsNullOrWhiteSpace(cleanLine))
-                        continue;
-
-                    yield return (isStdErr, cleanLine);
+                    yield return (isStdErr, line);
                 }
             }
             finally
@@ -95,14 +83,6 @@ namespace DockerBuildBoxSystem.Domain
             _logsCts = null;
             return ValueTask.CompletedTask;
         }
-
-        /// <summary>
-        /// Removes ANSI escape sequences from the provided log content.
-        /// </summary>
-        /// <param name="logs">The log content as a string, which may contain ANSI escape sequences.</param>
-        /// <returns>A string with all ANSI escape sequences removed.</returns>
-        private static string CleanAnsiFromLogs(string logs)
-            => AnsiRegex.Replace(logs, "");
 
     }
 }
