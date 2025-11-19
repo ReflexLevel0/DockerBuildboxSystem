@@ -10,7 +10,7 @@
   {
     "Control": "textbox",
     "Id": "customCommand",
-    "Label": "usertextbox:",
+    "Label": "Variables:",
     "Tooltip": "Enter a custom command to execute"
   },
   {

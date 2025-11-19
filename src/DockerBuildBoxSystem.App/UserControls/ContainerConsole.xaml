@@ -140,7 +140,7 @@
                                  FontSize="13"
                                  IsEnabled="{Binding DataContext.CanUseUserControls, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
                         <!--Button to retrieve input from textbox-->
-                        <Button Content="Send"
+                        <Button Content="Add"
                                 Width="40"
                                 Height="25"
                                 Margin="4,0,0,0"
