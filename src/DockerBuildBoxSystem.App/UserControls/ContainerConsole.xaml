@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
              xmlns:local="clr-namespace:DockerBuildBoxSystem.App.UserControls"
+             xmlns:converters="clr-namespace:DockerBuildBoxSystem.App.Converters"
              xmlns:vm="clr-namespace:DockerBuildBoxSystem.ViewModels.ViewModels;assembly=DockerBuildBoxSystem.ViewModels"
              xmlns:model="clr-namespace:DockerBuildBoxSystem.Models;assembly=DockerBuildBoxSystem.Models"
              mc:Ignorable="d"
@@ -11,6 +12,11 @@
              d:DataContext="{d:DesignInstance Type=vm:ContainerConsoleViewModel, IsDesignTimeCreatable=False}"
              Loaded="OnLoaded"
              Unloaded="OnUnloaded">
+
+    <UserControl.Resources>
+        <converters:StateToColorConverter x:Key="StateToColorConverter" />
+    </UserControl.Resources>
+    
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -206,6 +212,7 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="25" />
             </Grid.ColumnDefinitions>
             
             <TextBox x:Name="Input"
@@ -228,6 +235,15 @@
                     Content="Stop"
                     Padding="12,4"
                     Command="{Binding StopExecCommand}" />
+
+            <!-- Container status indicator -->
+            <Canvas Grid.Column="3">
+                <Ellipse Width="15" 
+                         Height="15" 
+                         Canvas.Top="5" 
+                         Canvas.Left="5" 
+                         Fill="{Binding SelectedContainer.StateKind, Converter={StaticResource StateToColorConverter}}"/>
+            </Canvas>
         </Grid>
     </Grid>
 </UserControl>
