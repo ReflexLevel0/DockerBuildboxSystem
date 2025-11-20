@@ -80,20 +80,11 @@
                     Padding="8,4"
                     MinWidth="70"/>
             <StackPanel Grid.Column="4" Orientation="Horizontal" Margin="6,0,0,0" VerticalAlignment="Center">
-                <Button Content="Start"
+                <Button Content="Sync"
                      Margin="0,0,6,0"
                      Padding="8,4"
                      MinWidth="70"
-                     Command="{Binding StartContainerCommand}"/>
-                <Button Content="Stop"
-                     Margin="0,0,6,0"
-                     Padding="8,4"
-                     MinWidth="70"
-                     Command="{Binding StopContainerCommand}"/>
-                <Button Content="Restart"
-                     Padding="8,4"
-                     MinWidth="70"
-                     Command="{Binding RestartContainerCommand}"/>
+                     Command="{Binding StartSyncCommand}"/>
             </StackPanel>
         </Grid>
 
