@@ -52,10 +52,6 @@ namespace DockerBuildBoxSystem.ViewModels.Common
         private CancellationTokenSource? _uiUpdateCts;
         private Task? _uiUpdateTask;
 
-        public int MaxPendingLines { get; set; } = 2000;
-        private int _pendingCount;
-        private int _skippedLines;
-
         // ANSI escape code, RegexOptions.Compiled for better performance compiling regex 
         private static readonly Regex AnsiRegex =
             new(@"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])|\a|\r", RegexOptions.Compiled);
@@ -104,14 +100,10 @@ namespace DockerBuildBoxSystem.ViewModels.Common
                         //If we dequeue everything at once it might overwhelm the UI
                         var batch = new List<ConsoleLine>(MaxLinesPerTick);
                         var important = new List<ConsoleLine>();
-                        var skipped = Interlocked.Exchange(ref _skippedLines, 0);
-                        if (skipped > 0)
-                            batch.Add(new ConsoleLine(DateTime.Now, $"... {skipped} lines skipped ...\r\n", false, true));
 
                         while (batch.Count < MaxLinesPerTick && _outputQueue.TryDequeue(out var line))
                         {
                             batch.Add(line);
-                            Interlocked.Decrement(ref _pendingCount);
                             if (line.IsImportant)
                                 important.Add(line);
                         }
@@ -178,7 +170,6 @@ namespace DockerBuildBoxSystem.ViewModels.Common
                 while (batch.Count < MaxLinesPerTick && _outputQueue.TryDequeue(out var line))
                 {
                     batch.Add(line);
-                    Interlocked.Decrement(ref _pendingCount);
                     if (line.IsImportant)
                         important.Add(line);
                 }
@@ -251,16 +242,7 @@ namespace DockerBuildBoxSystem.ViewModels.Common
         /// <param name="line">The console line to enqueue.</param>
         public void EnqueueLine(ConsoleLine line)
         {
-            //Volatile read to always fetch the latest value
-            while (Volatile.Read(ref _pendingCount) >= MaxPendingLines && _outputQueue.TryDequeue(out _))
-            {
-                //interlocked to modify the value safely without race conditions (esp. since we have a separate UI task decrementing it).
-                //Decrement -> - 1 to variable, Increment -> +1 to variable
-                Interlocked.Decrement(ref _pendingCount);
-                Interlocked.Increment(ref _skippedLines);
-            }
             _outputQueue.Enqueue(line);
-            Interlocked.Increment(ref _pendingCount);
         }
 
         /// <summary>
@@ -282,7 +264,6 @@ namespace DockerBuildBoxSystem.ViewModels.Common
         public void DiscardPending()
         {
             while (_outputQueue.TryDequeue(out _)) { }
-            Interlocked.Exchange(ref _pendingCount, 0);
         }
 
         public void ClearAsync()
@@ -292,7 +273,6 @@ namespace DockerBuildBoxSystem.ViewModels.Common
                 _lines.Clear();
                 //clear pending queue so old lines don't repopulate.
                 while (_outputQueue.TryDequeue(out _)) { }
-                Interlocked.Exchange(ref _pendingCount, 0);
                 lock (_bufferLock) _buffer.Clear();
             }
 
