@@ -56,8 +56,6 @@ namespace DockerBuildBoxSystem.ViewModels.Common
         private static readonly Regex AnsiRegex =
             new(@"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])|\a|\r", RegexOptions.Compiled);
 
-
-        public int MaxConsoleLines { get; set; } = 500;
         public int MaxLinesPerTick { get; set; } = 50;
         public TimeSpan Interval { get; }
 
@@ -205,23 +203,6 @@ namespace DockerBuildBoxSystem.ViewModels.Common
 
             //append new lines first
             foreach (var l in lines) _lines.Add(l);
-
-            //force MaxConsoleLines by keeping only the last MaxConsoleLines entries
-            if (_lines.Count > MaxConsoleLines)
-            {
-                //comp how many to remove
-                int excess = _lines.Count - MaxConsoleLines;
-                if (_lines is ContainerObservableCollection<ConsoleLine> ranged)
-                {
-                    var newList = _lines.Skip(excess).ToList();
-                    ranged.ClearAndAddRange(newList);
-                }
-                else
-                {
-                    //remove oldest one by one
-                    for (int i = 0; i < excess; i++) _lines.RemoveAt(0);
-                }
-            }
 
             //output events
             var chunk = new StringBuilder();
