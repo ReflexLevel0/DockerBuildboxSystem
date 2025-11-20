@@ -11,6 +11,7 @@ using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
+using System.Threading.Channels;
 using System.Threading.Tasks;
 
 namespace DockerBuildBoxSystem.ViewModels.ViewModels
@@ -59,6 +60,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [NotifyCanExecuteChangedFor(nameof(SendCommand))]
         [NotifyCanExecuteChangedFor(nameof(RunUserCommandCommand))]
         [NotifyPropertyChangedFor(nameof(CanUseUserControls))]
+        [NotifyCanExecuteChangedFor(nameof(StartSyncCommand))]
         private string _containerId = "";
 
         public bool CanUseUserControls => CanSend();
@@ -83,7 +85,17 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [NotifyCanExecuteChangedFor(nameof(SendCommand))]
         [NotifyCanExecuteChangedFor(nameof(RunUserCommandCommand))]
         [NotifyPropertyChangedFor(nameof(CanUseUserControls))]
+        [NotifyCanExecuteChangedFor(nameof(StartSyncCommand))]
         private ContainerInfo? _selectedContainer;
+
+        /// <summary>
+        /// True while sync is being executed.
+        /// </summary>
+        [ObservableProperty]
+        [NotifyCanExecuteChangedFor(nameof(SendCommand))]
+        [NotifyCanExecuteChangedFor(nameof(RunUserCommandCommand))]
+        [NotifyCanExecuteChangedFor(nameof(StartSyncCommand))]
+        public bool _isSyncRunning;
 
         /// <summary>
         /// If true, include stopped containers in the list.
@@ -126,6 +138,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                     SendCommand.NotifyCanExecuteChanged();
                     RunUserCommandCommand.NotifyCanExecuteChanged();
                     StopExecCommand.NotifyCanExecuteChanged();
+                    StartSyncCommand.NotifyCanExecuteChanged();
                 });
 
             _logRunner.RunningChanged += (_, __) =>
@@ -165,6 +178,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             }
         }
 
+
         #region Container Management
         /// <summary>
         /// Refreshes the list of containers from the container service.
@@ -192,7 +206,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             }
             catch (Exception ex)
             {
-                UIHandler.EnqueueLine($"[container-list-error] {ex.Message}", true);
+                PostLogMessage($"[container-list-error] {ex.Message}", true);
             }
             finally
             {
@@ -211,6 +225,11 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
             if (newContainer != null)
             {
+                //stop any running operations from previous container
+                _ = StopLogsAsync();
+                _ = StopExecAsync();
+                UIHandler.DiscardPending();
+
                 // If switching to a DIFFERENT container and previous was running, stop it
                 if (!string.IsNullOrWhiteSpace(oldId) && oldId != newContainer.Id)
                 {
@@ -222,11 +241,11 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 }
 
                 ContainerId = newContainer.Id;
-                UIHandler.EnqueueLine($"[info] Selected container: {newContainer.Names.FirstOrDefault() ?? newContainer.Id}", false);
+                PostLogMessage($"[info] Selected container: {newContainer.Names.FirstOrDefault() ?? newContainer.Id}", false);
 
                 //auto start logs if enabled
                 if (AutoStartLogs && !string.IsNullOrWhiteSpace(ContainerId))
-                    _ = StartLogsCommand.ExecuteAsync(null);
+                    _ = StartLogs();
             }
             else
             {
@@ -254,20 +273,20 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             if (string.IsNullOrWhiteSpace(ContainerId)) return;
             try
             {
-                UIHandler.EnqueueLine($"[info] Starting container: {ContainerId}", false);
+                PostLogMessage($"[info] Starting container: {ContainerId}", false);
                 var status = await _service.StartAsync(ContainerId);
                 if(status)
                 {
-                    UIHandler.EnqueueLine($"[info] Started container: {ContainerId}", false);
+                    PostLogMessage($"[info] Started container: {ContainerId}", false);
                 }
                 else
                 {
-                    UIHandler.EnqueueLine($"[start-container] Container did not start: {ContainerId}", true);
+                    PostLogMessage($"[start-container] Container did not start: {ContainerId}", true);
                 }
             }
             catch (Exception ex)
             {
-                UIHandler.EnqueueLine($"[start-container-error] {ex.Message}", true);
+                PostLogMessage($"[start-container-error] {ex.Message}", true);
             }
             finally
             {
@@ -286,13 +305,13 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             if (string.IsNullOrWhiteSpace(ContainerId)) return;
             try
             {
-                UIHandler.EnqueueLine($"[info] Stopping container: {ContainerId}", false);
+                PostLogMessage($"[info] Stopping container: {ContainerId}", false);
                 await _service.StopAsync(ContainerId, timeout: TimeSpan.FromSeconds(10));
-                UIHandler.EnqueueLine($"[info] Stopped container: {ContainerId}", false);
+                PostLogMessage($"[info] Stopped container: {ContainerId}", false);
             }
             catch (Exception ex)
             {
-                UIHandler.EnqueueLine($"[stop-container-error] {ex.Message}", true);
+                PostLogMessage($"[stop-container-error] {ex.Message}", true);
             }
             finally
             {
@@ -330,13 +349,13 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             if (string.IsNullOrWhiteSpace(ContainerId)) return;
             try
             {
-                UIHandler.EnqueueLine($"[info] Restarting container: {ContainerId}", false);
+                PostLogMessage($"[info] Restarting container: {ContainerId}", false);
                 await _service.RestartAsync(ContainerId, timeout: TimeSpan.FromSeconds(10));
-                UIHandler.EnqueueLine($"[info] Restarted container: {ContainerId}", false);
+                PostLogMessage($"[info] Restarted container: {ContainerId}", false);
             }
             catch (Exception ex)
             {
-                UIHandler.EnqueueLine($"[restart-container-error] {ex.Message}", true);
+                PostLogMessage($"[restart-container-error] {ex.Message}", true);
             }
             finally
             {
@@ -351,7 +370,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// <summary>
         /// Determines whether sending commands is currently allowed.
         /// </summary>
-        private bool CanSend() => !string.IsNullOrWhiteSpace(ContainerId) && !_cmdRunner.IsRunning && (SelectedContainer?.IsRunning == true);
+        private bool CanSend() => !string.IsNullOrWhiteSpace(ContainerId) && !_cmdRunner.IsRunning && (SelectedContainer?.IsRunning == true) && !IsSyncRunning;
 
      
         /// <summary>
@@ -370,7 +389,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             // Check for null control or no selected container
             if (control is null || SelectedContainer is null)
             {
-                UIHandler.EnqueueLine("[user-cmd] No command or container selected.", true);
+                PostLogMessage("[user-cmd] No command or container selected.", true);
                 return;
             }
             // Handle ButtonCommand control type
@@ -383,7 +402,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                     return;
                 }
                 var cmdStr = string.Join(' ', cmds);
-                await ExecuteAndLogAsync(cmdStr);
+                await RouteInputAsync(cmdStr);
             }
             else
             {
@@ -394,46 +413,50 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// <summary>
         /// Sends the current input text as a command to the container.
         /// </summary>
-        [RelayCommand(CanExecute = nameof(CanSend))]
+        [RelayCommand(CanExecute = nameof(CanSend), AllowConcurrentExecutions = true)]
         private async Task SendAsync()
         {
-            var cmd = (Input ?? String.Empty).Trim();
-            //Clear the input after sending
+            var raw = (Input ?? string.Empty);
             Input = string.Empty;
-            await ExecuteAndLogAsync(cmd);
+
+            await RouteInputAsync(raw);
         }
 
         /// <summary>
         /// Executes a command string by splitting it as a argv array.
         /// </summary>
-        private async Task ExecuteAndLogAsync(string cmd) => await ExecuteAndLogAsync(ShellSplitter.SplitShellLike(cmd));
+        private async Task ExecuteAndLogAsync(string cmd) => await ExecuteAndLog(ShellSplitter.SplitShellLike(cmd));
 
         /// <summary>
         /// Executes a command inside the selected container and streams output to the console UI.
         /// </summary>
         /// <param name="args">The command and its arguments (argv form).</param>
-        private async Task ExecuteAndLogAsync(string[] args)
+        private Task ExecuteAndLog(string[] args)
         {
-            UIHandler.EnqueueLine($"> {string.Join(' ', args)}", false);
+            //add command to console on UI thread
+            PostLogMessage($"> {string.Join(' ', args)}", false);
 
-            try
+            return Task.Run(async () =>
             {
-                await foreach (var (isErr, line) in _cmdRunner.RunAsync(_service, ContainerId, args))
+                try
                 {
-                    UIHandler.EnqueueLine(line, isErr);
-                }
+                    await foreach (var (isErr, line) in _cmdRunner.RunAsync(_service, ContainerId, args).ConfigureAwait(false))
+                    {
+                        UIHandler.EnqueueLine(line, isErr);
+                    }
 
-                var exitCode = await _cmdRunner.ExitCode;
-                UIHandler.EnqueueLine($"[exit] {exitCode}", false, true);
-            }
-            catch (OperationCanceledException)
-            {
-                UIHandler.EnqueueLine("[exec] canceled", false, true);
-            }
-            catch (Exception ex)
-            {
-                UIHandler.EnqueueLine($"[exec-error] {ex.Message}", true, true);
-            }
+                    var exitCode = await _cmdRunner.ExitCode.ConfigureAwait(false);
+                    PostLogMessage($"[exit] {exitCode}", false, true);
+                }
+                catch (OperationCanceledException)
+                {
+                    PostLogMessage("[exec] canceled", false, true);
+                }
+                catch (Exception ex)
+                {
+                    PostLogMessage($"[exec-error] {ex.Message}", true, true);
+                }
+            });
         }
 
         /// <summary>
@@ -463,23 +486,27 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// Starts streaming container logs, following container TTY settings.
         /// </summary>
         [RelayCommand(CanExecute = nameof(CanStartLogs))]
-        private async Task StartLogsAsync()
+        private Task StartLogs()
         {
-            try
+            return Task.Run(async () =>
             {
-                await foreach (var (isErr, line) in _logRunner.RunAsync(_service, ContainerId))
+                try
                 {
-                    UIHandler.EnqueueLine(line, isErr);
+                    await foreach (var (isErr, line) in _logRunner.RunAsync(_service, ContainerId).ConfigureAwait(false))
+                    {
+                        PostLogMessage(line, isErr);
+                    }
                 }
-            }
-            catch (OperationCanceledException)
-            {
-                UIHandler.EnqueueLine("[logs] canceled", false);
-            }
-            catch (Exception ex)
-            {
-                UIHandler.EnqueueLine($"[logs-error] {ex.Message}", true, true);
-            }
+                catch (OperationCanceledException)
+                {
+                    PostLogMessage("[logs] canceled", false);
+                }
+                catch (Exception ex)
+                {
+                    PostLogMessage($"[logs-error] {ex.Message}", true, true);
+                }
+
+            });
         }
 
         /// <summary>
@@ -504,10 +531,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// Clears all lines from the console.
         /// </summary>
         [RelayCommand]
-        private Task ClearAsync()
+        private async Task ClearAsync()
         {
             UIHandler.ClearAsync();
-            return Task.CompletedTask;
         }
 
         /// <summary>
@@ -522,6 +548,45 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             await UIHandler.CopyAsync(_clipboard);
         }
 
+        #endregion
+
+        #region Sync
+        /// <summary>
+        /// Determines whether sync can be started.
+        /// </summary>
+        private bool CanSync() => !string.IsNullOrWhiteSpace(ContainerId) && (SelectedContainer?.IsRunning == true) && !IsSyncRunning && !IsCommandRunning;
+
+        /// <summary>
+        /// Starts the sync operation.
+        /// </summary>
+        /// <remarks>Temporary implementation.</remarks>
+        [RelayCommand(CanExecute = nameof(CanSync))]
+        private async Task StartSyncAsync()
+        {
+            IsSyncRunning = true;
+            try
+            {
+                await Task.Delay(1000);
+            }
+            finally
+            {
+                IsSyncRunning = false;
+            }
+        }
+
+        /// <summary>
+        /// Determines whether sync operation can be stopped.
+        /// </summary>
+        private bool CanStopSync() => IsSyncRunning;
+
+        /// <summary>
+        /// Stops the current sync task, if it is running.
+        /// </summary>
+        [RelayCommand(CanExecute = nameof(CanStopLogs))]
+        private async Task StopSyncAsync()
+        {
+            IsSyncRunning = false;
+        }
         #endregion
 
         #region Helpers
@@ -617,13 +682,27 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         }
 
 
+
+        private async Task RouteInputAsync(string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+                return;
+
+            if (await _cmdRunner.TryWriteToInteractiveAsync(raw))
+                return;
+
+            var args = ShellSplitter.SplitShellLike(raw);
+            await ExecuteAndLog(args);
+        }
+
+        private void PostLogMessage(string message, bool isError, bool isImportant = false) => UIHandler.EnqueueLine(message + "\r\n", isError, isImportant);
         #endregion
 
-        #region Cleanup
+            #region Cleanup
 
-        /// <summary>
-        /// cancel and cleanup task
-        /// </summary>
+            /// <summary>
+            /// cancel and cleanup task
+            /// </summary>
         public override async ValueTask DisposeAsync()
         {
             await StopLogsAsync();
