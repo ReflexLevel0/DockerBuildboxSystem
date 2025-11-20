@@ -13,7 +13,7 @@ namespace DockerBuildBoxSystem.Domain
     {
         //exec streaming
         private CancellationTokenSource? _execCts = new();
-        private (ChannelReader<(bool IsStdErr, string Line)> Output, Task<long> ExitCodeTask)? _reader;
+        private (ChannelReader<(bool IsStdErr, string Line)> Output, ChannelWriter<string> Input, Task<long> ExitCodeTask)? _reader;
 
         private bool _isRunning;
         public bool IsRunning
@@ -30,6 +30,11 @@ namespace DockerBuildBoxSystem.Domain
         public event EventHandler<bool>? RunningChanged;
 
         public Task<long> ExitCode => _reader?.ExitCodeTask ?? Task.FromResult(-1L);
+        private ChannelWriter<string>? InputWriter => _reader?.Input;
+
+        //force TTY for exec sessions - used for interactive shells such python
+        private bool _forceTtyExec = true;
+        private bool IsInteractive => IsRunning && InputWriter is not null;
 
         public async IAsyncEnumerable<(bool IsStdErr, string Line)> RunAsync(IContainerService svc, 
             string containerId, 
@@ -39,7 +44,7 @@ namespace DockerBuildBoxSystem.Domain
             if(args is null || args.Length == 0)
                 yield break;
 
-            await StopAsync();
+            await StopAsync().ConfigureAwait(false);
 
             _execCts?.Cancel();
             _execCts?.Dispose();
@@ -47,15 +52,15 @@ namespace DockerBuildBoxSystem.Domain
 
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(_execCts.Token, ct);
 
-            var containerInfo = await svc.InspectAsync(containerId, linked.Token);
+            var containerInfo = await svc.InspectAsync(containerId, linked.Token).ConfigureAwait(false);
 
-            _reader = await svc.StreamExecAsync(containerId, args, containerInfo.Tty, linked.Token);
+            _reader = await svc.StreamExecAsync(containerId, args, containerInfo.Tty || _forceTtyExec, linked.Token).ConfigureAwait(false);
 
             IsRunning = true;
 
             try
             {
-                await foreach (var item in _reader.Value.Output.ReadAllAsync(linked.Token))
+                await foreach (var item in _reader.Value.Output.ReadAllAsync(linked.Token).ConfigureAwait(false))
                 {
                     yield return item;
                 }
@@ -63,6 +68,21 @@ namespace DockerBuildBoxSystem.Domain
             finally
             {
                 IsRunning = false;
+            }
+        }
+
+        public async Task<bool> TryWriteToInteractiveAsync(string raw)
+        {
+            if (!IsInteractive) return false;
+
+            try
+            {
+                await InputWriter!.WriteAsync(raw).ConfigureAwait(false);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                return true;
             }
         }
 

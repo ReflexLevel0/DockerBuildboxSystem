@@ -87,6 +87,7 @@ namespace DockerBuildBoxSystem.Contracts
         }
     }
 
+
     /// <summary>
     /// Defines an abstraction for interacting with the Docker Engine API.
     /// </summary>
@@ -175,20 +176,6 @@ namespace DockerBuildBoxSystem.Contracts
             bool tty = false,
             CancellationToken ct = default);
 
-        /// <summary>
-        /// Runs a command inside a running container and returns (exitCode, stdout, stderr).
-        /// Set shell=null to pass a raw argv (e.g., ["sh","-lc","echo test"]).
-        /// </summary>
-        /// <param name="containerId">The id or name of the container</param>
-        /// <param name="cmd">Command arguments (e.g., ["sh", "-c", "echo hello"])</param>
-        /// <param name="tty">If true, runs a command with TTY enabled (merged output stream)</param>
-        /// <param name="ct">Cancellation token to stop reading</param>
-        /// <returns>Returns a tuple of (ExitCode, StdOut, StdErr).</returns>
-        Task<(long ExitCode, string StdOut, string StdErr)> ExecAsync(
-            string containerId,
-            IReadOnlyList<string> cmd,
-            bool tty = false,
-            CancellationToken ct = default);
 
         /// <summary>
         /// Runs a command inside a running container and instead streams the output as it is produced.
@@ -200,7 +187,7 @@ namespace DockerBuildBoxSystem.Contracts
         /// <param name="tty">If true, runs a command with TTY enabled (merged output stream)</param>
         /// <param name="ct">Cancellation token to stop reading</param>
         /// <returns>Returns a tuple containing a channel reader that yields (IsStdErr, Line) tuples and a task that completes with the exit code when the command finishes</returns>
-        Task<(ChannelReader<(bool IsStdErr, string Line)> Output, Task<long> ExitCodeTask)> StreamExecAsync(
+        Task<(ChannelReader<(bool IsStdErr, string Line)> Output, ChannelWriter<string> Input, Task<long> ExitCodeTask)> StreamExecAsync(
             string containerId,
             IReadOnlyList<string> cmd,
             bool tty = false,

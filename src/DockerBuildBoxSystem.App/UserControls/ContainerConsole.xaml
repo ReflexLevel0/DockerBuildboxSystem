@@ -23,7 +23,6 @@
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
-
         <!-- Container Selector -->
         <Grid Grid.Row="0" Margin="6">
             <Grid.ColumnDefinitions>
@@ -33,12 +32,11 @@
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            
             <TextBlock Grid.Column="0" 
                        Text="Container:" 
                        VerticalAlignment="Center" 
                        Margin="0,0,6,0"/>
-            
+
             <ComboBox Grid.Column="1" 
                       ItemsSource="{Binding Containers}"
                       SelectedItem="{Binding SelectedContainer}"
@@ -67,13 +65,12 @@
                     </DataTemplate>
                 </ComboBox.ItemTemplate>
             </ComboBox>
-            
             <CheckBox Grid.Column="2" 
                       Content="Show All" 
                       IsChecked="{Binding ShowAllContainers}"
                       VerticalAlignment="Center"
                       Margin="6,0,6,0"/>
-            
+
             <Button Grid.Column="3" 
                     Content="Refresh" 
                     Command="{Binding RefreshContainersCommand}"
@@ -107,54 +104,20 @@
                             MinWidth="80"/>
                 </DataTemplate>
             </ItemsControl.ItemTemplate>
-
         </ItemsControl>
-
+        <!-- Output TextBox -->
         <Grid Grid.Row="2" ClipToBounds="True">
-            <!-- Output -->
-            <!-- using ListBox now instead of ScrollViewer -->
-            <ListBox x:Name="OutputList"
-                     ItemsSource="{Binding Lines}"
-                     Background="{StaticResource ContainerBackgroundBrush}"
-                     BorderThickness="0"
-                     ScrollViewer.VerticalScrollBarVisibility="Auto"
-                     ScrollViewer.CanContentScroll="True"
-                     VirtualizingStackPanel.IsVirtualizing="True"
-                     VirtualizingStackPanel.VirtualizationMode="Recycling"
-                     VirtualizingStackPanel.CacheLength="2">
-                <ListBox.ItemTemplate>
-                    <DataTemplate>
-                        <TextBlock FontFamily="Consolas" FontSize="13">
-                            <TextBlock.Style>
-                                <Style TargetType="TextBlock">
-                                    <Setter Property="Foreground" Value="{StaticResource ContainerNormalBrush}"/>
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding IsError}" Value="True">
-                                            <Setter Property="Foreground" Value="{StaticResource ContainerErrorBrush}"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </TextBlock.Style>
-                            <Run Text="{Binding Timestamp, StringFormat='[{0:HH:mm:ss}]'}" Foreground="{StaticResource ContainerTimestampBrush}"/>
-                            <Run Text=" "/>
-                            <Run Text="{Binding Text}"/>
-                        </TextBlock>
-                    </DataTemplate>
-                </ListBox.ItemTemplate>
-            </ListBox>
-
-            <!-- Control Buttons -->
-            <StackPanel Orientation="Horizontal" 
-                        Margin="8"
-                        VerticalAlignment="Top"
-                        HorizontalAlignment="Right">
-                    <Button Content="Copy"
-                        Command="{Binding CopyCommand}"
-                        Padding="4,2"
-                        Margin="0,0,4,0"/>
-                    <Button Content="Clear" 
-                        Command="{Binding ClearCommand}"
-                        Padding="4,2"/>
+            <TextBox x:Name="TerminalOutput" 
+                     Style="{StaticResource TerminalTextBoxStyle}" 
+                     IsReadOnly="True" 
+                     AcceptsReturn="True" 
+                     IsUndoEnabled="False"
+                     HorizontalScrollBarVisibility="Auto"
+                     VerticalScrollBarVisibility="Auto"
+                     Background="{StaticResource ContainerBackgroundBrush}"/>
+            <StackPanel Orientation="Horizontal" Margin="8" VerticalAlignment="Top" HorizontalAlignment="Right">
+                <Button Content="Copy" Command="{Binding CopyCommand}" Padding="4,2" Margin="0,0,4,0"/>
+                <Button Content="Clear" Command="{Binding ClearCommand}" Padding="4,2"/>
             </StackPanel>
         </Grid>
         <!-- Input -->
