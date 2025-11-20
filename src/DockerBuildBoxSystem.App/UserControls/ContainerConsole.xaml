@@ -6,6 +6,7 @@
              xmlns:local="clr-namespace:DockerBuildBoxSystem.App.UserControls"
              xmlns:converters="clr-namespace:DockerBuildBoxSystem.App.Converters"
              xmlns:vm="clr-namespace:DockerBuildBoxSystem.ViewModels.ViewModels;assembly=DockerBuildBoxSystem.ViewModels"
+             xmlns:model="clr-namespace:DockerBuildBoxSystem.Models;assembly=DockerBuildBoxSystem.Models"
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="800"
              d:DataContext="{d:DesignInstance Type=vm:ContainerConsoleViewModel, IsDesignTimeCreatable=False}"
@@ -85,25 +86,64 @@
             </StackPanel>
         </Grid>
 
-        <!-- User Commands -->
+        <!-- User Controls -->
         <ItemsControl Grid.Row="1"
-              ItemsSource="{Binding UserCommands}"
+              ItemsSource="{Binding UserControlDefinition}"
               Margin="6">
             <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate>
-                    <StackPanel Orientation="Horizontal"  />
+                    <StackPanel Orientation="Horizontal"/>
                 </ItemsPanelTemplate>
             </ItemsControl.ItemsPanel>
-            <ItemsControl.ItemTemplate>
-                <DataTemplate>
-                    <Button Content="{Binding Label}"
+            <ItemsControl.Resources>
+                <!--Template for Button-->
+                <DataTemplate DataType="{x:Type model:ButtonCommand}">
+                    <!--Global button styles in App/resources/styles.xaml-->
+                    <Button Style="{StaticResource FlatIconButton}"
+                            ToolTip="{Binding Tooltip}"
                             Command="{Binding DataContext.RunUserCommandCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                             CommandParameter="{Binding }"
-                            Padding="8,4"
-                            Margin="0,0,6,0"
-                            MinWidth="80"/>
+                            Width="30" Height="30">
+                        <Image Source="{Binding IconPath}" Width="20" Height="20"/>
+                    </Button>
                 </DataTemplate>
-            </ItemsControl.ItemTemplate>
+                <!--Template for dropdown-->
+                <DataTemplate DataType="{x:Type model:DropdownOption}">
+                    <StackPanel Orientation="Horizontal" >
+                        <TextBlock Text="{Binding Label}" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                        <ComboBox ItemsSource="{Binding Values}"
+                                  SelectedItem="{Binding SelectedValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                  Width="100" Height="25"
+                                  IsEnabled="{Binding DataContext.CanUseUserControls, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                  Padding="6"/>
+                    </StackPanel>
+
+                </DataTemplate>
+
+                <!--Template for TextBox-->
+                <DataTemplate DataType="{x:Type model:TextBoxCommand}">
+                    <StackPanel Orientation="Horizontal" Margin="4">
+                        <TextBlock Text="{Binding Label}" Margin="4,0,4,0" VerticalAlignment="Center"/>
+                        <TextBox Text="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 Tag="{Binding Id}"
+                                 Width="160"
+                                 Height="25"
+                                 Padding="6"
+                                 FontFamily="Consolas"
+                                 FontSize="13"
+                                 IsEnabled="{Binding DataContext.CanUseUserControls, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+                        <!--Button to retrieve input from textbox-->
+                        <Button Content="Add"
+                                Width="40"
+                                Height="25"
+                                Margin="4,0,0,0"
+                                Command="{Binding DataContext.SubmitTextCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                IsEnabled="{Binding DataContext.CanUseUserControls, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                            />
+                    </StackPanel>
+                </DataTemplate>
+            </ItemsControl.Resources>
+
         </ItemsControl>
         <!-- Output TextBox -->
         <Grid Grid.Row="2" ClipToBounds="True">

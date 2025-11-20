@@ -1,30 +1,49 @@
 ﻿[
+
   {
-    "Label": "List /",
-    "Command": [ "ls", "/" ]
+    "Control": "dropdown",
+    "Id": "platform",
+    "Label": "Platform:",
+    "Values": [ "arm", "intel", "x86" ],
+    "Tooltip": "Choose your platform"
   },
   {
-    "Label": "Custom",
-    "Command": [ "bash", "-c", "/home/ubuntu/myscript.sh" ]
+    "Control": "textbox",
+    "Id": "customCommand",
+    "Label": "Variables:",
+    "Tooltip": "Enter a custom command to execute"
   },
   {
-    "Label": "Show Env",
-    "Command": [ "printenv" ]
+    "Control": "button",
+    "Command": [ "ls", "/" ],
+    "Tooltip": "List root directory",
+    "IconPath": "Assets/icons/list.png"
+
   },
   {
-    "Label": "Disk Usage",
-    "Command": [ "df", "-h" ]
+    "Control": "button",
+    "Command": [ "printenv" ],
+    "Tooltip": "Show environment variables",
+    "IconPath": "Assets/icons/show-env.png"
   },
   {
-    "Label": "Processes",
-    "Command": [ "ps", "aux" ]
+    "Control": "button",
+    "Command": [ "df", "-h" ],
+    "Tooltip": "Check disk usage",
+    "IconPath": "Assets/icons/check-disk.png"
   },
   {
-    "Label": "Build",
-    "Command": [ "echo", "Building!" ]
+    "Control": "button",
+    "Command": [ "uptime" ],
+    "Tooltip": "Show system uptime",
+    "IconPath": "Assets/icons/uptime.png"
+
   },
   {
-    "Label": "Clean",
-    "Command": [ "echo", "Cleaning!" ]
+    "Control": "button",
+    "Command": [ "ps", "aux" ],
+    "Tooltip": "List running processes",
+    "IconPath": "Assets/icons/processes.png"
   }
+
 ]
