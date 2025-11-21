@@ -59,8 +59,7 @@ namespace DockerBuildBoxSystem.ViewModels.Common
 
         public int MaxLinesPerTick { get; set; } = 50;
         public int MaxLines { get; set; } = 1000;
-      
-        public TimeSpan Interval { get; }
+        public TimeSpan Interval { get; } = TimeSpan.FromMilliseconds(200);
 
         /// <summary>
         /// Raised whenever an important line is added to the UI, ex a error line that needs attention.
@@ -71,7 +70,7 @@ namespace DockerBuildBoxSystem.ViewModels.Common
         public UILineBuffer(RangeObservableCollection<ConsoleLine> lines, TimeSpan? interval = null, SynchronizationContext? uiContext = null)
         {
             _lines = lines;
-            Interval = interval ?? TimeSpan.FromMilliseconds(75);
+            Interval = interval ?? Interval;
             _uiContext = uiContext ?? SynchronizationContext.Current;
         }
 
