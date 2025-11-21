@@ -94,6 +94,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [ObservableProperty]
         [NotifyCanExecuteChangedFor(nameof(SendCommand))]
         [NotifyCanExecuteChangedFor(nameof(RunUserCommandCommand))]
+        [NotifyPropertyChangedFor(nameof(CanUseUserControls))]
         [NotifyCanExecuteChangedFor(nameof(StartSyncCommand))]
         public bool _isSyncRunning;
 
