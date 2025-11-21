@@ -27,6 +27,11 @@ namespace DockerBuildBoxSystem.Contracts
                 base.OnCollectionChanged(e);
         }
 
+        /// <summary>
+        /// Adds the elements of the specified collection to the current collection.
+        /// </summary>
+        /// <param name="list">The collection of elements to add.</param>
+        /// <exception cref="ArgumentNullException">Thrown if <paramref name="list"/> is <see langword="null"/>.</exception>
         public void AddRange(IEnumerable<T> list)
         {
             if (list == null)
@@ -42,6 +47,11 @@ namespace DockerBuildBoxSystem.Contracts
             OnCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
         }
 
+        /// <summary>
+        /// Removes a range of items from the collection.
+        /// </summary>
+        /// <param name="list">The collection of items to remove.</param>
+        /// <exception cref="ArgumentNullException">Thrown if <paramref name="list"/> is <see langword="null"/>.</exception>
         public void RemoveRange(IEnumerable<T> list)
         {
             if (list == null)
