@@ -149,6 +149,13 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                     StopLogsCommand.NotifyCanExecuteChanged();
                 });
 
+            PropertyChanged += async (s, e) =>
+            {
+                if(string.Compare(e.PropertyName, nameof(SelectedContainer)) == 0) {
+                    await OnSelectedContainerChangedAsync(SelectedContainer);
+                }
+            };
+
             UIHandler = new UILineBuffer(Lines);
         }
 
@@ -218,7 +225,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// Updates dependent state when the selected container changes.
         /// </summary>
         /// <param name="value">The newly selected container info or null.</param>
-        partial void OnSelectedContainerChanged(ContainerInfo? value)
+        public async Task OnSelectedContainerChangedAsync(ContainerInfo? value)
         {
             var newContainer = value;
             var oldId = _previousContainerId ?? ContainerId; // fallback to current if previous not tracked yet
@@ -250,6 +257,12 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             else
             {
                 ContainerId = string.Empty;
+            }
+
+            // Starting the new container
+            if (newContainer != null && !newContainer.IsRunning)
+            {
+                await StartContainerAsync();
             }
 
             _previousContainerId = ContainerId; // update tracker (after change)
@@ -698,11 +711,11 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private void PostLogMessage(string message, bool isError, bool isImportant = false) => UIHandler.EnqueueLine(message + "\r\n", isError, isImportant);
         #endregion
 
-            #region Cleanup
+        #region Cleanup
 
-            /// <summary>
-            /// cancel and cleanup task
-            /// </summary>
+        /// <summary>
+        /// cancel and cleanup task
+        /// </summary>
         public override async ValueTask DisposeAsync()
         {
             await StopLogsAsync();
