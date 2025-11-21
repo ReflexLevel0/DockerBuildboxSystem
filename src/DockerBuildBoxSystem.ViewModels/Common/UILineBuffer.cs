@@ -33,6 +33,7 @@ namespace DockerBuildBoxSystem.ViewModels.Common
 
         public event EventHandler<string>? OutputChunk;
         public event EventHandler? OutputCleared;
+        public event EventHandler<int>? OutputTrimmed;
 
         private readonly StringBuilder _buffer = new();
         private readonly object _bufferLock = new();
@@ -43,7 +44,7 @@ namespace DockerBuildBoxSystem.ViewModels.Common
         /// <summary>
         /// Lines currently displayed in the console UI.
         /// </summary>
-        private readonly ObservableCollection<ConsoleLine> _lines;
+        private readonly RangeObservableCollection<ConsoleLine> _lines;
 
         private readonly SynchronizationContext? _uiContext;
 
@@ -57,6 +58,8 @@ namespace DockerBuildBoxSystem.ViewModels.Common
             new(@"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])|\a|\r", RegexOptions.Compiled);
 
         public int MaxLinesPerTick { get; set; } = 50;
+        public int MaxLines { get; set; } = 1000;
+      
         public TimeSpan Interval { get; }
 
         /// <summary>
@@ -65,7 +68,7 @@ namespace DockerBuildBoxSystem.ViewModels.Common
         /// </summary>
         public event EventHandler<ConsoleLine>? ImportantLineArrived;
 
-        public UILineBuffer(ObservableCollection<ConsoleLine> lines, TimeSpan? interval = null, SynchronizationContext? uiContext = null)
+        public UILineBuffer(RangeObservableCollection<ConsoleLine> lines, TimeSpan? interval = null, SynchronizationContext? uiContext = null)
         {
             _lines = lines;
             Interval = interval ?? TimeSpan.FromMilliseconds(75);
@@ -94,6 +97,9 @@ namespace DockerBuildBoxSystem.ViewModels.Common
                 {
                     while (await uiTimer.WaitForNextTickAsync(ct).ConfigureAwait(false))
                     {
+                        if (_outputQueue.IsEmpty)
+                            continue;
+
                         //Restrict the number of lines per tick
                         //If we dequeue everything at once it might overwhelm the UI
                         var batch = new List<ConsoleLine>(MaxLinesPerTick);
@@ -202,7 +208,10 @@ namespace DockerBuildBoxSystem.ViewModels.Common
             if (lines.Count == 0) return;
 
             //append new lines first
-            foreach (var l in lines) _lines.Add(l);
+            _lines.AddRange(lines);
+
+            //remove old lines if the terminal starts to exceed the set max lines
+            TrimIfNeeded();
 
             //output events
             var chunk = new StringBuilder();
@@ -210,12 +219,45 @@ namespace DockerBuildBoxSystem.ViewModels.Common
             {
                 chunk.Append(line.Text);
             }
-            OutputChunk?.Invoke(this, chunk.ToString());
-            lock (_bufferLock) _buffer.Append(chunk);
+
+            var chunkString = chunk.ToString();
+            OutputChunk?.Invoke(this, chunkString);
+            lock (_bufferLock) _buffer.Append(chunkString);
 
             // Notify only for important lines captured during batching
             foreach (var l in batch.Important) ImportantLineArrived?.Invoke(this, l);
         }
+
+        /// <summary>
+        /// Trims the collection of lines and the associated buffer if the number of lines exceeds the maximum allowed.
+        /// </summary>
+        private void TrimIfNeeded()
+        {
+            if (_lines.Count <= MaxLines)
+                return;
+
+            var linesToRemove = _lines.Count - MaxLines;
+
+            //compute character count for removed lines
+            var charsToRemove = 0;
+            for (int i = 0; i < linesToRemove; i++)
+            {
+                charsToRemove += _lines[i].Text.Length;
+            }
+
+            _lines.RemoveRangeAt(0, linesToRemove);
+
+            lock (_bufferLock)
+            {
+                if (_buffer.Length >= charsToRemove)
+                {
+                    _buffer.Remove(0, charsToRemove);
+                }
+            }
+
+            OutputTrimmed?.Invoke(this, charsToRemove);
+        }
+
 
         /// <summary>
         /// Enqueues a line to be added to the console output on the UI thread.

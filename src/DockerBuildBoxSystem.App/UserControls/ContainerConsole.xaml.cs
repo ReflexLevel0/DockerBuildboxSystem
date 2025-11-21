@@ -64,6 +64,7 @@ namespace DockerBuildBoxSystem.App.UserControls
             _viewModel.UIHandler.ImportantLineArrived += ViewModelOnImportantLineArrived;
             _viewModel.UIHandler.OutputChunk += _viewModel_OutputChunk;
             _viewModel.UIHandler.OutputCleared += _viewModel_OutputCleared;
+            _viewModel.UIHandler.OutputTrimmed += _viewModel_OutputTrimmed;
         }
         private void _viewModel_OutputCleared(object? sender, EventArgs e)
         {
@@ -76,6 +77,20 @@ namespace DockerBuildBoxSystem.App.UserControls
             AutoScrollToEnd(); //seems to work without any discrepancies in performance! :)
         }
 
+        private void _viewModel_OutputTrimmed(object? sender, int charsToRemove)
+        {
+            if (TerminalOutput is null || charsToRemove <= 0)
+                return;
+
+            Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() =>
+            {
+                if (TerminalOutput.Text.Length >= charsToRemove)
+                {
+                    TerminalOutput.Text = TerminalOutput.Text.Substring(charsToRemove);
+                }
+            }));
+        }
+
         private void OnUnloaded(object? sender, RoutedEventArgs e)
         {
             if (_viewModel is null)
@@ -85,6 +100,7 @@ namespace DockerBuildBoxSystem.App.UserControls
             _viewModel.UIHandler.ImportantLineArrived -= ViewModelOnImportantLineArrived;
             _viewModel.UIHandler.OutputChunk -= _viewModel_OutputChunk;
             _viewModel.UIHandler.OutputCleared -= _viewModel_OutputCleared;
+            _viewModel.UIHandler.OutputTrimmed -= _viewModel_OutputTrimmed;
         }
 
 
@@ -102,6 +118,7 @@ namespace DockerBuildBoxSystem.App.UserControls
                 _viewModel.UIHandler.ImportantLineArrived -= ViewModelOnImportantLineArrived;
                 _viewModel.UIHandler.OutputChunk -= _viewModel_OutputChunk;
                 _viewModel.UIHandler.OutputCleared -= _viewModel_OutputCleared;
+                _viewModel.UIHandler.OutputTrimmed -= _viewModel_OutputTrimmed;
 
                 //dispose the ViewModel
                 await _viewModel.DisposeAsync();
