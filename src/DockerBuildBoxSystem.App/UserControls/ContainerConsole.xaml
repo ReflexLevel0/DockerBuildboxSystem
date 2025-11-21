@@ -1,0 +1,203 @@
+﻿<UserControl x:Class="DockerBuildBoxSystem.App.UserControls.ContainerConsole"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:DockerBuildBoxSystem.App.UserControls"
+             xmlns:converters="clr-namespace:DockerBuildBoxSystem.App.Converters"
+             xmlns:vm="clr-namespace:DockerBuildBoxSystem.ViewModels.ViewModels;assembly=DockerBuildBoxSystem.ViewModels"
+             xmlns:model="clr-namespace:DockerBuildBoxSystem.Models;assembly=DockerBuildBoxSystem.Models"
+             mc:Ignorable="d"
+             d:DesignHeight="450" d:DesignWidth="800"
+             d:DataContext="{d:DesignInstance Type=vm:ContainerConsoleViewModel, IsDesignTimeCreatable=False}"
+             Loaded="OnLoaded"
+             Unloaded="OnUnloaded">
+
+    <UserControl.Resources>
+        <converters:StateToColorConverter x:Key="StateToColorConverter" />
+    </UserControl.Resources>
+    
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <!-- Container Selector -->
+        <Grid Grid.Row="0" Margin="6">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" 
+                       Text="Container:" 
+                       VerticalAlignment="Center" 
+                       Margin="0,0,6,0"/>
+
+            <ComboBox Grid.Column="1" 
+                      ItemsSource="{Binding Containers}"
+                      SelectedItem="{Binding SelectedContainer}"
+                      IsEnabled="{Binding IsLoadingContainers, Converter={StaticResource InverseBooleanConverter}}"
+                      MinWidth="200">
+                <ComboBox.ItemTemplate>
+                    <DataTemplate>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding Names[0]}" FontWeight="Bold" Margin="0,0,8,0"/>
+                            <TextBlock Text="{Binding State}" Foreground="Gray" Margin="0,0,8,0">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding State}" Value="running">
+                                                <Setter Property="Foreground" Value="Green"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding State}" Value="exited">
+                                                <Setter Property="Foreground" Value="Red"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                            <TextBlock Text="{Binding Image}" Foreground="DarkGray" FontStyle="Italic"/>
+                        </StackPanel>
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
+            <CheckBox Grid.Column="2" 
+                      Content="Show All" 
+                      IsChecked="{Binding ShowAllContainers}"
+                      VerticalAlignment="Center"
+                      Margin="6,0,6,0"/>
+
+            <Button Grid.Column="3" 
+                    Content="Refresh" 
+                    Command="{Binding RefreshContainersCommand}"
+                    Padding="8,4"
+                    MinWidth="70"/>
+            <StackPanel Grid.Column="4" Orientation="Horizontal" Margin="6,0,0,0" VerticalAlignment="Center">
+                <Button Content="Sync"
+                     Margin="0,0,6,0"
+                     Padding="8,4"
+                     MinWidth="70"
+                     Command="{Binding StartSyncCommand}"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- User Controls -->
+        <ItemsControl Grid.Row="1"
+              ItemsSource="{Binding UserControlDefinition}"
+              Margin="6">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <StackPanel Orientation="Horizontal"/>
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.Resources>
+                <!--Template for Button-->
+                <DataTemplate DataType="{x:Type model:ButtonCommand}">
+                    <!--Global button styles in App/resources/styles.xaml-->
+                    <Button Style="{StaticResource FlatIconButton}"
+                            ToolTip="{Binding Tooltip}"
+                            Command="{Binding DataContext.RunUserCommandCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                            CommandParameter="{Binding }"
+                            Width="30" Height="30">
+                        <Image Source="{Binding IconPath}" Width="20" Height="20"/>
+                    </Button>
+                </DataTemplate>
+                <!--Template for dropdown-->
+                <DataTemplate DataType="{x:Type model:DropdownOption}">
+                    <StackPanel Orientation="Horizontal" >
+                        <TextBlock Text="{Binding Label}" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                        <ComboBox ItemsSource="{Binding Values}"
+                                  SelectedItem="{Binding SelectedValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                  Width="100" Height="25"
+                                  IsEnabled="{Binding DataContext.CanUseUserControls, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                  Padding="6"/>
+                    </StackPanel>
+
+                </DataTemplate>
+
+                <!--Template for TextBox-->
+                <DataTemplate DataType="{x:Type model:TextBoxCommand}">
+                    <StackPanel Orientation="Horizontal" Margin="4">
+                        <TextBlock Text="{Binding Label}" Margin="4,0,4,0" VerticalAlignment="Center"/>
+                        <TextBox Text="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 Tag="{Binding Id}"
+                                 Width="160"
+                                 Height="25"
+                                 Padding="6"
+                                 FontFamily="Consolas"
+                                 FontSize="13"
+                                 IsEnabled="{Binding DataContext.CanUseUserControls, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+                        <!--Button to retrieve input from textbox-->
+                        <Button Content="Add"
+                                Width="40"
+                                Height="25"
+                                Margin="4,0,0,0"
+                                Command="{Binding DataContext.SubmitTextCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                IsEnabled="{Binding DataContext.CanUseUserControls, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                            />
+                    </StackPanel>
+                </DataTemplate>
+            </ItemsControl.Resources>
+
+        </ItemsControl>
+        <!-- Output TextBox -->
+        <Grid Grid.Row="2" ClipToBounds="True">
+            <TextBox x:Name="TerminalOutput" 
+                     Style="{StaticResource TerminalTextBoxStyle}" 
+                     IsReadOnly="True" 
+                     AcceptsReturn="True" 
+                     IsUndoEnabled="False"
+                     HorizontalScrollBarVisibility="Auto"
+                     VerticalScrollBarVisibility="Auto"
+                     Background="{StaticResource ContainerBackgroundBrush}"/>
+            <StackPanel Orientation="Horizontal" Margin="8" VerticalAlignment="Top" HorizontalAlignment="Right">
+                <Button Content="Copy" Command="{Binding CopyCommand}" Padding="4,2" Margin="0,0,4,0"/>
+                <Button Content="Clear" Command="{Binding ClearCommand}" Padding="4,2"/>
+            </StackPanel>
+        </Grid>
+        <!-- Input -->
+        <Grid Grid.Row="3" Margin="6">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="25" />
+            </Grid.ColumnDefinitions>
+            
+            <TextBox x:Name="Input"
+                 Grid.Column="0"
+                 FontFamily="Consolas"
+                 FontSize="13"
+                 Margin="0,0,6,0"
+                 Text="{Binding Input, UpdateSourceTrigger=PropertyChanged}">
+                <TextBox.InputBindings>
+                    <KeyBinding Key="Enter" Command="{Binding SendCommand}" />
+                </TextBox.InputBindings>
+            </TextBox>
+            
+            <Button Grid.Column="1"
+                    Content="Send"
+                    Padding="12,4"
+                    Command="{Binding SendCommand}" />
+            
+            <Button Grid.Column="2"
+                    Content="Stop"
+                    Padding="12,4"
+                    Command="{Binding StopExecCommand}" />
+
+            <!-- Container status indicator -->
+            <Canvas Grid.Column="3">
+                <Ellipse Width="15" 
+                         Height="15" 
+                         Canvas.Top="5" 
+                         Canvas.Left="5" 
+                         Fill="{Binding SelectedContainer.StateKind, Converter={StaticResource StateToColorConverter}}"/>
+            </Canvas>
+        </Grid>
+    </Grid>
+</UserControl>

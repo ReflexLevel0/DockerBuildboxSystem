@@ -1,0 +1,19 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- https://github.com/dotnet/Docker.DotNet/issues/628#issuecomment-2810547338 -->
+    <PackageReference Include="Docker.DotNet.Enhanced" Version="3.127.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DockerBuildBoxSystem.Contracts\DockerBuildBoxSystem.Contracts.csproj" />
+    <ProjectReference Include="..\DockerBuildBoxSystem.Models\DockerBuildBoxSystem.Models.csproj" />
+  </ItemGroup>
+
+</Project>

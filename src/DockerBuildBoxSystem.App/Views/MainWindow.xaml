@@ -1,0 +1,69 @@
+﻿<Window x:Class="DockerBuildBoxSystem.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:DockerBuildBoxSystem.App"
+        xmlns:vm="clr-namespace:DockerBuildBoxSystem.ViewModels.Main;assembly=DockerBuildBoxSystem.ViewModels"
+        xmlns:uc="clr-namespace:DockerBuildBoxSystem.App.UserControls"
+        mc:Ignorable="d"
+        d:DataContext="{d:DesignInstance Type=vm:MainViewModel}"
+        Title="{Binding Title}"
+        WindowStartupLocation="CenterScreen">
+    
+    <Window.Resources>
+    </Window.Resources>
+    
+    <Grid>
+         <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!--  Main Content Area - the UserControl is responsible for its own ViewModel lifecycle  -->
+        <uc:ContainerConsole x:Name="ContainerConsoleControl" Grid.Row="0" />
+
+        <Grid Grid.Row="1" Margin="6">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <Button
+                Grid.Column="0"
+                MinWidth="38"
+                Padding="2,2"
+                Background="Transparent"
+                BorderBrush="Transparent"
+                BorderThickness="0"
+                Command="{Binding SelectSourcePathCommand}"
+                Focusable="False"
+                ToolTip="Choose source folder">
+                <TextBlock
+                    FontFamily="Segoe MDL2 Assets"
+                    FontSize="19"
+                    Text="&#xE838;" />
+            </Button>
+            
+            <TextBox
+                Grid.Column="1"
+                MinWidth="500"
+                Margin="2,2,6,2"
+                VerticalAlignment="Center"
+                Text="{Binding SourcePath, UpdateSourceTrigger=PropertyChanged}"
+                ToolTip="Source folder path" />
+
+
+
+            <!--  Exit Button  -->
+            <Button
+                Grid.Column="2"
+                Width="70"
+                Height="28"
+                Command="{Binding ExitCommand}"
+                Content="Exit"
+                Style="{StaticResource ExitButtonStyle}" />
+        </Grid>
+    </Grid>
+</Window>
