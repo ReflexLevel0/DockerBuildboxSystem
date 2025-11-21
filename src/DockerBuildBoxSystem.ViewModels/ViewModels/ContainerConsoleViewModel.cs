@@ -370,7 +370,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// <summary>
         /// Determines whether sending commands is currently allowed.
         /// </summary>
-        private bool CanSend() => !string.IsNullOrWhiteSpace(ContainerId) && !_cmdRunner.IsRunning && (SelectedContainer?.IsRunning == true) && !IsSyncRunning;
+        private bool CanSend() => !string.IsNullOrWhiteSpace(ContainerId) && (SelectedContainer?.IsRunning == true) && !IsSyncRunning;
 
      
         /// <summary>
