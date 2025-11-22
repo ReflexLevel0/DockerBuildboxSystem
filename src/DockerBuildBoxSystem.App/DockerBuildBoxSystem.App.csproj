@@ -4,7 +4,6 @@
 		<ProjectReference Include="..\DockerBuildBoxSystem.ViewModels\DockerBuildBoxSystem.ViewModels.csproj" />
 		<ProjectReference Include="..\DockerBuildBoxSystem.Contracts\DockerBuildBoxSystem.Contracts.csproj" />
 		<ProjectReference Include="..\DockerBuildBoxSystem.Domain\DockerBuildBoxSystem.Domain.csproj" />
-		<ProjectReference Include="..\DockerBuildBoxSystem.Models\DockerBuildBoxSystem.Models.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>

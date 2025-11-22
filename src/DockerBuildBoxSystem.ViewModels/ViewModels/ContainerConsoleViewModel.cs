@@ -2,7 +2,6 @@
 using CommunityToolkit.Mvvm.Input;
 using DockerBuildBoxSystem.Contracts;
 using DockerBuildBoxSystem.Domain;
-using DockerBuildBoxSystem.Models;
 using DockerBuildBoxSystem.ViewModels.Common;
 using System;
 using System.Collections.Concurrent;
@@ -33,7 +32,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// <summary>
         /// Lines currently displayed in the console UI.
         /// </summary>
-        public ObservableCollection<ConsoleLine> Lines { get; } = new ContainerObservableCollection<ConsoleLine>();
+        public RangeObservableCollection<ConsoleLine> Lines { get; } = new RangeObservableCollection<ConsoleLine>();
 
         /// <summary>
         /// List of available containers on the host.
@@ -95,6 +94,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [ObservableProperty]
         [NotifyCanExecuteChangedFor(nameof(SendCommand))]
         [NotifyCanExecuteChangedFor(nameof(RunUserCommandCommand))]
+        [NotifyPropertyChangedFor(nameof(CanUseUserControls))]
         [NotifyCanExecuteChangedFor(nameof(StartSyncCommand))]
         public bool _isSyncRunning;
 
@@ -149,6 +149,13 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                     StartLogsCommand.NotifyCanExecuteChanged();
                     StopLogsCommand.NotifyCanExecuteChanged();
                 });
+
+            PropertyChanged += async (s, e) =>
+            {
+                if(string.Compare(e.PropertyName, nameof(SelectedContainer)) == 0) {
+                    await OnSelectedContainerChangedAsync(SelectedContainer);
+                }
+            };
 
             UIHandler = new UILineBuffer(Lines);
         }
@@ -219,7 +226,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// Updates dependent state when the selected container changes.
         /// </summary>
         /// <param name="value">The newly selected container info or null.</param>
-        partial void OnSelectedContainerChanged(ContainerInfo? value)
+        public async Task OnSelectedContainerChangedAsync(ContainerInfo? value)
         {
             var newContainer = value;
             var oldId = _previousContainerId ?? ContainerId; // fallback to current if previous not tracked yet
@@ -251,6 +258,12 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             else
             {
                 ContainerId = string.Empty;
+            }
+
+            // Starting the new container
+            if (newContainer != null && !newContainer.IsRunning)
+            {
+                await StartContainerAsync();
             }
 
             _previousContainerId = ContainerId; // update tracker (after change)
@@ -371,7 +384,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// <summary>
         /// Determines whether sending commands is currently allowed.
         /// </summary>
-        private bool CanSend() => !string.IsNullOrWhiteSpace(ContainerId) && !_cmdRunner.IsRunning && (SelectedContainer?.IsRunning == true) && !IsSyncRunning;
+        private bool CanSend() => !string.IsNullOrWhiteSpace(ContainerId) && (SelectedContainer?.IsRunning == true) && !IsSyncRunning;
 
      
         /// <summary>
@@ -699,11 +712,11 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private void PostLogMessage(string message, bool isError, bool isImportant = false) => UIHandler.EnqueueLine(message + "\r\n", isError, isImportant);
         #endregion
 
-            #region Cleanup
+        #region Cleanup
 
-            /// <summary>
-            /// cancel and cleanup task
-            /// </summary>
+        /// <summary>
+        /// cancel and cleanup task
+        /// </summary>
         public override async ValueTask DisposeAsync()
         {
             await StopLogsAsync();

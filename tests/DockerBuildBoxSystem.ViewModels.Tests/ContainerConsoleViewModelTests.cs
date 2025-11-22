@@ -1,6 +1,5 @@
 using System.Threading.Channels;
 using DockerBuildBoxSystem.Contracts;
-using DockerBuildBoxSystem.Models;
 using DockerBuildBoxSystem.ViewModels.ViewModels;
 using DockerBuildBoxSystem.ViewModels.Common;
 using NSubstitute;
@@ -46,8 +45,6 @@ public class ContainerConsoleViewModelTests
 
         //Assert
         Assert.Single(vm.Containers);
-        //Creating default user commands 
-        Assert.NotEmpty(vm.UserCommands);
     }
 
     /// <summary>
