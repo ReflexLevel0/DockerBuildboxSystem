@@ -26,6 +26,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private readonly IClipboardService? _clipboard;
         private readonly ILogRunner _logRunner;
         private readonly ICommandRunner _cmdRunner;
+        private readonly int maxControls = 15;
 
         public readonly UILineBuffer UIHandler;
 
@@ -596,7 +597,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// </summary>
         /// <remarks>This method reads the specified JSON file, validates its content, and deserializes it
         /// into a list of user control definitions. If the file does not exist, a warning message is logged, and the
-        /// method exits. The method enforces a maximum of 7 controls; if more are defined, only the first 7 are loaded,
+        /// method exits. The method enforces a maximum of 15 controls; if more are defined, only the first 15 are loaded,
         /// and a warning is logged. For button controls with an icon path, the method verifies the existence of the
         /// icon file and updates the path to an absolute URI if valid. If the icon file is missing, a warning is
         /// logged, and the icon path is cleared.</remarks>
@@ -625,11 +626,11 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 using var jsonDoc = JsonDocument.Parse(json);
                 var controls = JsonSerializer.Deserialize<List<UserControlDefinition>>(json, options)!;
 
-                // Limit to maximum of 7 controls
-                if (controls.Count > 7)
+                // Limit to maximum 
+                if (controls.Count > maxControls)
                 {
-                    UIHandler.EnqueueLine("[user-control] Warning: More than 7 controls defined. Only the first 7 will be loaded.", true);
-                    controls = controls.Take(7).ToList();
+                    UIHandler.EnqueueLine("[user-control] Warning: More than 15 controls defined. Only the first 15 will be loaded.", true);
+                    controls = controls.Take(maxControls).ToList();
                 }
                 // Clear existing controls and add the new ones
                 UserControlDefinition.Clear();
