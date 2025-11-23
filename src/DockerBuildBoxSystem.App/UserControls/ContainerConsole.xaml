@@ -113,7 +113,7 @@
                         <TextBlock Text="{Binding Label}" Margin="0,0,4,0" VerticalAlignment="Center"/>
                         <ComboBox ItemsSource="{Binding Values}"
                                   SelectedItem="{Binding SelectedValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                  Width="100" Height="25"
+                                  Width="100" Height="30"
                                   IsEnabled="{Binding DataContext.CanUseUserControls, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                   Padding="6"/>
                     </StackPanel>
@@ -127,7 +127,7 @@
                         <TextBox Text="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                  Tag="{Binding Id}"
                                  Width="160"
-                                 Height="25"
+                                 Height="30"
                                  Padding="6"
                                  FontFamily="Consolas"
                                  FontSize="12"
@@ -135,8 +135,9 @@
                         <!--Button to retrieve input from textbox-->
                         <Button Content="Add"
                                 Width="40"
-                                Height="25"
+                                Height="30"
                                 Margin="4,0,0,0"
+                                ToolTip="Enter a user variable in the format key=value to add to user variables"
                                 Command="{Binding DataContext.SubmitTextCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                 CommandParameter="{Binding }"
                                 IsEnabled="{Binding DataContext.CanUseUserControls, RelativeSource={RelativeSource AncestorType=UserControl}}"

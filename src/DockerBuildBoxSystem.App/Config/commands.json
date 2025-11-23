@@ -9,14 +9,14 @@
   },
   {
     "Control": "textbox",
-    "Id": "customCommand",
+    "Id": "userVariable",
     "Label": "Variables:",
-    "Tooltip": "Enter a custom command to execute"
+    "Tooltip": "Enter a user variable in the format key=value to add to user variables"
   },
   {
     "Control": "button",
-    "Command": [ "ls", "/" ],
-    "Tooltip": "List root directory",
+    "Command": [ "ls", "${app}" ],
+    "Tooltip": "List app directory",
     "IconPath": "Assets/icons/list.png"
 
   },

@@ -707,7 +707,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             if (await _cmdRunner.TryWriteToInteractiveAsync(raw))
                 return;
 
-            var args = ShellSplitter.SplitShellLike(raw);
+            var resolvedCommand = await _userVariableService.RetrieveVariableAsync(raw);
+
+            var args = ShellSplitter.SplitShellLike(resolvedCommand);
             await ExecuteAndLog(args);
         }
 

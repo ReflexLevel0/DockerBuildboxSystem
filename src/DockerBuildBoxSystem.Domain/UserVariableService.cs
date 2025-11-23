@@ -1,6 +1,7 @@
 ﻿using DockerBuildBoxSystem.Contracts;
 using System;
 using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
@@ -101,6 +102,63 @@ namespace DockerBuildBoxSystem.Domain
                 userVariables.Add(new UserVariables(key, value));
             }
             await SaveUserVariablesAsync(userVariables);
+        }
+
+        /// <summary>
+        /// Removes a user-defined variable identified by the specified key.
+        /// </summary>
+        /// <remarks>This method loads the current user variables, searches for a variable with the
+        /// specified key, and removes it if found. The updated list of user variables is then saved. If no variable
+        /// with the specified key exists, the method returns <see langword="false"/>.</remarks>
+        /// <param name="key">The key of the user variable to remove. Cannot be <see langword="null"/> or empty.</param>
+        /// <returns><see langword="true"/> if the variable was successfully removed; otherwise, <see langword="false"/> if no
+        /// variable with the specified key exists.</returns>
+        public async Task<bool> RemoveUserVariableAsync(string key)
+        {
+            var userVariables = await LoadUserVariablesAsync();
+            var variableToRemove = userVariables.FirstOrDefault(uv => uv.Key == key);
+            if (variableToRemove != null)
+            {
+                userVariables.Remove(variableToRemove);
+                await SaveUserVariablesAsync(userVariables);
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Clears all user-defined variables asynchronously.
+        /// </summary>
+        /// <remarks>This method removes all existing user-defined variables by replacing them with an
+        /// empty collection. It performs the operation asynchronously and ensures that the changes are saved.</remarks>
+        /// <returns>A task that represents the asynchronous operation.</returns>
+        public async Task ClearAllUserVariablesAsync()
+        {
+            await SaveUserVariablesAsync(new List<UserVariables>());
+        }
+
+
+        /// <summary>
+        /// Replaces placeholders in the specified command with their corresponding user-defined variable values.
+        /// </summary>
+        /// <remarks>Placeholders in the command string must match the format <c>${variableName}</c>,
+        /// where <c>variableName</c> corresponds to a key in the user-defined variables.</remarks>
+        /// <param name="command">The command string containing placeholders in the format <c>${variableName}</c> to be replaced.</param>
+        /// <returns>A <see cref="string"/> with all recognized placeholders replaced by their respective values. If no
+        /// placeholders are found, the original command is returned.</returns>
+        public async Task<string> RetrieveVariableAsync(string command)
+        {
+            var userVariables = await LoadUserVariablesAsync();
+            foreach (var variable in userVariables)
+            {
+                // Create the token format ${key}
+                string token = $"${{{variable.Key}}}";
+                if (command.Contains(token))
+                {
+                    command = command.Replace($"${{{variable.Key}}}", variable.Value);
+                }
+            }
+            return command;
         }
     }
 }
