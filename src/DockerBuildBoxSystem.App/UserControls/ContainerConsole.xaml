@@ -130,7 +130,7 @@
                                  Height="25"
                                  Padding="6"
                                  FontFamily="Consolas"
-                                 FontSize="13"
+                                 FontSize="12"
                                  IsEnabled="{Binding DataContext.CanUseUserControls, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
                         <!--Button to retrieve input from textbox-->
                         <Button Content="Add"
@@ -138,6 +138,7 @@
                                 Height="25"
                                 Margin="4,0,0,0"
                                 Command="{Binding DataContext.SubmitTextCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                CommandParameter="{Binding }"
                                 IsEnabled="{Binding DataContext.CanUseUserControls, RelativeSource={RelativeSource AncestorType=UserControl}}"
                             />
                     </StackPanel>

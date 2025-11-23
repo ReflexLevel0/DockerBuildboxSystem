@@ -1,4 +1,6 @@
-﻿namespace DockerBuildBoxSystem.Contracts
+﻿using System.ComponentModel;
+
+namespace DockerBuildBoxSystem.Contracts
 {
 
     /// <summary>
@@ -50,11 +52,25 @@
     /// suitable for scenarios where a labeled input field is required.  The <see cref="Id"/> property can be used to
     /// uniquely identify the control,  while the <see cref="Label"/> provides a descriptive name for the input,  and
     /// the <see cref="Value"/> holds the user-entered or programmatically assigned text.</remarks>
-    public class TextBoxCommand : UserControlDefinition
+    public class TextBoxCommand : UserControlDefinition, INotifyPropertyChanged
     {
+        public event PropertyChangedEventHandler? PropertyChanged;
         public string? Id { get; set; } = string.Empty;
         public string? Label { get; set; } = string.Empty;
-        public string? Value { get; set; } = string.Empty;
+        private string? _value;
+        public string? Value
+        {
+            get => _value;
+            set
+            {
+                if (_value != value)
+                {
+                    _value = value;
+                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Value)));
+
+                }
+            }
+        }
 
     }
 }

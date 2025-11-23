@@ -25,6 +25,8 @@
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
 
+		<!--Copy user variables to the bin\Debug\net9.0 at build-->
+
 	</ItemGroup>
 
 	<!--Copy the pgn icons from the assets\icons-->

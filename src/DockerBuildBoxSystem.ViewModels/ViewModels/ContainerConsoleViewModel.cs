@@ -26,6 +26,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private readonly ILogRunner _logRunner;
         private readonly ICommandRunner _cmdRunner;
         private readonly int maxControls = 15;
+        private readonly UserVariableService _userVariableService;
 
         public readonly UILineBuffer UIHandler;
 
@@ -129,6 +130,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         {
             _service = service ?? throw new ArgumentNullException(nameof(service));
             _clipboard = clipboard;
+            _userVariableService = new UserVariableService();
 
             _logRunner = new LogRunner();
             _cmdRunner = new CommandRunner();
@@ -710,6 +712,41 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         }
 
         private void PostLogMessage(string message, bool isError, bool isImportant = false) => UIHandler.EnqueueLine(message + "\r\n", isError, isImportant);
+        #endregion
+
+        #region User Variables
+        /// <summary>
+        /// Processes the input text from a <see cref="TextBoxCommand"/> to add or update a user-defined variable.
+        /// </summary>
+        /// <remarks>If the input text is null, empty, or whitespace, the method returns without
+        /// performing any action. If the input text is in the correct format, the variable is added or updated using
+        /// the user variable service. Otherwise, an error message is enqueued to indicate an invalid format.</remarks>
+        /// <param name="textBoxCmd">The command containing the input text to process. The input should be in the format "VAR_NAME=VALUE".</param>
+        /// <returns></returns>
+        [RelayCommand]
+        private async Task SubmitText(TextBoxCommand? textBoxCmd)
+        {
+            if (textBoxCmd is null) return;
+
+            var input = textBoxCmd.Value?.Trim();
+            if (string.IsNullOrWhiteSpace(input)) return;
+
+            // Split input into key and value
+            var parts = input.Split('=', 2, StringSplitOptions.TrimEntries);
+            if (parts.Length == 2)
+            {
+                var key = parts[0];
+                var value = parts[1];
+                await _userVariableService.AddUserVariableAsync(key, value);
+                // add on the same line (to be fixed)
+                UIHandler.EnqueueLine($"[var] Set {key}={value}", false);
+            }
+            else
+            {
+                UIHandler.EnqueueLine("[var] Invalid variable format. Use 'VAR_NAME=VALUE'.", true);
+            }
+            textBoxCmd.Value = string.Empty;
+        }
         #endregion
 
         #region Cleanup
