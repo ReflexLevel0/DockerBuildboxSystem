@@ -706,7 +706,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
             if (await _cmdRunner.TryWriteToInteractiveAsync(raw))
                 return;
-
+            // resolve user variables from input
             var resolvedCommand = await _userVariableService.RetrieveVariableAsync(raw);
 
             var args = ShellSplitter.SplitShellLike(resolvedCommand);
@@ -741,11 +741,11 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 var value = parts[1];
                 await _userVariableService.AddUserVariableAsync(key, value);
                 // add on the same line (to be fixed)
-                UIHandler.EnqueueLine($"[var] Set {key}={value}", false);
+                PostLogMessage($"[var] Set variable: {key}={value}", false);
             }
             else
             {
-                UIHandler.EnqueueLine("[var] Invalid variable format. Use 'VAR_NAME=VALUE'.", true);
+                PostLogMessage("[var-error] Invalid variable format. Use VAR_NAME=VALUE.", true);
             }
             textBoxCmd.Value = string.Empty;
         }
