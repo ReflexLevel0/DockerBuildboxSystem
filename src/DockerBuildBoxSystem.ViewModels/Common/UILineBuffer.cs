@@ -54,8 +54,14 @@ namespace DockerBuildBoxSystem.ViewModels.Common
         private Task? _uiUpdateTask;
 
         // ANSI escape code, RegexOptions.Compiled for better performance compiling regex 
-        private static readonly Regex AnsiRegex =
-            new(@"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])|\a|\r", RegexOptions.Compiled);
+        //https://github.com/chalk/ansi-regex/blob/main/index.js
+        //https://www.npmjs.com/package/ansi-regex
+        private static readonly Regex AnsiRegex = new(
+            @"(?:\u001B\][\s\S]*?(?:\u0007|\u001B\u005C|\u009C))" +
+            @"|" +
+            @"(?:[\u001B\u009B][\[\]\(\)#;?]*(?:\d{1,4}(?:[;:]\d{0,4})*)?[\dA-PR-TZcf-nq-uy=><~])",
+            RegexOptions.Compiled
+        );
 
         public int MaxLinesPerTick { get; set; } = 50;
         public int MaxLines { get; set; } = 1000;
