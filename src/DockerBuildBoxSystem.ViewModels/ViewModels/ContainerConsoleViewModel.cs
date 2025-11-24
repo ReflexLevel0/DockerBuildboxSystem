@@ -718,12 +718,17 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
         #region User Variables
         /// <summary>
-        /// Processes the input text from a <see cref="TextBoxCommand"/> to add or update a user-defined variable.
+        /// Processes the input text from the specified command and performs the appropriate action, such as listing,
+        /// removing, adding, or updating variables.
         /// </summary>
-        /// <remarks>If the input text is null, empty, or whitespace, the method returns without
-        /// performing any action. If the input text is in the correct format, the variable is added or updated using
-        /// the user variable service. Otherwise, an error message is enqueued to indicate an invalid format.</remarks>
-        /// <param name="textBoxCmd">The command containing the input text to process. The input should be in the format "VAR_NAME=VALUE".</param>
+        /// <remarks>This method handles three types of operations based on the input text: <list
+        /// type="bullet"> <item><description>Lists variables if the input matches the criteria for
+        /// listing.</description></item> <item><description>Removes a variable if the input matches the criteria for
+        /// removal.</description></item> <item><description>Adds or updates a variable if the input does not match the
+        /// criteria for the above operations.</description></item> </list> After processing, the input text in
+        /// <paramref name="textBoxCmd"/> is cleared.</remarks>
+        /// <param name="textBoxCmd">The command containing the input text to process. The <see cref="TextBoxCommand.Value"/> property should
+        /// contain the text to be analyzed. If null or empty, no action is performed.</param>
         /// <returns></returns>
         [RelayCommand]
         private async Task SubmitText(TextBoxCommand? textBoxCmd)
@@ -733,21 +738,111 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             var input = textBoxCmd.Value?.Trim();
             if (string.IsNullOrWhiteSpace(input)) return;
 
-            // Split input into key and value
+            // List variables
+            if (await HandleListVars(input))
+            {
+                textBoxCmd.Value = string.Empty;
+                return;
+            }
+
+            // Remove variable
+            if (await HandleRemoveVar(input))
+            {
+                textBoxCmd.Value = string.Empty;
+                return;
+            }
+            // Add or update variable
+            await HandleAddOrUpdateVar(input);
+            textBoxCmd.Value = string.Empty;
+
+        }
+
+        /// <summary>
+        /// Handles the "ls var" command to list all user-defined variables.
+        /// </summary>
+        /// <remarks>This method retrieves all user-defined variables asynchronously and logs them. If no
+        /// variables are defined, a message indicating this is logged. The method does not perform any action if the
+        /// input does not match the expected command.</remarks>
+        /// <param name="input">The input command to process. Expected to be "ls var" (case-insensitive) to trigger the listing of user
+        /// variables.</param>
+        /// <returns><see langword="true"/> if the input matches the "ls var" command and the variables are processed; otherwise,
+        /// <see langword="false"/>.</returns>
+        private async Task<bool> HandleListVars(string input)
+        {
+            if (string.Equals(input, "ls var", StringComparison.OrdinalIgnoreCase))
+            {
+                var vars = await _userVariableService.LoadUserVariablesAsync();
+                if (vars.Count == 0)
+                {
+                    PostLogMessage("[var] No user variables defined.", false);
+                }
+                else
+                {
+                    foreach (var v in vars)
+                    {
+                        PostLogMessage($"[var] {v.Key} = {v.Value}", false);
+                    }
+                }
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Handles the removal of a user-defined variable based on the provided input command.
+        /// </summary>
+        /// <remarks>If the variable name is missing or the variable does not exist, an appropriate log
+        /// message is posted. The method uses the <see cref="_userVariableService"/> to remove the variable
+        /// asynchronously.</remarks>
+        /// <param name="input">The input string containing the command to remove a variable. The command must start with "rm" followed by
+        /// the variable name.</param>
+        /// <returns><see langword="true"/> if the input starts with "rm" and the command is processed; otherwise, <see
+        /// langword="false"/>.</returns>
+        private async Task<bool> HandleRemoveVar(string input)
+        {
+            // Checks for "rm VAR_NAME"
+            if (input.StartsWith("rm", StringComparison.OrdinalIgnoreCase))
+            {
+                // Split input to get variable name
+                var rmParts = input.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+                if (rmParts.Length < 2)
+                {
+                    PostLogMessage("[var-error] Variable name missing. Use: rm VAR_NAME", true);
+                }
+                else
+                {
+                    // Get variable name and attempt removal
+                    var varName = rmParts[1].Trim();
+                    var success = await _userVariableService.RemoveUserVariableAsync(varName);
+                    if (success)
+                    {
+                        PostLogMessage($"[var] Removed variable: {varName}", false);
+                    }
+                    else
+                    {
+                        PostLogMessage($"[var-error] Variable not found: {varName}", true);
+                    }
+                }
+                return true;
+            }
+            return false;
+        }
+
+
+        private async Task HandleAddOrUpdateVar(string input)
+        {
             var parts = input.Split('=', 2, StringSplitOptions.TrimEntries);
             if (parts.Length == 2)
             {
                 var key = parts[0];
                 var value = parts[1];
                 await _userVariableService.AddUserVariableAsync(key, value);
-                // add on the same line (to be fixed)
-                PostLogMessage($"[var] Set variable: {key}={value}", false);
+                PostLogMessage($"[var] Set variable: {key} = {value}", false);
             }
             else
             {
                 PostLogMessage("[var-error] Invalid variable format. Use VAR_NAME=VALUE.", true);
             }
-            textBoxCmd.Value = string.Empty;
         }
         #endregion
 
