@@ -60,7 +60,8 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [NotifyCanExecuteChangedFor(nameof(SendCommand))]
         [NotifyCanExecuteChangedFor(nameof(RunUserCommandCommand))]
         [NotifyPropertyChangedFor(nameof(CanUseUserControls))]
-        [NotifyCanExecuteChangedFor(nameof(StartSyncCommand))]
+        [NotifyCanExecuteChangedFor(nameof(StartSyncCommand))]       
+        [NotifyCanExecuteChangedFor(nameof(StartForceSyncCommand))]
         private string _containerId = "";
 
         public bool CanUseUserControls => CanSend();
@@ -86,6 +87,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [NotifyCanExecuteChangedFor(nameof(RunUserCommandCommand))]
         [NotifyPropertyChangedFor(nameof(CanUseUserControls))]
         [NotifyCanExecuteChangedFor(nameof(StartSyncCommand))]
+        [NotifyCanExecuteChangedFor(nameof(StartForceSyncCommand))]
         private ContainerInfo? _selectedContainer;
 
         /// <summary>
@@ -96,6 +98,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [NotifyCanExecuteChangedFor(nameof(RunUserCommandCommand))]
         [NotifyPropertyChangedFor(nameof(CanUseUserControls))]
         [NotifyCanExecuteChangedFor(nameof(StartSyncCommand))]
+        [NotifyCanExecuteChangedFor(nameof(StartForceSyncCommand))]
         public bool _isSyncRunning;
 
         /// <summary>
@@ -140,6 +143,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                     RunUserCommandCommand.NotifyCanExecuteChanged();
                     StopExecCommand.NotifyCanExecuteChanged();
                     StartSyncCommand.NotifyCanExecuteChanged();
+                    StartForceSyncCommand.NotifyCanExecuteChanged();
                 });
 
             _logRunner.RunningChanged += (_, __) =>
@@ -581,6 +585,27 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             try
             {
                 await Task.Delay(1000);
+            }
+            finally
+            {
+                IsSyncRunning = false;
+            }
+        }
+
+        /// <summary>
+        /// Starts the force sync operation (same constraints as startSync).
+        /// This functiona should delete all sync in data from docker volume and resync everything.
+        /// To be implemented once file sync functionality is in place.
+        /// </summary>
+        [RelayCommand(CanExecute = nameof(CanSync))]
+        private async Task StartForceSyncAsync()
+        {
+            IsSyncRunning = true;
+            try
+            {
+                PostLogMessage("[force-sync] Starting force sync operation", false);
+                await Task.Delay(1000);
+                PostLogMessage("[force-sync] Completed force sync operation", false);
             }
             finally
             {
