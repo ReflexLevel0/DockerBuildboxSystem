@@ -10,13 +10,14 @@ using System.Threading.Tasks;
 namespace DockerBuildBoxSystem.Domain
 {
     /// <summary>
-    /// Provides functionality for managing user-defined variables, including loading, saving, and adding variables.
+    /// Provides services for managing user-defined variables, including loading, saving, adding, and substituting
+    /// variables in command strings using a JSON file as persistent storage.
     /// </summary>
-    /// <remarks>This service reads and writes user variables to a JSON file stored in the application's base
-    /// directory. The file name can be customized via the constructor. The service ensures that the directory for the
-    /// file exists before performing any operations. Variables are serialized and deserialized using camelCase naming
-    /// conventions.</remarks>
-    public class UserVariableService
+    /// <remarks>This service enables asynchronous operations for handling user variables, which are stored in
+    /// a JSON file located in the application's base directory. Placeholders in command strings can be replaced with
+    /// user-defined variable values using the supported format. The service ensures that the storage file and its
+    /// directory are created if they do not exist.</remarks>
+    public class UserVariableService: IUserVariableService
     {
         private readonly string _filePath;
         private readonly JsonSerializerOptions _jsonOptions;
@@ -80,61 +81,28 @@ namespace DockerBuildBoxSystem.Domain
         }
 
         /// <summary>
-        /// Adds or updates a user-defined variable asynchronously.
+        /// Adds a user variable with the specified identifier and value asynchronously. If a variable with the given
+        /// identifier already exists, its value is updated.
         /// </summary>
-        /// <remarks>If a variable with the specified key already exists, its value is updated. Otherwise,
-        /// a new variable is added.</remarks>
-        /// <param name="key">The unique key identifying the user variable. Cannot be <see langword="null"/> or empty.</param>
-        /// <param name="value">The value to associate with the specified key. Cannot be <see langword="null"/>.</param>
-        /// <returns>A task that represents the asynchronous operation.</returns>
-        public async Task AddUserVariableAsync(string key, string value)
+        /// <param name="id">The unique identifier for the user variable to add or update. Cannot be null.</param>
+        /// <param name="value">The value to assign to the user variable. Cannot be null.</param>
+        /// <returns>A task that represents the asynchronous add or update operation.</returns>
+        public async Task AddUserVariableAsync(string id, string value)
         {
             // Load existing variables
             var userVariables = await LoadUserVariablesAsync();
             // Check if the key already exists
-            var existingVariable = userVariables.FirstOrDefault(uv => uv.Key == key);
+            var existingVariable = userVariables.FirstOrDefault(uv => uv.Id == id);
             if (existingVariable != null)
             {
                 existingVariable.Value = value;
             }
+            
             else
             {
-                userVariables.Add(new UserVariables(key, value));
+                userVariables.Add(new UserVariables(id, value));
             }
             await SaveUserVariablesAsync(userVariables);
-        }
-
-        /// <summary>
-        /// Removes a user-defined variable identified by the specified key.
-        /// </summary>
-        /// <remarks>This method loads the current user variables, searches for a variable with the
-        /// specified key, and removes it if found. The updated list of user variables is then saved. If no variable
-        /// with the specified key exists, the method returns <see langword="false"/>.</remarks>
-        /// <param name="key">The key of the user variable to remove. Cannot be <see langword="null"/> or empty.</param>
-        /// <returns><see langword="true"/> if the variable was successfully removed; otherwise, <see langword="false"/> if no
-        /// variable with the specified key exists.</returns>
-        public async Task<bool> RemoveUserVariableAsync(string key)
-        {
-            var userVariables = await LoadUserVariablesAsync();
-            var variableToRemove = userVariables.FirstOrDefault(uv => uv.Key == key);
-            if (variableToRemove != null)
-            {
-                userVariables.Remove(variableToRemove);
-                await SaveUserVariablesAsync(userVariables);
-                return true;
-            }
-            return false;
-        }
-
-        /// <summary>
-        /// Clears all user-defined variables asynchronously.
-        /// </summary>
-        /// <remarks>This method removes all existing user-defined variables by replacing them with an
-        /// empty collection. It performs the operation asynchronously and ensures that the changes are saved.</remarks>
-        /// <returns>A task that represents the asynchronous operation.</returns>
-        public async Task ClearAllUserVariablesAsync()
-        {
-            await SaveUserVariablesAsync(new List<UserVariables>());
         }
 
 
@@ -142,7 +110,7 @@ namespace DockerBuildBoxSystem.Domain
         /// Replaces placeholders in the specified command with their corresponding user-defined variable values.
         /// </summary>
         /// <remarks>Placeholders in the command string must match the format <c>${variableName}</c>,
-        /// where <c>variableName</c> corresponds to a key in the user-defined variables.</remarks>
+        /// where <c>variableName</c> corresponds to an Id in the user-defined variables.</remarks>
         /// <param name="command">The command string containing placeholders in the format <c>${variableName}</c> to be replaced.</param>
         /// <returns>A <see cref="string"/> with all recognized placeholders replaced by their respective values. If no
         /// placeholders are found, the original command is returned.</returns>
@@ -151,11 +119,11 @@ namespace DockerBuildBoxSystem.Domain
             var userVariables = await LoadUserVariablesAsync();
             foreach (var variable in userVariables)
             {
-                // Create the token format ${key}
-                string token = $"${{{variable.Key}}}";
+                // Create the token format ${variableName}
+                string token = $"${{{variable.Id}}}";
                 if (command.Contains(token))
                 {
-                    command = command.Replace($"${{{variable.Key}}}", variable.Value);
+                    command = command.Replace($"${{{variable.Id}}}", variable.Value);
                 }
             }
             return command;

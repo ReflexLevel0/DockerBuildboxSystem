@@ -8,14 +8,27 @@
     "Tooltip": "Choose your platform"
   },
   {
+    "Control": "dropdown",
+    "Id": "phone",
+    "Label": "Phone:",
+    "Values": [ "Iphone", "Samsung", "Google" ],
+    "Tooltip": "Choose your phone"
+  },
+  {
     "Control": "textbox",
-    "Id": "userVariable",
-    "Label": "Variables:",
-    "Tooltip": "Enter a user variable in the format key=value to add to user variables"
+    "Id": "username",
+    "Label": "username:",
+    "Tooltip": "Enter a username"
+  },
+  {
+    "Control": "textbox",
+    "Id": "password",
+    "Label": "password:",
+    "Tooltip": "Enter a password"
   },
   {
     "Control": "button",
-    "Command": [ "ls", "${app}" ],
+    "Command": [ "ls", "${password}" ],
     "Tooltip": "List app directory",
     "IconPath": "Assets/icons/list.png"
 

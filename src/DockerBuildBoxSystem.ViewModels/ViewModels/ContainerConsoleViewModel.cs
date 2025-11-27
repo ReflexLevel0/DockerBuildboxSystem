@@ -25,8 +25,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private readonly IClipboardService? _clipboard;
         private readonly ILogRunner _logRunner;
         private readonly ICommandRunner _cmdRunner;
+        private readonly IUserVariableService _userVariableService;
         private readonly int maxControls = 15;
-        private readonly UserVariableService _userVariableService;
+        
 
         public readonly UILineBuffer UIHandler;
 
@@ -41,9 +42,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         public ObservableCollection<ContainerInfo> Containers { get; } = new();
 
         /// <summary>
-        /// User-defined controls
+        /// User-defined controls loaded from configuration.
         /// </summary>
-        public ObservableCollection<UserControlDefinition> UserControlDefinition { get; } = new();
+        public ObservableCollection<object> AllUserControls { get; } = new();
 
         /// <summary>
         /// The raw user input text bound from the UI.
@@ -180,6 +181,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
             // Load user-defined controls
             await LoadUserControlsAsync();
+
+            // Load user variables into controls
+            await LoadUserVariablesAsync();
 
             // Optionally auto-start logs if ContainerId is set
             if (AutoStartLogs && !string.IsNullOrWhiteSpace(ContainerId))
@@ -606,99 +610,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         #endregion
 
         #region Helpers
-
-        /// <summary>
-        /// Asynchronously loads user control definitions from a JSON configuration file.
-        /// </summary>
-        /// <remarks>This method reads the specified JSON file, validates its content, and deserializes it
-        /// into a list of user control definitions. If the file does not exist, a warning message is logged, and the
-        /// method exits. The method enforces a maximum of 15 controls; if more are defined, only the first 15 are loaded,
-        /// and a warning is logged. For button controls with an icon path, the method verifies the existence of the
-        /// icon file and updates the path to an absolute URI if valid. If the icon file is missing, a warning is
-        /// logged, and the icon path is cleared.</remarks>
-        /// <param name="filename">The name of the configuration file to load. Defaults to "commands.json".</param>
-        /// <returns></returns>
-        private async Task LoadUserControlsAsync(string filename = "commands.json")
-        {
-            // Determine the path to the configuration file
-            var configPath = Path.Combine(AppContext.BaseDirectory, "Config", filename);
-            if (!File.Exists(configPath))
-            {
-                UIHandler.EnqueueLine($"[user-control] Configuration file not found: {configPath}", true);
-                return;
-            }
-
-            try
-            {
-                var json = await File.ReadAllTextAsync(configPath);
-                var options = new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true,
-                    Converters = { new UserControlConverter() }
-                };
-
-                // Validate and deserialize the JSON content
-                using var jsonDoc = JsonDocument.Parse(json);
-                var controls = JsonSerializer.Deserialize<List<UserControlDefinition>>(json, options)!;
-
-                // Limit to maximum 
-                if (controls.Count > maxControls)
-                {
-                    UIHandler.EnqueueLine("[user-control] Warning: More than 15 controls defined. Only the first 15 will be loaded.", true);
-                    controls = controls.Take(maxControls).ToList();
-                }
-                // Clear existing controls and add the new ones
-                UserControlDefinition.Clear();
-                foreach (var c in controls ?? [])
-                {
-                    // For ButtonCommand, validate and update icon path
-                    if (c is ButtonCommand btn && !string.IsNullOrEmpty(btn.IconPath))
-                    {
-                        // Resolve the full path to the icon file
-                        var iconFullPath = Path.Combine(AppContext.BaseDirectory, btn.IconPath.Replace('/', Path.DirectorySeparatorChar));
-                        if (File.Exists(iconFullPath))
-                        {
-                            // Update to absolute URI format
-                            btn.IconPath = new Uri(iconFullPath, UriKind.Absolute).AbsoluteUri;
-                        }
-                        else
-                        {
-                            UIHandler.EnqueueLine($"[user-control] Warning: Icon file not found for button '{btn.Control}': {iconFullPath}", true);
-                            btn.IconPath = null; //clear invalid path
-                        }
-                    }
-                    // Add the control to the collection
-                    UserControlDefinition.Add(c);
-                }
-            }
-            catch (JsonException jex)
-            {
-                UIHandler.EnqueueLine($"[user-control] JSON parsing error: {jex.Message}", true);
-            }
-            catch (Exception ex)
-            {
-                UIHandler.EnqueueLine($"[user-control] Error loading user controls: {ex.Message}", true);
-            }
-        }
-
-
-        /// <summary>
-        /// Retrieves the platform selection from the dropdown options.
-        /// </summary>
-        /// <remarks>This method searches the dropdown options for an entry with an ID matching "platform"
-        /// (case-insensitive). If no such option exists, the method returns <see langword="null"/>.</remarks>
-        /// <returns>The <see cref="DropdownOption"/> representing the platform selection, or <see langword="null"/>  if no
-        /// matching option is found.</returns>
-        private DropdownOption? GetPlatformFromDropdown()
-        {
-            // To use in the build process when the target platform is needed
-            return UserControlDefinition
-                .OfType<DropdownOption>()
-                .FirstOrDefault(d => d.Id.Equals("platform", StringComparison.OrdinalIgnoreCase));
-        }
-
-
-
         private async Task RouteInputAsync(string raw)
         {
             if (string.IsNullOrWhiteSpace(raw))
@@ -716,132 +627,154 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private void PostLogMessage(string message, bool isError, bool isImportant = false) => UIHandler.EnqueueLine(message + "\r\n", isError, isImportant);
         #endregion
 
-        #region User Variables
+        #region User Controls
         /// <summary>
-        /// Processes the input text from the specified command and performs the appropriate action, such as listing,
-        /// removing, adding, or updating variables.
+        /// Asynchronously loads user-defined controls from a JSON configuration file.
+        /// Limits the number of loaded controls to a maximum defined by maxControls.
+        /// Adds each control to the AllUserControls collection for the ViewModel.
         /// </summary>
-        /// <remarks>This method handles three types of operations based on the input text: <list
-        /// type="bullet"> <item><description>Lists variables if the input matches the criteria for
-        /// listing.</description></item> <item><description>Removes a variable if the input matches the criteria for
-        /// removal.</description></item> <item><description>Adds or updates a variable if the input does not match the
-        /// criteria for the above operations.</description></item> </list> After processing, the input text in
-        /// <paramref name="textBoxCmd"/> is cleared.</remarks>
-        /// <param name="textBoxCmd">The command containing the input text to process. The <see cref="TextBoxCommand.Value"/> property should
-        /// contain the text to be analyzed. If null or empty, no action is performed.</param>
+        /// <param name="filename">the JSON configuration file name</param>
         /// <returns></returns>
-        [RelayCommand]
-        private async Task SubmitText(TextBoxCommand? textBoxCmd)
+        private async Task LoadUserControlsAsync(string filename = "commands.json")
         {
-            if (textBoxCmd is null) return;
-
-            var input = textBoxCmd.Value?.Trim();
-            if (string.IsNullOrWhiteSpace(input)) return;
-
-            // List variables
-            if (await HandleListVars(input))
+            var controls = await LoadControlsFromFileAsync(filename);
+            if (controls is null)
             {
-                textBoxCmd.Value = string.Empty;
+                PostLogMessage("[user-control] No user controls loaded.", true);
                 return;
             }
 
-            // Remove variable
-            if (await HandleRemoveVar(input))
+            if (controls.Count > maxControls)
             {
-                textBoxCmd.Value = string.Empty;
-                return;
+                PostLogMessage($"[user-control] Warning: Loaded controls exceed maximum of {maxControls}. Only the first {maxControls} will be used.", true);
+                controls = controls.Take(maxControls).ToList();
             }
-            // Add or update variable
-            await HandleAddOrUpdateVar(input);
-            textBoxCmd.Value = string.Empty;
-
+            AllUserControls.Clear();
+            foreach (var control in controls)
+            {
+                AddControlToViewModel(control);
+            }
         }
 
         /// <summary>
-        /// Handles the "ls var" command to list all user-defined variables.
+        /// Asynchronously loads a list of user control definitions from a JSON configuration file.
         /// </summary>
-        /// <remarks>This method retrieves all user-defined variables asynchronously and logs them. If no
-        /// variables are defined, a message indicating this is logged. The method does not perform any action if the
-        /// input does not match the expected command.</remarks>
-        /// <param name="input">The input command to process. Expected to be "ls var" (case-insensitive) to trigger the listing of user
-        /// variables.</param>
-        /// <returns><see langword="true"/> if the input matches the "ls var" command and the variables are processed; otherwise,
-        /// <see langword="false"/>.</returns>
-        private async Task<bool> HandleListVars(string input)
+        /// <remarks>If the specified file does not exist or contains invalid JSON, the method logs an
+        /// error and returns null. The deserialization is case-insensitive with respect to property names.</remarks>
+        /// <param name="filename">The name of the JSON file containing user control definitions. The file is expected to be located in the
+        /// application's 'Config' directory. Cannot be null or empty.</param>
+        /// <returns>A list of user control definitions if the file is found and successfully deserialized; otherwise, null.</returns>
+        private async Task<List<UserControlDefinition>?> LoadControlsFromFileAsync(string filename)
         {
-            if (string.Equals(input, "ls var", StringComparison.OrdinalIgnoreCase))
+            var configPath = Path.Combine(AppContext.BaseDirectory, "Config", filename);
+            if (!File.Exists(configPath))
             {
-                var vars = await _userVariableService.LoadUserVariablesAsync();
-                if (vars.Count == 0)
-                {
-                    PostLogMessage("[var] No user variables defined.", false);
-                }
-                else
-                {
-                    foreach (var v in vars)
-                    {
-                        PostLogMessage($"[var] {v.Key} = {v.Value}", false);
-                    }
-                }
-                return true;
+                PostLogMessage($"[user-control] Configuration file not found: {configPath}", true);
+                return null;
             }
-            return false;
+            try
+            {
+                var json = await File.ReadAllTextAsync(configPath);
+                var options = new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true,
+                    Converters = { new UserControlConverter() }
+                };
+                // Validate and deserialize the JSON content
+                using var jsonDoc = JsonDocument.Parse(json);
+                var controls = JsonSerializer.Deserialize<List<UserControlDefinition>>(json, options)!;
+                return controls;
+            }
+            catch (JsonException jex)
+            {
+                PostLogMessage($"[user-control] JSON parsing error: {jex.Message}", true);
+            }
+            catch (Exception ex)
+            {
+                PostLogMessage($"[user-control] Error loading user controls: {ex.Message}", true);
+            }
+            return null;
         }
 
         /// <summary>
-        /// Handles the removal of a user-defined variable based on the provided input command.
+        /// Adds a user control definition to the ViewModel's collection based on its type.
+        /// If it's a button with an icon, resolves the icon path to an absolute URI.
         /// </summary>
-        /// <remarks>If the variable name is missing or the variable does not exist, an appropriate log
-        /// message is posted. The method uses the <see cref="_userVariableService"/> to remove the variable
-        /// asynchronously.</remarks>
-        /// <param name="input">The input string containing the command to remove a variable. The command must start with "rm" followed by
-        /// the variable name.</param>
-        /// <returns><see langword="true"/> if the input starts with "rm" and the command is processed; otherwise, <see
-        /// langword="false"/>.</returns>
-        private async Task<bool> HandleRemoveVar(string input)
+        /// <param name="control">The user control definition to add.</param>
+        private void AddControlToViewModel(UserControlDefinition control)
         {
-            // Checks for "rm VAR_NAME"
-            if (input.StartsWith("rm", StringComparison.OrdinalIgnoreCase))
+            switch (control)
             {
-                // Split input to get variable name
-                var rmParts = input.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
-                if (rmParts.Length < 2)
-                {
-                    PostLogMessage("[var-error] Variable name missing. Use: rm VAR_NAME", true);
-                }
-                else
-                {
-                    // Get variable name and attempt removal
-                    var varName = rmParts[1].Trim();
-                    var success = await _userVariableService.RemoveUserVariableAsync(varName);
-                    if (success)
+                case TextBoxCommand tb:
+                    AllUserControls.Add(new TextBoxViewModel(tb, _userVariableService));
+                    break;
+                case DropdownOption dd:
+                    AllUserControls.Add(new DropdownViewModel(dd, _userVariableService));
+                    break;
+                case ButtonCommand btn:
+                    if (!string.IsNullOrEmpty(btn.IconPath))
                     {
-                        PostLogMessage($"[var] Removed variable: {varName}", false);
+                        btn.IconPath = ResolveIconPath(btn.IconPath, btn.Control);
                     }
-                    else
-                    {
-                        PostLogMessage($"[var-error] Variable not found: {varName}", true);
-                    }
-                }
-                return true;
+                    AllUserControls.Add(new ButtonViewModel(btn));
+                    break;
+                default:
+                    PostLogMessage($"[user-control] Warning: Unsupported control type: {control.GetType().Name}", true);
+                    break;
             }
-            return false;
         }
 
-
-        private async Task HandleAddOrUpdateVar(string input)
+        /// <summary>
+        /// Resolves a relative icon path to an absolute URI.
+        /// </summary>
+        /// <param name="path"> the relative path to the icon file</param>
+        /// <param name="controlName"> the name of the control</param>
+        /// <returns> the absolute URI of the icon file, or null if not found</returns>
+        private string? ResolveIconPath(string path, string controlName)
         {
-            var parts = input.Split('=', 2, StringSplitOptions.TrimEntries);
-            if (parts.Length == 2)
+            var iconFullPath = Path.Combine(AppContext.BaseDirectory, path.Replace('/', Path.DirectorySeparatorChar));
+            if (File.Exists(iconFullPath))
             {
-                var key = parts[0];
-                var value = parts[1];
-                await _userVariableService.AddUserVariableAsync(key, value);
-                PostLogMessage($"[var] Set variable: {key} = {value}", false);
+                // Update to absolute URI format
+                return new Uri(iconFullPath, UriKind.Absolute).AbsoluteUri;
             }
             else
             {
-                PostLogMessage("[var-error] Invalid variable format. Use VAR_NAME=VALUE.", true);
+                PostLogMessage($"[user-control] Warning: Icon file not found for button '{controlName}': {iconFullPath}", true);
+                return null; //clear invalid path
+            }
+        }
+        #endregion
+
+        #region User Variables
+        /// <summary>
+        /// Asynchronously loads user-defined variables and updates all user controls with their corresponding values.
+        /// </summary>
+        /// <remarks>This method updates the values of all user controls based on the current set of user
+        /// variables. Controls that do not have a matching variable remain unchanged.</remarks>
+        /// <returns>A task that represents the asynchronous load operation.</returns>
+        private async Task LoadUserVariablesAsync()
+        {
+            var userVars = await _userVariableService.LoadUserVariablesAsync();
+            foreach (var control in AllUserControls)
+            {
+                switch (control)
+                {
+                    case TextBoxViewModel tbVm:
+                        var tbVar = userVars.FirstOrDefault(v => v.Id == tbVm.Id);
+                        if (tbVar != null)
+                        {
+                            tbVm.Value = tbVar.Value;
+                        }
+                        break;
+                    case DropdownViewModel ddVm:
+                        var ddVar = userVars.FirstOrDefault(v => v.Id == ddVm.Id);
+                        if (ddVar != null)
+                        {
+                            ddVm.SelectedValue = ddVar.Value;
+                        }
+                        break;
+                }
             }
         }
         #endregion

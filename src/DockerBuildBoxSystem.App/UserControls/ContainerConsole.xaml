@@ -6,7 +6,6 @@
              xmlns:local="clr-namespace:DockerBuildBoxSystem.App.UserControls"
              xmlns:converters="clr-namespace:DockerBuildBoxSystem.App.Converters"
              xmlns:vm="clr-namespace:DockerBuildBoxSystem.ViewModels.ViewModels;assembly=DockerBuildBoxSystem.ViewModels"
-             xmlns:contract="clr-namespace:DockerBuildBoxSystem.Contracts;assembly=DockerBuildBoxSystem.Contracts"
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="800"
              d:DataContext="{d:DesignInstance Type=vm:ContainerConsoleViewModel, IsDesignTimeCreatable=False}"
@@ -88,40 +87,41 @@
 
         <!-- User Controls -->
         <ItemsControl Grid.Row="1"
-              ItemsSource="{Binding UserControlDefinition}"
-              Margin="6">
+                      ItemsSource="{Binding AllUserControls}"
+                      Margin="6">
             <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate>
                     <StackPanel Orientation="Horizontal"/>
                 </ItemsPanelTemplate>
             </ItemsControl.ItemsPanel>
+
             <ItemsControl.Resources>
-                <!--Template for Button-->
-                <DataTemplate DataType="{x:Type contract:ButtonCommand}">
+                <!--Template for buttons-->
+                <DataTemplate DataType="{x:Type vm:ButtonViewModel}">
                     <!--Global button styles in App/resources/styles.xaml-->
                     <Button Style="{StaticResource FlatIconButton}"
-                            ToolTip="{Binding Tooltip}"
-                            Command="{Binding DataContext.RunUserCommandCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                            CommandParameter="{Binding }"
-                            Width="30" Height="30">
-                        <Image Source="{Binding IconPath}" Width="20" Height="20"/>
+                                ToolTip="{Binding Definition.Tooltip}"
+                                Command="{Binding DataContext.RunUserCommandCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                CommandParameter="{Binding Definition}"
+                                Width="30" Height="30">
+                        <Image Source="{Binding Definition.IconPath}" Width="20" Height="20"/>
                     </Button>
                 </DataTemplate>
+
                 <!--Template for dropdown-->
-                <DataTemplate DataType="{x:Type contract:DropdownOption}">
-                    <StackPanel Orientation="Horizontal" >
+                <DataTemplate DataType="{x:Type vm:DropdownViewModel}">
+                    <StackPanel Orientation="Horizontal" Margin="4">
                         <TextBlock Text="{Binding Label}" Margin="0,0,4,0" VerticalAlignment="Center"/>
                         <ComboBox ItemsSource="{Binding Values}"
-                                  SelectedItem="{Binding SelectedValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                  Width="100" Height="30"
-                                  IsEnabled="{Binding DataContext.CanUseUserControls, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                  Padding="6"/>
+                              SelectedItem="{Binding SelectedValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                              Width="80" Height="30"
+                              IsEnabled="{Binding DataContext.CanUseUserControls, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                              Padding="6"/>
                     </StackPanel>
-
                 </DataTemplate>
 
                 <!--Template for TextBox-->
-                <DataTemplate DataType="{x:Type contract:TextBoxCommand}">
+                <DataTemplate DataType="{x:Type vm:TextBoxViewModel}">
                     <StackPanel Orientation="Horizontal" Margin="4">
                         <TextBlock Text="{Binding Label}" Margin="4,0,4,0" VerticalAlignment="Center"/>
                         <TextBox Text="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
@@ -132,16 +132,7 @@
                                  FontFamily="Consolas"
                                  FontSize="12"
                                  IsEnabled="{Binding DataContext.CanUseUserControls, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
-                        <!--Button to retrieve input from textbox-->
-                        <Button Content="Add"
-                                Width="40"
-                                Height="30"
-                                Margin="4,0,0,0"
-                                ToolTip="Enter a user variable in the format key=value to add to user variables"
-                                Command="{Binding DataContext.SubmitTextCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                CommandParameter="{Binding }"
-                                IsEnabled="{Binding DataContext.CanUseUserControls, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                            />
+
                     </StackPanel>
                 </DataTemplate>
             </ItemsControl.Resources>

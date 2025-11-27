@@ -1,6 +1,4 @@
-﻿using System.ComponentModel;
-
-namespace DockerBuildBoxSystem.Contracts
+﻿namespace DockerBuildBoxSystem.Contracts
 {
 
     /// <summary>
@@ -30,12 +28,8 @@ namespace DockerBuildBoxSystem.Contracts
     }
 
     /// <summary>
-    /// Represents an option in a dropdown control, including its identifier, label, available values, and the currently
-    /// selected value.
+    /// Represents a user control for a dropdown menu, allowing users to select from a list of options.
     /// </summary>
-    /// <remarks>This class is designed to encapsulate the data required for a dropdown option, such as its
-    /// unique identifier, display label, a collection of selectable values, and the currently selected value. It can be
-    /// used in UI components to manage dropdown state and behavior.</remarks>
     public class DropdownOption : UserControlDefinition
     {
         public string Id { get; set; } = string.Empty;
@@ -45,32 +39,16 @@ namespace DockerBuildBoxSystem.Contracts
     }
 
     /// <summary>
-    /// Represents a user control that provides a text box with associated metadata,  including an identifier, a label,
-    /// and a value.
+    /// Represents a command definition for a text box control, including its identifier, display label, and current
+    /// value.
     /// </summary>
-    /// <remarks>This control is designed to encapsulate a text box along with its metadata,  making it
-    /// suitable for scenarios where a labeled input field is required.  The <see cref="Id"/> property can be used to
-    /// uniquely identify the control,  while the <see cref="Label"/> provides a descriptive name for the input,  and
-    /// the <see cref="Value"/> holds the user-entered or programmatically assigned text.</remarks>
-    public class TextBoxCommand : UserControlDefinition, INotifyPropertyChanged
+    /// <remarks>Use this class to configure and represent a text box command within a user interface
+    /// definition. The properties allow customization of the control's identity, label, and initial or current
+    /// value.</remarks>
+    public class TextBoxCommand : UserControlDefinition
     {
-        public event PropertyChangedEventHandler? PropertyChanged;
         public string? Id { get; set; } = string.Empty;
         public string? Label { get; set; } = string.Empty;
-        private string? _value;
-        public string? Value
-        {
-            get => _value;
-            set
-            {
-                if (_value != value)
-                {
-                    _value = value;
-                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Value)));
-
-                }
-            }
-        }
-
+        public string? Value { get; set; }
     }
 }
