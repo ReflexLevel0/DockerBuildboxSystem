@@ -347,7 +347,7 @@ namespace DockerBuildBoxSystem.ViewModels.Common
         /// <param name="s">The input string from which ANSI escape sequences will be removed. Cannot be <see langword="null"/>.</param>
         /// <returns>A string with all ANSI escape sequences removed. If the input string is empty, an empty string is returned.</returns>
         private static string CleanAnsi(string s)
-            => AnsiRegex.Replace(s, "");
+            => AnsiRegex.Replace(s, "").Replace("\r\n", "\n").Replace("\r", "");
         #endregion
 
 
