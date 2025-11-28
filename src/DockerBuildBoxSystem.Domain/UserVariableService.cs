@@ -95,6 +95,10 @@ namespace DockerBuildBoxSystem.Domain
             var existingVariable = userVariables.FirstOrDefault(uv => uv.Id == id);
             if (existingVariable != null)
             {
+                // if the value is the same, no need to update
+                if (existingVariable.Value == value)
+                    return;
+                
                 existingVariable.Value = value;
             }
             

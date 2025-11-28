@@ -9,10 +9,10 @@
   },
   {
     "Control": "dropdown",
-    "Id": "phone",
-    "Label": "Phone:",
-    "Values": [ "Iphone", "Samsung", "Google" ],
-    "Tooltip": "Choose your phone"
+    "Id": "target",
+    "Label": "Target:",
+    "Values": [ "builder", "dev", "prod", "test" ],
+    "Tooltip": "Choose your target"
   },
   {
     "Control": "textbox",
