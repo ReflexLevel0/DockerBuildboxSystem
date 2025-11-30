@@ -349,13 +349,13 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             {
                 var prev = Containers.FirstOrDefault(c => c.Id == id);
                 var nameOrId = prev?.Names.FirstOrDefault() ?? id;
-                UIHandler.EnqueueLine($"[info] Auto-stopping previous container: {nameOrId}", false);
+                PostLogMessage($"[info] Auto-stopping previous container: {nameOrId}", false);
                 await _service.StopAsync(id, timeout: TimeSpan.FromSeconds(10));
-                UIHandler.EnqueueLine($"[info] Auto-stopped container: {nameOrId}", false);
+                PostLogMessage($"[info] Auto-stopped container: {nameOrId}", false);
             }
             catch (Exception ex)
             {
-                UIHandler.EnqueueLine($"[auto-stop-error] {ex.Message}", true);
+                PostLogMessage($"[auto-stop-error] {ex.Message}", true);
             }
         }
 
@@ -417,7 +417,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 var cmds = buttonCmd.Command;
                 if (cmds.Length == 0)
                 {
-                    UIHandler.EnqueueLine("[user-cmd] No command defined for this button.", true);
+                    PostLogMessage("[user-cmd] No command defined for this button.", true);
                     return;
                 }
                 var cmdStr = string.Join(' ', cmds);
@@ -425,7 +425,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             }
             else
             {
-                UIHandler.EnqueueLine("[user-cmd] Unsupported control type for command execution.", true);
+                PostLogMessage("[user-cmd] Unsupported control type for command execution.", true);
             }
         }
 
@@ -662,7 +662,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             var configPath = Path.Combine(AppContext.BaseDirectory, "Config", filename);
             if (!File.Exists(configPath))
             {
-                UIHandler.EnqueueLine($"[user-control] Configuration file not found: {configPath}", true);
+                PostLogMessage($"[user-control] Configuration file not found: {configPath}", true);
                 return;
             }
 
@@ -682,7 +682,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 // Limit to maximum of 7 controls
                 if (controls.Count > 7)
                 {
-                    UIHandler.EnqueueLine("[user-control] Warning: More than 7 controls defined. Only the first 7 will be loaded.", true);
+                    PostLogMessage("[user-control] Warning: More than 7 controls defined. Only the first 7 will be loaded.", true);
                     controls = controls.Take(7).ToList();
                 }
                 // Clear existing controls and add the new ones
@@ -701,7 +701,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                         }
                         else
                         {
-                            UIHandler.EnqueueLine($"[user-control] Warning: Icon file not found for button '{btn.Control}': {iconFullPath}", true);
+                            PostLogMessage($"[user-control] Warning: Icon file not found for button '{btn.Control}': {iconFullPath}", true);
                             btn.IconPath = null; //clear invalid path
                         }
                     }
@@ -711,11 +711,11 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             }
             catch (JsonException jex)
             {
-                UIHandler.EnqueueLine($"[user-control] JSON parsing error: {jex.Message}", true);
+                PostLogMessage($"[user-control] JSON parsing error: {jex.Message}", true);
             }
             catch (Exception ex)
             {
-                UIHandler.EnqueueLine($"[user-control] Error loading user controls: {ex.Message}", true);
+                PostLogMessage($"[user-control] Error loading user controls: {ex.Message}", true);
             }
         }
 
