@@ -35,7 +35,7 @@
         public string Id { get; set; } = string.Empty;
         public string Label { get; set; } = string.Empty;
         public List<string> Values { get; set; } = new List<string>();
-        public string? SelectedValue { get; set; }
+        public string? Value { get; set; }
     }
 
     /// <summary>

@@ -25,9 +25,10 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private readonly IClipboardService? _clipboard;
         private readonly ILogRunner _logRunner;
         private readonly ICommandRunner _cmdRunner;
-        private readonly IUserVariableService _userVariableService;
+        private readonly IUserControlService _userControlService;
         private readonly int maxControls = 15;
-        
+        private List<UserVariables> _userVariables = new();
+
 
         public readonly UILineBuffer UIHandler;
 
@@ -42,9 +43,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         public ObservableCollection<ContainerInfo> Containers { get; } = new();
 
         /// <summary>
-        /// User-defined controls loaded from configuration.
+        /// Defined user variables for command resolution.
         /// </summary>
-        public ObservableCollection<object> AllUserControls { get; } = new();
+        public ObservableCollection<IUserControlViewModel> UserControls { get; } = new();
 
         /// <summary>
         /// The raw user input text bound from the UI.
@@ -131,7 +132,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         {
             _service = service ?? throw new ArgumentNullException(nameof(service));
             _clipboard = clipboard;
-            _userVariableService = new UserVariableService();
+            _userControlService = new UserControlService();
 
             _logRunner = new LogRunner();
             _cmdRunner = new CommandRunner();
@@ -181,9 +182,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
             // Load user-defined controls
             await LoadUserControlsAsync();
-
-            // Load user variables into controls
-            await LoadUserVariablesAsync();
 
             // Optionally auto-start logs if ContainerId is set
             if (AutoStartLogs && !string.IsNullOrWhiteSpace(ContainerId))
@@ -618,7 +616,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             if (await _cmdRunner.TryWriteToInteractiveAsync(raw))
                 return;
             // resolve user variables from input
-            var resolvedCommand = await _userVariableService.RetrieveVariableAsync(raw);
+            var resolvedCommand = await _userControlService.RetrieveVariableAsync(raw, _userVariables);
 
             var args = ShellSplitter.SplitShellLike(resolvedCommand);
             await ExecuteAndLog(args);
@@ -629,94 +627,68 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
         #region User Controls
         /// <summary>
-        /// Asynchronously loads user-defined controls from a JSON configuration file.
-        /// Limits the number of loaded controls to a maximum defined by maxControls.
-        /// Adds each control to the AllUserControls collection for the ViewModel.
+        /// Load the user-defined controls from the service and populate the ViewModel collection.
+        /// then loads any saved user variable values.
         /// </summary>
-        /// <param name="filename">the JSON configuration file name</param>
-        /// <returns></returns>
-        private async Task LoadUserControlsAsync(string filename = "commands.json")
+        /// <remarks>If the number of loaded controls exceeds the maximum allowed,
+        /// only the first <paramref name="maxControls"/> will be used.</remarks>
+        /// <returns> a task representing the asynchronous operation</returns>
+        private async Task LoadUserControlsAsync()
         {
-            var controls = await LoadControlsFromFileAsync(filename);
-            if (controls is null)
-            {
-                PostLogMessage("[user-control] No user controls loaded.", true);
-                return;
-            }
+            var controls = await _userControlService.LoadUserControlsAsync();
 
             if (controls.Count > maxControls)
             {
                 PostLogMessage($"[user-control] Warning: Loaded controls exceed maximum of {maxControls}. Only the first {maxControls} will be used.", true);
                 controls = controls.Take(maxControls).ToList();
             }
-            AllUserControls.Clear();
+
+            UserControls.Clear();
             foreach (var control in controls)
             {
                 AddControlToViewModel(control);
             }
+            // After loading controls, load user variables
+            LoadUserVariables();
         }
 
-        /// <summary>
-        /// Asynchronously loads a list of user control definitions from a JSON configuration file.
-        /// </summary>
-        /// <remarks>If the specified file does not exist or contains invalid JSON, the method logs an
-        /// error and returns null. The deserialization is case-insensitive with respect to property names.</remarks>
-        /// <param name="filename">The name of the JSON file containing user control definitions. The file is expected to be located in the
-        /// application's 'Config' directory. Cannot be null or empty.</param>
-        /// <returns>A list of user control definitions if the file is found and successfully deserialized; otherwise, null.</returns>
-        private async Task<List<UserControlDefinition>?> LoadControlsFromFileAsync(string filename)
-        {
-            var configPath = Path.Combine(AppContext.BaseDirectory, "Config", filename);
-            if (!File.Exists(configPath))
-            {
-                PostLogMessage($"[user-control] Configuration file not found: {configPath}", true);
-                return null;
-            }
-            try
-            {
-                var json = await File.ReadAllTextAsync(configPath);
-                var options = new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true,
-                    Converters = { new UserControlConverter() }
-                };
-                // Validate and deserialize the JSON content
-                using var jsonDoc = JsonDocument.Parse(json);
-                var controls = JsonSerializer.Deserialize<List<UserControlDefinition>>(json, options)!;
-                return controls;
-            }
-            catch (JsonException jex)
-            {
-                PostLogMessage($"[user-control] JSON parsing error: {jex.Message}", true);
-            }
-            catch (Exception ex)
-            {
-                PostLogMessage($"[user-control] Error loading user controls: {ex.Message}", true);
-            }
-            return null;
-        }
 
         /// <summary>
-        /// Adds a user control definition to the ViewModel's collection based on its type.
-        /// If it's a button with an icon, resolves the icon path to an absolute URI.
+        /// Adds a user control definition to the ViewModel collection by creating the appropriate ViewModel instance.
         /// </summary>
-        /// <param name="control">The user control definition to add.</param>
+        /// <remarks> Uses updateVarAction to update user variable values when controls change.
+        /// this ensures that the shared _userVariables list stays in sync with the UI.</remarks>
+        /// <param name="control"> the user control definition</param>
         private void AddControlToViewModel(UserControlDefinition control)
         {
+            Action<string, string>? updateVarAction = (id, value) =>
+            {
+                var existingVar = _userVariables.FirstOrDefault(v => v.Id == id);
+                if (existingVar != null)
+                    existingVar.Value = value;
+                
+                else
+                  _userVariables.Add(new UserVariables (id,value));
+                
+            };
+
+            // Create appropriate ViewModel based on control type
             switch (control)
             {
                 case TextBoxCommand tb:
-                    AllUserControls.Add(new TextBoxViewModel(tb, _userVariableService));
+                    UserControls.Add(new TextBoxViewModel(tb, _userControlService, updateVarAction));
                     break;
                 case DropdownOption dd:
-                    AllUserControls.Add(new DropdownViewModel(dd, _userVariableService));
+                    UserControls.Add(new DropdownViewModel(dd, _userControlService, updateVarAction));
                     break;
+
+                // Handle ButtonCommand with icon path resolution
                 case ButtonCommand btn:
                     if (!string.IsNullOrEmpty(btn.IconPath))
                     {
                         btn.IconPath = ResolveIconPath(btn.IconPath, btn.Control);
                     }
-                    AllUserControls.Add(new ButtonViewModel(btn));
+                    UserControls.Add(new ButtonViewModel(btn));
                     break;
                 default:
                     PostLogMessage($"[user-control] Warning: Unsupported control type: {control.GetType().Name}", true);
@@ -747,28 +719,35 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         #endregion
 
         #region User Variables
+
         /// <summary>
-        /// Asynchronously loads user-defined variables and updates all user controls with their corresponding values.
+        /// Loads user-defined variable values and updates the corresponding user control view models with the retrieved
+        /// data.
         /// </summary>
-        /// <remarks>This method updates the values of all user controls based on the current set of user
-        /// variables. Controls that do not have a matching variable remain unchanged.</remarks>
-        /// <returns>A task that represents the asynchronous load operation.</returns>
-        private async Task LoadUserVariablesAsync()
+        /// <remarks>This method synchronizes the values of user controls with the latest user variable
+        /// data. It should be called whenever user variables need to be refreshed or reloaded to ensure that the UI
+        /// reflects the current state.</remarks>
+        private void LoadUserVariables()
         {
-            var userVars = await _userVariableService.LoadUserVariablesAsync();
-            foreach (var control in AllUserControls)
+            // Retrieve user variables for all defined controls
+            var controls = UserControls.Select(vm => vm.Definition).ToList();
+            // Load saved user variable values
+            _userVariables = _userControlService.LoadUserVariables(controls);
+
+            // Update each control's ViewModel with the loaded variable values
+            foreach (var control in UserControls)
             {
                 switch (control)
                 {
                     case TextBoxViewModel tbVm:
-                        var tbVar = userVars.FirstOrDefault(v => v.Id == tbVm.Id);
+                        var tbVar = _userVariables.FirstOrDefault(v => v.Id == tbVm.Id);
                         if (tbVar != null)
                         {
                             tbVm.Value = tbVar.Value;
                         }
                         break;
                     case DropdownViewModel ddVm:
-                        var ddVar = userVars.FirstOrDefault(v => v.Id == ddVm.Id);
+                        var ddVar = _userVariables.FirstOrDefault(v => v.Id == ddVm.Id);
                         if (ddVar != null)
                         {
                             ddVm.SelectedValue = ddVar.Value;

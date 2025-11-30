@@ -20,11 +20,9 @@
 		<None Update="Config\appsettings.Development.json">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
-		<!-- Copy the command.json to the bin\Debug\net9.0 at build -->
-		<None Update="Config\commands.json">
+		<None Update="Config\controls.json">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
-
 		<!--Copy user variables to the bin\Debug\net9.0 at build-->
 
 	</ItemGroup>

@@ -13,9 +13,10 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
     /// </summary>
     /// <remarks>This class exposes button metadata such as the command to execute, icon path, and tooltip
     /// text, typically for use in data binding scenarios within UI frameworks.</remarks>
-    public class ButtonViewModel
+    public class ButtonViewModel: IUserControlViewModel
     {
         public ButtonCommand Definition { get; }
+        UserControlDefinition IUserControlViewModel.Definition => Definition;
         public string[] Command => Definition.Command;
         public string? IconPath => Definition.IconPath;
         public string? Tooltip => Definition.Tooltip;

@@ -9,18 +9,27 @@ using System.Threading.Tasks;
 namespace DockerBuildBoxSystem.ViewModels.ViewModels
 {
     /// <summary>
-    /// Represents a view model for a text box that supports data binding and user variable persistence.
+    /// Represents the view model for a text box user control, providing data binding and change notification for its
+    /// value.
     /// </summary>
-    /// <remarks>This class provides property change notifications for data binding scenarios and
-    /// automatically persists the text value using the provided user variable service when the value changes. It is
-    /// typically used in MVVM architectures to connect UI text boxes to application logic.</remarks>
-    public class TextBoxViewModel: INotifyPropertyChanged
+    /// <remarks>Implements property change notification to support data binding scenarios in UI frameworks.
+    /// The view model exposes the text box definition and manages updates to its value, propagating changes to
+    /// associated services or actions as needed.</remarks>
+
+    public class TextBoxViewModel: INotifyPropertyChanged, IUserControlViewModel
     {
-        public event PropertyChangedEventHandler? PropertyChanged;
-        private readonly IUserVariableService? _service;
+        private readonly IUserControlService? _service;
+        // Action to update variable values externally
+        private readonly Action<string, string>? _updateVariableAction;
+
         public TextBoxCommand Definition { get; }
-        public string Id => Definition.Id ?? string.Empty;
-        public string Label => Definition.Label ?? string.Empty;
+        // Explicit interface implementation to expose the Definition as UserControlDefinition
+        UserControlDefinition IUserControlViewModel.Definition => Definition;
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+        
+        public string? Id => Definition.Id;
+        public string? Label => Definition.Label;
         private string? _value;
         public string? Value
         {
@@ -30,21 +39,38 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 if (_value != value)
                 {
                     _value = value;
+                    // Notify property change
                     PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Value)));
-                    if (!string.IsNullOrEmpty(Id) && _value != null)
-                    {
-                        // Save the variable asynchronously, but don't await to avoid blocking the setter
-                        _ = _service?.AddUserVariableAsync(Id, _value ?? "");
-                    }
+                    // Handle value change logic
+                    OnValueChanged(Id, _value);
                 }
             }
         }
 
-        public TextBoxViewModel(TextBoxCommand definition, IUserVariableService? service)
+        public TextBoxViewModel(TextBoxCommand definition,
+                                IUserControlService? service,
+                                Action<string, string>? updateVariableAction)
         {
             Definition = definition;
             _service = service;
+            _updateVariableAction = updateVariableAction;
+
             _value = definition.Value ?? string.Empty;
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="id"></param>
+        /// <param name="value"></param>
+        private void OnValueChanged(string? id, string? value)
+        {
+            if (!string.IsNullOrEmpty(id) && value != null)
+            {
+                // Save the variable asynchronously, but don't await to avoid blocking the setter
+                _ = _service?.AddUserControlValueAsync(id, value);
+                _updateVariableAction?.Invoke(id, value);
+            }
         }
 
     }

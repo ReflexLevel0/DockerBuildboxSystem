@@ -87,7 +87,7 @@
 
         <!-- User Controls -->
         <ItemsControl Grid.Row="1"
-                      ItemsSource="{Binding AllUserControls}"
+                      ItemsSource="{Binding UserControls}"
                       Margin="6">
             <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate>
@@ -101,7 +101,7 @@
                     <!--Global button styles in App/resources/styles.xaml-->
                     <Button Style="{StaticResource FlatIconButton}"
                                 ToolTip="{Binding Definition.Tooltip}"
-                                Command="{Binding DataContext.RunUserCommandCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                Command="{Binding DataContext.RunUserCommandCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                 CommandParameter="{Binding Definition}"
                                 Width="30" Height="30">
                         <Image Source="{Binding Definition.IconPath}" Width="20" Height="20"/>
@@ -115,7 +115,7 @@
                         <ComboBox ItemsSource="{Binding Values}"
                               SelectedItem="{Binding SelectedValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                               Width="80" Height="30"
-                              IsEnabled="{Binding DataContext.CanUseUserControls, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                              IsEnabled="{Binding DataContext.CanUseUserControls, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                               Padding="6"/>
                     </StackPanel>
                 </DataTemplate>
@@ -131,7 +131,7 @@
                                  Padding="6"
                                  FontFamily="Consolas"
                                  FontSize="12"
-                                 IsEnabled="{Binding DataContext.CanUseUserControls, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+                                 IsEnabled="{Binding DataContext.CanUseUserControls, RelativeSource={RelativeSource AncestorType=ItemsControl}}"/>
 
                     </StackPanel>
                 </DataTemplate>
