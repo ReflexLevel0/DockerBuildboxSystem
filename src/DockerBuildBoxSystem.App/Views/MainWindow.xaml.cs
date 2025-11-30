@@ -37,12 +37,6 @@ public partial class MainWindow : Window
         Closing += OnWindowClosing;
     }
 
-    private void Window_DragEnter(object sender, DragEventArgs e) => HandleDragEnter(e);
-    private void Window_Drop(object sender, DragEventArgs e) => HandleDrop(e);
-    private void Window_DragLeave(object sender, DragEventArgs e)
-    {
-    }
-
     private async void OnWindowClosing(object? sender, CancelEventArgs e)
     {
         if (_isClosing)
@@ -77,23 +71,28 @@ public partial class MainWindow : Window
     /// <summary>
     /// When the user drags something into the window, for instance a folder.
     /// </summary>
+    /// <param name="sender">The source of the drag event</param>
     /// <param name="e">Contains relevant information for drag-and-drop events</param>
-    private void HandleDragEnter(DragEventArgs e)
+    private void Path_DragEnter(object sender, DragEventArgs e)
     {
         e.Effects = HasFolder(e, out _) ? DragDropEffects.Copy : DragDropEffects.None;
         e.Handled = true;
     }
 
-    /// <summary>
-    /// Handles the drop operation when the user drops something to the window.
-    /// </summary>
-    /// <param name="e">Contains relevant information for drag-and-drop events</param>
-    private void HandleDrop(DragEventArgs e)
+    private void SourcePath_Drop(object sender, DragEventArgs e)
     {
-        if (!HasFolder(e, out string? firstFolder))
-            return;
+        if (HasFolder(e, out var folder))
+        {
+            _viewModel.SourcePath = folder;
+        }
+    }
 
-        _viewModel.HandleFolderDrop(firstFolder);
+    private void SyncOutPath_Drop(object sender, DragEventArgs e)
+    {
+        if (HasFolder(e, out var folder))
+        {
+            _viewModel.SyncOutPath = folder;
+        }
     }
 
     /// <summary>
