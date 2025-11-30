@@ -171,6 +171,7 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="25" />
             </Grid.ColumnDefinitions>
             
@@ -189,14 +190,19 @@
                     Content="Send"
                     Padding="12,4"
                     Command="{Binding SendCommand}" />
-            
+
             <Button Grid.Column="2"
+                    Content="Interrupt"
+                    Padding="12,4"
+                    Command="{Binding InterruptExecCommand}" />
+
+            <Button Grid.Column="3"
                     Content="Stop"
                     Padding="12,4"
                     Command="{Binding StopExecCommand}" />
 
             <!-- Container status indicator -->
-            <Canvas Grid.Column="3">
+            <Canvas Grid.Column="4">
                 <Ellipse Width="15" 
                          Height="15" 
                          Canvas.Top="5" 

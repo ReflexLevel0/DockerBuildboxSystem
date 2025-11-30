@@ -142,6 +142,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                     SendCommand.NotifyCanExecuteChanged();
                     RunUserCommandCommand.NotifyCanExecuteChanged();
                     StopExecCommand.NotifyCanExecuteChanged();
+                    InterruptExecCommand.NotifyCanExecuteChanged();
                     StartSyncCommand.NotifyCanExecuteChanged();
                     StartForceSyncCommand.NotifyCanExecuteChanged();
                 });
@@ -489,6 +490,20 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private async Task StopExecAsync()
         {
             await _cmdRunner.StopAsync();
+        }
+
+        /// <summary>
+        /// Determines whether command execution can be interrupted...
+        /// </summary>
+        private bool CanInterruptExec() => _cmdRunner.IsRunning;
+
+        /// <summary>
+        /// Interrupts the current command execution task, if it is running!
+        /// </summary>
+        [RelayCommand(CanExecute = nameof(CanInterruptExec))]
+        private async Task InterruptExecAsync()
+        {
+            await _cmdRunner.InterruptAsync();
         }
 
         #endregion
