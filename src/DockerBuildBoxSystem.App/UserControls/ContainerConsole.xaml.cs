@@ -62,6 +62,43 @@ namespace DockerBuildBoxSystem.App.UserControls
 
             //attach auto-scroll behavior
             _viewModel.UIHandler.ImportantLineArrived += ViewModelOnImportantLineArrived;
+            _viewModel.UIHandler.OutputChunk += _viewModel_OutputChunk;
+            _viewModel.UIHandler.OutputCleared += _viewModel_OutputCleared;
+            _viewModel.UIHandler.OutputTrimmed += _viewModel_OutputTrimmed;
+        }
+
+        /// <summary>
+        /// Handles the event triggered when the output is cleared in the view model.
+        /// </summary>
+        private void _viewModel_OutputCleared(object? sender, EventArgs e)
+        {
+            TerminalOutput.Clear();
+        }
+
+        /// <summary>
+        /// Handles the output of a chunk of text from the view model and appends it to the terminal output.
+        /// </summary>
+        private void _viewModel_OutputChunk(object? sender, string chunk)
+        {
+            TerminalOutput.AppendText(chunk);
+            AutoScrollToEnd(); //seems to work without any discrepancies in performance! :)
+        }
+
+        /// <summary>
+        /// Handles the event triggered when the output needs to be trimmed by a specified number of characters.
+        /// </summary>
+        private void _viewModel_OutputTrimmed(object? sender, int charsToRemove)
+        {
+            if (TerminalOutput is null || charsToRemove <= 0)
+                return;
+
+            Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() =>
+            {
+                if (TerminalOutput.Text.Length >= charsToRemove)
+                {
+                    TerminalOutput.Text = TerminalOutput.Text.Substring(charsToRemove);
+                }
+            }));
         }
 
         private void OnUnloaded(object? sender, RoutedEventArgs e)
@@ -71,6 +108,9 @@ namespace DockerBuildBoxSystem.App.UserControls
 
             //Only detach view-specific behavior
             _viewModel.UIHandler.ImportantLineArrived -= ViewModelOnImportantLineArrived;
+            _viewModel.UIHandler.OutputChunk -= _viewModel_OutputChunk;
+            _viewModel.UIHandler.OutputCleared -= _viewModel_OutputCleared;
+            _viewModel.UIHandler.OutputTrimmed -= _viewModel_OutputTrimmed;
         }
 
 
@@ -86,6 +126,9 @@ namespace DockerBuildBoxSystem.App.UserControls
             {
                 //detach event handlers
                 _viewModel.UIHandler.ImportantLineArrived -= ViewModelOnImportantLineArrived;
+                _viewModel.UIHandler.OutputChunk -= _viewModel_OutputChunk;
+                _viewModel.UIHandler.OutputCleared -= _viewModel_OutputCleared;
+                _viewModel.UIHandler.OutputTrimmed -= _viewModel_OutputTrimmed;
 
                 //dispose the ViewModel
                 await _viewModel.DisposeAsync();
@@ -97,20 +140,19 @@ namespace DockerBuildBoxSystem.App.UserControls
         }
         private void ViewModelOnImportantLineArrived(object? sender, ConsoleLine line)
         {
-            //scroll to the specific important line that was just added
-            ScrollToItem(line);
+            AutoScrollToEnd();
+            //Do stuff if important lines arrives... ex show error in popup/notifcation etc
         }
 
-        private void ScrollToItem(object item)
+        private void AutoScrollToEnd()
         {
-            if (OutputList is null) return;
+            if (TerminalOutput is null) return;
 
             Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
             {
-                if (OutputList.Items.Count == 0) return;
-                OutputList.ScrollIntoView(item);
+                TerminalOutput.CaretIndex = TerminalOutput.Text.Length;
+                TerminalOutput.ScrollToEnd();
             }));
         }
-
     }
 }

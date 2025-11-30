@@ -3,7 +3,7 @@
 
     <!-- Converters -->
     <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
-    
+
     <!-- TextBlock Styles -->
     <Style x:Key="TitleTextBlockStyle" TargetType="TextBlock">
         <Setter Property="FontSize" Value="20"/>
@@ -11,7 +11,7 @@
         <Setter Property="VerticalAlignment" Value="Center"/>
         <Setter Property="Foreground" Value="{StaticResource TitleTextBrush}"/>
     </Style>
-    
+
     <!-- Button Styles -->
     <Style x:Key="ExitButtonStyle" TargetType="Button">
         <Setter Property="Width" Value="100"/>
@@ -19,5 +19,66 @@
         <Setter Property="Margin" Value="10"/>
         <Setter Property="HorizontalAlignment" Value="Right"/>
     </Style>
-    
+
+    <Style x:Key="FlatIconButton" TargetType="Button">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Padding" Value="2"/>
+        <Setter Property="Margin" Value="2"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="ToolTipService.ShowDuration" Value="4000"/>
+
+
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Grid>
+                        <Border x:Name="HoverSquare"
+                            Width="{Binding ActualHeight, RelativeSource={RelativeSource TemplatedParent}}"
+                            Height="{Binding ActualHeight, RelativeSource={RelativeSource TemplatedParent}}"
+                            Background="Transparent"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"/>
+
+                        <!--The content of the button -->
+                        <ContentPresenter HorizontalAlignment="Center"
+                                      VerticalAlignment="Center"
+                                      RecognizesAccessKey="True"/>
+
+                    </Grid>
+                    <!-- Hover + press states -->
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="HoverSquare" Property="Background" Value="#22000000"/>
+
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="HoverSquare" Property="Background" Value="#33000000"/>
+
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.4"/>
+                            <Setter Property="Cursor" Value="Arrow"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+
+        
+    </Style>
+
+    <Style x:Key="TerminalTextBoxStyle" TargetType="TextBox">
+        <Setter Property="FontFamily" Value="Consolas" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Background" Value="{StaticResource ContainerBackgroundBrush}" />
+        <Setter Property="Foreground" Value="{StaticResource ContainerNormalBrush}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="AcceptsReturn" Value="True" />
+        <Setter Property="VerticalScrollBarVisibility" Value="Auto" />
+        <Setter Property="HorizontalScrollBarVisibility" Value="Auto" />
+        <Setter Property="TextWrapping" Value="NoWrap" />
+    </Style>
 </ResourceDictionary>

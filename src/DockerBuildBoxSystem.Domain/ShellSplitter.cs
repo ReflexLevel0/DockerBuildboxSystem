@@ -15,8 +15,43 @@ namespace DockerBuildBoxSystem.Domain
         /// <returns>The argv array.</returns>
         public static string[] SplitShellLike(string cmd)
         {
-            //simple split
-            return cmd.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var result = new List<string>();
+            if (string.IsNullOrWhiteSpace(cmd))
+            {
+                return result.ToArray();
+            }
+
+            var current = new StringBuilder();
+            var inQuotes = false;
+
+            foreach (var ch in cmd)
+            {
+                switch (ch)
+                {
+                    case '\"':
+                        inQuotes = !inQuotes;
+                        current.Append(ch);
+                        break;
+                    case ' ' when !inQuotes:
+                        if (current.Length > 0)
+                        {
+                            result.Add(current.ToString());
+                            current.Clear();
+                        }
+
+                        break;
+                    default:
+                        current.Append(ch);
+                        break;
+                }
+            }
+
+            if (current.Length > 0)
+            {
+                result.Add(current.ToString());
+            }
+
+            return result.ToArray();
         }
     }
 }

@@ -11,6 +11,7 @@ using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
+using System.Threading.Channels;
 using System.Threading.Tasks;
 
 namespace DockerBuildBoxSystem.ViewModels.ViewModels
@@ -28,12 +29,10 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
         public readonly UILineBuffer UIHandler;
 
-        // Manage user commands
-        private readonly UserCommandService _userCommandService = new();
         /// <summary>
         /// Lines currently displayed in the console UI.
         /// </summary>
-        public ObservableCollection<ConsoleLine> Lines { get; } = new ContainerObservableCollection<ConsoleLine>();
+        public RangeObservableCollection<ConsoleLine> Lines { get; } = new RangeObservableCollection<ConsoleLine>();
 
         /// <summary>
         /// List of available containers on the host.
@@ -41,9 +40,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         public ObservableCollection<ContainerInfo> Containers { get; } = new();
 
         /// <summary>
-        /// User-defined commands
+        /// User-defined controls
         /// </summary>
-        public ObservableCollection<UserCommand> UserCommands { get; } = new();
+        public ObservableCollection<UserControlDefinition> UserControlDefinition { get; } = new();
 
         /// <summary>
         /// The raw user input text bound from the UI.
@@ -60,8 +59,12 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [NotifyCanExecuteChangedFor(nameof(RestartContainerCommand))]
         [NotifyCanExecuteChangedFor(nameof(SendCommand))]
         [NotifyCanExecuteChangedFor(nameof(RunUserCommandCommand))]
-        [NotifyCanExecuteChangedFor(nameof(StartSyncCommand))]
+        [NotifyPropertyChangedFor(nameof(CanUseUserControls))]
+        [NotifyCanExecuteChangedFor(nameof(StartSyncCommand))]       
+        [NotifyCanExecuteChangedFor(nameof(StartForceSyncCommand))]
         private string _containerId = "";
+
+        public bool CanUseUserControls => CanSend();
 
         /// <summary>
         /// True while logs are currently being streamed.
@@ -82,7 +85,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [NotifyCanExecuteChangedFor(nameof(RestartContainerCommand))]
         [NotifyCanExecuteChangedFor(nameof(SendCommand))]
         [NotifyCanExecuteChangedFor(nameof(RunUserCommandCommand))]
+        [NotifyPropertyChangedFor(nameof(CanUseUserControls))]
         [NotifyCanExecuteChangedFor(nameof(StartSyncCommand))]
+        [NotifyCanExecuteChangedFor(nameof(StartForceSyncCommand))]
         private ContainerInfo? _selectedContainer;
 
         /// <summary>
@@ -91,7 +96,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [ObservableProperty]
         [NotifyCanExecuteChangedFor(nameof(SendCommand))]
         [NotifyCanExecuteChangedFor(nameof(RunUserCommandCommand))]
+        [NotifyPropertyChangedFor(nameof(CanUseUserControls))]
         [NotifyCanExecuteChangedFor(nameof(StartSyncCommand))]
+        [NotifyCanExecuteChangedFor(nameof(StartForceSyncCommand))]
         public bool _isSyncRunning;
 
         /// <summary>
@@ -136,6 +143,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                     RunUserCommandCommand.NotifyCanExecuteChanged();
                     StopExecCommand.NotifyCanExecuteChanged();
                     StartSyncCommand.NotifyCanExecuteChanged();
+                    StartForceSyncCommand.NotifyCanExecuteChanged();
                 });
 
             _logRunner.RunningChanged += (_, __) =>
@@ -146,6 +154,13 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                     StopLogsCommand.NotifyCanExecuteChanged();
                 });
 
+            PropertyChanged += async (s, e) =>
+            {
+                if(string.Compare(e.PropertyName, nameof(SelectedContainer)) == 0) {
+                    await OnSelectedContainerChangedAsync(SelectedContainer);
+                }
+            };
+
             UIHandler = new UILineBuffer(Lines);
         }
 
@@ -153,7 +168,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// Initializes the ViewModel: 
         ///     starts the UI update loop, 
         ///     refreshes containers, 
-        ///     loads user commands, 
+        ///     loads user controls, 
         ///     and optionally starts logs.
         /// </summary>
         [RelayCommand]
@@ -165,8 +180,8 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             // Load available containers on initialization
             await RefreshContainersCommand.ExecuteAsync(null);
 
-            // Load user-defined commands
-            await LoadUserCommandsAsync();
+            // Load user-defined controls
+            await LoadUserControlsAsync();
 
             // Optionally auto-start logs if ContainerId is set
             if (AutoStartLogs && !string.IsNullOrWhiteSpace(ContainerId))
@@ -174,6 +189,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 await StartLogsCommand.ExecuteAsync(null);
             }
         }
+
 
         #region Container Management
         /// <summary>
@@ -202,7 +218,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             }
             catch (Exception ex)
             {
-                UIHandler.EnqueueLine($"[container-list-error] {ex.Message}", true);
+                PostLogMessage($"[container-list-error] {ex.Message}", true);
             }
             finally
             {
@@ -214,13 +230,18 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// Updates dependent state when the selected container changes.
         /// </summary>
         /// <param name="value">The newly selected container info or null.</param>
-        partial void OnSelectedContainerChanged(ContainerInfo? value)
+        public async Task OnSelectedContainerChangedAsync(ContainerInfo? value)
         {
             var newContainer = value;
             var oldId = _previousContainerId ?? ContainerId; // fallback to current if previous not tracked yet
 
             if (newContainer != null)
             {
+                //stop any running operations from previous container
+                _ = StopLogsAsync();
+                _ = StopExecAsync();
+                UIHandler.DiscardPending();
+
                 // If switching to a DIFFERENT container and previous was running, stop it
                 if (!string.IsNullOrWhiteSpace(oldId) && oldId != newContainer.Id)
                 {
@@ -232,15 +253,21 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 }
 
                 ContainerId = newContainer.Id;
-                UIHandler.EnqueueLine($"[info] Selected container: {newContainer.Names.FirstOrDefault() ?? newContainer.Id}", false);
+                PostLogMessage($"[info] Selected container: {newContainer.Names.FirstOrDefault() ?? newContainer.Id}", false);
 
                 //auto start logs if enabled
                 if (AutoStartLogs && !string.IsNullOrWhiteSpace(ContainerId))
-                    _ = StartLogsCommand.ExecuteAsync(null);
+                    _ = StartLogs();
             }
             else
             {
                 ContainerId = string.Empty;
+            }
+
+            // Starting the new container
+            if (newContainer != null && !newContainer.IsRunning)
+            {
+                await StartContainerAsync();
             }
 
             _previousContainerId = ContainerId; // update tracker (after change)
@@ -264,20 +291,20 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             if (string.IsNullOrWhiteSpace(ContainerId)) return;
             try
             {
-                UIHandler.EnqueueLine($"[info] Starting container: {ContainerId}", false);
+                PostLogMessage($"[info] Starting container: {ContainerId}", false);
                 var status = await _service.StartAsync(ContainerId);
                 if(status)
                 {
-                    UIHandler.EnqueueLine($"[info] Started container: {ContainerId}", false);
+                    PostLogMessage($"[info] Started container: {ContainerId}", false);
                 }
                 else
                 {
-                    UIHandler.EnqueueLine($"[start-container] Container did not start: {ContainerId}", true);
+                    PostLogMessage($"[start-container] Container did not start: {ContainerId}", true);
                 }
             }
             catch (Exception ex)
             {
-                UIHandler.EnqueueLine($"[start-container-error] {ex.Message}", true);
+                PostLogMessage($"[start-container-error] {ex.Message}", true);
             }
             finally
             {
@@ -296,13 +323,13 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             if (string.IsNullOrWhiteSpace(ContainerId)) return;
             try
             {
-                UIHandler.EnqueueLine($"[info] Stopping container: {ContainerId}", false);
+                PostLogMessage($"[info] Stopping container: {ContainerId}", false);
                 await _service.StopAsync(ContainerId, timeout: TimeSpan.FromSeconds(10));
-                UIHandler.EnqueueLine($"[info] Stopped container: {ContainerId}", false);
+                PostLogMessage($"[info] Stopped container: {ContainerId}", false);
             }
             catch (Exception ex)
             {
-                UIHandler.EnqueueLine($"[stop-container-error] {ex.Message}", true);
+                PostLogMessage($"[stop-container-error] {ex.Message}", true);
             }
             finally
             {
@@ -340,13 +367,13 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             if (string.IsNullOrWhiteSpace(ContainerId)) return;
             try
             {
-                UIHandler.EnqueueLine($"[info] Restarting container: {ContainerId}", false);
+                PostLogMessage($"[info] Restarting container: {ContainerId}", false);
                 await _service.RestartAsync(ContainerId, timeout: TimeSpan.FromSeconds(10));
-                UIHandler.EnqueueLine($"[info] Restarted container: {ContainerId}", false);
+                PostLogMessage($"[info] Restarted container: {ContainerId}", false);
             }
             catch (Exception ex)
             {
-                UIHandler.EnqueueLine($"[restart-container-error] {ex.Message}", true);
+                PostLogMessage($"[restart-container-error] {ex.Message}", true);
             }
             finally
             {
@@ -361,77 +388,93 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// <summary>
         /// Determines whether sending commands is currently allowed.
         /// </summary>
-        private bool CanSend() => !string.IsNullOrWhiteSpace(ContainerId) && !_cmdRunner.IsRunning && (SelectedContainer?.IsRunning == true) && !IsSyncRunning;
+        private bool CanSend() => !string.IsNullOrWhiteSpace(ContainerId) && (SelectedContainer?.IsRunning == true) && !IsSyncRunning;
 
+     
         /// <summary>
-        /// Executes the specified user command asynchronously within the selected container.
+        /// Executes a user-defined command associated with the specified control asynchronously.
         /// </summary>
-        /// <remarks>
-        /// This method sends the command to the selected container and captures the output,
-        /// including standard output and error streams. The results are displayed in the UI. If no container is
-        /// selected, the method logs a message indicating that no action was taken.
-        /// </remarks>
-        /// <param name="userCmd">The user command to execute. Can include the command and its arguments. If <paramref name="userCmd"/>
-        /// is <see langword="null"/>, the method does not execute any command.</param>
-        /// <returns>A task that represents the asynchronous operation.</returns>
+        /// <remarks>If the <paramref name="control"/> is <see langword="null"/> or no container is
+        /// selected, the method logs a message indicating that no command or container is available. If the control is
+        /// a <see cref="ButtonCommand"/> and no command is defined for the button, a corresponding message is logged.
+        /// Unsupported control types are also logged.</remarks>
+        /// <param name="control">The <see cref="UserControlDefinition"/> representing the control that defines the command to execute. This
+        /// parameter can be <see langword="null"/>.</param>
+        /// <returns></returns>
         [RelayCommand(CanExecute = nameof(CanSend))]
-        private async Task RunUserCommandAsync(UserCommand? userCmd)
+        private async Task RunUserCommandAsync(UserControlDefinition? control)
         {
-            // Check if the user command or selected container is null
-            if (userCmd is null || SelectedContainer is null)
+            // Check for null control or no selected container
+            if (control is null || SelectedContainer is null)
             {
-                UIHandler.EnqueueLine("[user-cmd] No command or container selected.", true);
+                PostLogMessage("[user-cmd] No command or container selected.", true);
                 return;
             }
-
-            var cmd = userCmd.Command;
-
-            await ExecuteAndLogAsync(cmd);
+            // Handle ButtonCommand control type
+            if (control is ButtonCommand buttonCmd)
+            {
+                var cmds = buttonCmd.Command;
+                if (cmds.Length == 0)
+                {
+                    UIHandler.EnqueueLine("[user-cmd] No command defined for this button.", true);
+                    return;
+                }
+                var cmdStr = string.Join(' ', cmds);
+                await RouteInputAsync(cmdStr);
+            }
+            else
+            {
+                UIHandler.EnqueueLine("[user-cmd] Unsupported control type for command execution.", true);
+            }
         }
 
         /// <summary>
         /// Sends the current input text as a command to the container.
         /// </summary>
-        [RelayCommand(CanExecute = nameof(CanSend))]
+        [RelayCommand(CanExecute = nameof(CanSend), AllowConcurrentExecutions = true)]
         private async Task SendAsync()
         {
-            var cmd = (Input ?? String.Empty).Trim();
-            //Clear the input after sending
+            var raw = (Input ?? string.Empty);
             Input = string.Empty;
-            await ExecuteAndLogAsync(cmd);
+
+            await RouteInputAsync(raw);
         }
 
         /// <summary>
         /// Executes a command string by splitting it as a argv array.
         /// </summary>
-        private async Task ExecuteAndLogAsync(string cmd) => await ExecuteAndLogAsync(ShellSplitter.SplitShellLike(cmd));
+        private async Task ExecuteAndLogAsync(string cmd) => await ExecuteAndLog(ShellSplitter.SplitShellLike(cmd));
 
         /// <summary>
         /// Executes a command inside the selected container and streams output to the console UI.
         /// </summary>
         /// <param name="args">The command and its arguments (argv form).</param>
-        private async Task ExecuteAndLogAsync(string[] args)
+        private Task ExecuteAndLog(string[] args)
         {
-            UIHandler.EnqueueLine($"> {string.Join(' ', args)}", false);
+            //add command to console on UI thread
+            PostLogMessage($"> {string.Join(' ', args)}", false);
 
-            try
+            return Task.Run(async () =>
             {
-                await foreach (var (isErr, line) in _cmdRunner.RunAsync(_service, ContainerId, args))
+                try
                 {
-                    UIHandler.EnqueueLine(line, isErr);
-                }
+                    await foreach (var (isErr, line) in _cmdRunner.RunAsync(_service, ContainerId, args).ConfigureAwait(false))
+                    {
+                        UIHandler.EnqueueLine(line, isErr);
+                    }
 
-                var exitCode = await _cmdRunner.ExitCode;
-                UIHandler.EnqueueLine($"[exit] {exitCode}", false, true);
-            }
-            catch (OperationCanceledException)
-            {
-                UIHandler.EnqueueLine("[exec] canceled", false, true);
-            }
-            catch (Exception ex)
-            {
-                UIHandler.EnqueueLine($"[exec-error] {ex.Message}", true, true);
-            }
+                    var exitCode = await _cmdRunner.ExitCode.ConfigureAwait(false);
+                    PostLogMessage($"[exit] {exitCode}", false, true);
+                }
+                catch (OperationCanceledException)
+                {
+                    PostLogMessage("[exec] canceled", false, true);
+                }
+                catch (Exception ex)
+                {
+                    PostLogMessage($"[exec-error] {ex.Message}", true, true);
+                }
+            });
         }
 
         /// <summary>
@@ -461,23 +504,27 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// Starts streaming container logs, following container TTY settings.
         /// </summary>
         [RelayCommand(CanExecute = nameof(CanStartLogs))]
-        private async Task StartLogsAsync()
+        private Task StartLogs()
         {
-            try
+            return Task.Run(async () =>
             {
-                await foreach (var (isErr, line) in _logRunner.RunAsync(_service, ContainerId))
+                try
                 {
-                    UIHandler.EnqueueLine(line, isErr);
+                    await foreach (var (isErr, line) in _logRunner.RunAsync(_service, ContainerId).ConfigureAwait(false))
+                    {
+                        PostLogMessage(line, isErr);
+                    }
                 }
-            }
-            catch (OperationCanceledException)
-            {
-                UIHandler.EnqueueLine("[logs] canceled", false);
-            }
-            catch (Exception ex)
-            {
-                UIHandler.EnqueueLine($"[logs-error] {ex.Message}", true, true);
-            }
+                catch (OperationCanceledException)
+                {
+                    PostLogMessage("[logs] canceled", false);
+                }
+                catch (Exception ex)
+                {
+                    PostLogMessage($"[logs-error] {ex.Message}", true, true);
+                }
+
+            });
         }
 
         /// <summary>
@@ -502,10 +549,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// Clears all lines from the console.
         /// </summary>
         [RelayCommand]
-        private Task ClearAsync()
+        private async Task ClearAsync()
         {
             UIHandler.ClearAsync();
-            return Task.CompletedTask;
         }
 
         /// <summary>
@@ -547,6 +593,27 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         }
 
         /// <summary>
+        /// Starts the force sync operation (same constraints as startSync).
+        /// This functiona should delete all sync in data from docker volume and resync everything.
+        /// To be implemented once file sync functionality is in place.
+        /// </summary>
+        [RelayCommand(CanExecute = nameof(CanSync))]
+        private async Task StartForceSyncAsync()
+        {
+            IsSyncRunning = true;
+            try
+            {
+                PostLogMessage("[force-sync] Starting force sync operation", false);
+                await Task.Delay(1000);
+                PostLogMessage("[force-sync] Completed force sync operation", false);
+            }
+            finally
+            {
+                IsSyncRunning = false;
+            }
+        }
+
+        /// <summary>
         /// Determines whether sync operation can be stopped.
         /// </summary>
         private bool CanStopSync() => IsSyncRunning;
@@ -564,53 +631,110 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         #region Helpers
 
         /// <summary>
-        /// Asynchronously loads user-defined commands from a JSON configuration file.
+        /// Asynchronously loads user control definitions from a JSON configuration file.
         /// </summary>
-        /// <remarks>If the specified configuration file does not exist, a default set of commands is
-        /// created, serialized to the file, and then loaded. The commands are deserialized into a list of <see
-        /// cref="UserCommand"/> objects and added to the <c>UserCommands</c> collection.</remarks>
+        /// <remarks>This method reads the specified JSON file, validates its content, and deserializes it
+        /// into a list of user control definitions. If the file does not exist, a warning message is logged, and the
+        /// method exits. The method enforces a maximum of 7 controls; if more are defined, only the first 7 are loaded,
+        /// and a warning is logged. For button controls with an icon path, the method verifies the existence of the
+        /// icon file and updates the path to an absolute URI if valid. If the icon file is missing, a warning is
+        /// logged, and the icon path is cleared.</remarks>
         /// <param name="filename">The name of the configuration file to load. Defaults to "commands.json".</param>
-        /// <returns>A task that represents the asynchronous operation.</returns>
-        private async Task LoadUserCommandsAsync(string filename = "commands.json")
+        /// <returns></returns>
+        private async Task LoadUserControlsAsync(string filename = "commands.json")
         {
             // Determine the path to the configuration file
             var configPath = Path.Combine(AppContext.BaseDirectory, "Config", filename);
-            // If the file does not exist, create it with default commands
             if (!File.Exists(configPath))
             {
-                var defaultCmds = new[]
-                {
-                    new UserCommand { Label = "List /", Command = ["ls", "/"] },
-                    new UserCommand { Label = "Check Disk", Command = ["df", "-h"] },
-                };
-                Directory.CreateDirectory(Path.GetDirectoryName(configPath)!);
-                await File.WriteAllTextAsync(configPath,
-                    JsonSerializer.Serialize(defaultCmds, new JsonSerializerOptions { WriteIndented = true }));
+                UIHandler.EnqueueLine($"[user-control] Configuration file not found: {configPath}", true);
+                return;
             }
-            // Read and deserialize the commands from the configuration file
-            var json = await File.ReadAllTextAsync(configPath);
-            var cmds = JsonSerializer.Deserialize<List<UserCommand>>(json) ?? new List<UserCommand>();
-            UserCommands.Clear();
-            // Add each command to the UserCommands collection
-            foreach (var cmd in cmds)
+
+            try
             {
-                UserCommands.Add(cmd);
+                var json = await File.ReadAllTextAsync(configPath);
+                var options = new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true,
+                    Converters = { new UserControlConverter() }
+                };
+
+                // Validate and deserialize the JSON content
+                using var jsonDoc = JsonDocument.Parse(json);
+                var controls = JsonSerializer.Deserialize<List<UserControlDefinition>>(json, options)!;
+
+                // Limit to maximum of 7 controls
+                if (controls.Count > 7)
+                {
+                    UIHandler.EnqueueLine("[user-control] Warning: More than 7 controls defined. Only the first 7 will be loaded.", true);
+                    controls = controls.Take(7).ToList();
+                }
+                // Clear existing controls and add the new ones
+                UserControlDefinition.Clear();
+                foreach (var c in controls ?? [])
+                {
+                    // For ButtonCommand, validate and update icon path
+                    if (c is ButtonCommand btn && !string.IsNullOrEmpty(btn.IconPath))
+                    {
+                        // Resolve the full path to the icon file
+                        var iconFullPath = Path.Combine(AppContext.BaseDirectory, btn.IconPath.Replace('/', Path.DirectorySeparatorChar));
+                        if (File.Exists(iconFullPath))
+                        {
+                            // Update to absolute URI format
+                            btn.IconPath = new Uri(iconFullPath, UriKind.Absolute).AbsoluteUri;
+                        }
+                        else
+                        {
+                            UIHandler.EnqueueLine($"[user-control] Warning: Icon file not found for button '{btn.Control}': {iconFullPath}", true);
+                            btn.IconPath = null; //clear invalid path
+                        }
+                    }
+                    // Add the control to the collection
+                    UserControlDefinition.Add(c);
+                }
+            }
+            catch (JsonException jex)
+            {
+                UIHandler.EnqueueLine($"[user-control] JSON parsing error: {jex.Message}", true);
+            }
+            catch (Exception ex)
+            {
+                UIHandler.EnqueueLine($"[user-control] Error loading user controls: {ex.Message}", true);
             }
         }
 
 
-        public async Task AddCommandAsync(UserCommand newCmd)
+        /// <summary>
+        /// Retrieves the platform selection from the dropdown options.
+        /// </summary>
+        /// <remarks>This method searches the dropdown options for an entry with an ID matching "platform"
+        /// (case-insensitive). If no such option exists, the method returns <see langword="null"/>.</remarks>
+        /// <returns>The <see cref="DropdownOption"/> representing the platform selection, or <see langword="null"/>  if no
+        /// matching option is found.</returns>
+        private DropdownOption? GetPlatformFromDropdown()
         {
-            await _userCommandService.AddAsync(newCmd);
-            UserCommands.Add(newCmd);
+            // To use in the build process when the target platform is needed
+            return UserControlDefinition
+                .OfType<DropdownOption>()
+                .FirstOrDefault(d => d.Id.Equals("platform", StringComparison.OrdinalIgnoreCase));
         }
 
-        public async Task RemoveCommandAtAsync(int index)
+
+
+        private async Task RouteInputAsync(string raw)
         {
-            await _userCommandService.RemoveAtAsync(index);
-            UserCommands.RemoveAt(index);
+            if (string.IsNullOrWhiteSpace(raw))
+                return;
+
+            if (await _cmdRunner.TryWriteToInteractiveAsync(raw))
+                return;
+
+            var args = ShellSplitter.SplitShellLike(raw);
+            await ExecuteAndLog(args);
         }
 
+        private void PostLogMessage(string message, bool isError, bool isImportant = false) => UIHandler.EnqueueLine(message + "\r\n", isError, isImportant);
         #endregion
 
         #region Cleanup

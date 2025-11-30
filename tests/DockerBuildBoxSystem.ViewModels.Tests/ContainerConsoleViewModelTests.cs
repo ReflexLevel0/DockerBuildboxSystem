@@ -46,8 +46,6 @@ public class ContainerConsoleViewModelTests
 
         //Assert
         Assert.Single(vm.Containers);
-        //Creating default user commands 
-        Assert.NotEmpty(vm.UserCommands);
     }
 
     /// <summary>
@@ -86,7 +84,7 @@ public class ContainerConsoleViewModelTests
         Assert.True(logsStarted, "Logs should have started!");
 
         //wait until line appears, with timeout after 2 seconds...
-        var ok = await WaitUntilAsync(() => vm.Lines.Any(l => l.Text == "sup"), TimeSpan.FromSeconds(2));
+        var ok = await WaitUntilAsync(() => vm.UIHandler.Output.Contains("sup"), TimeSpan.FromSeconds(2));
 
         //Assert
         Assert.True(ok, "Line 'sup' should have appeared!");
@@ -129,8 +127,9 @@ public class ContainerConsoleViewModelTests
             (true,  "err1"),
         ]);
         var exitTask = Task.FromResult(0L);
+        var inputWriter = Channel.CreateUnbounded<string>().Writer;
         ContainerService.StreamExecAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult((output, (Task<long>)exitTask)));
+            .Returns(Task.FromResult((output, inputWriter, (Task<long>)exitTask)));
 
         var vm = CreateViewModel(ContainerService);
 
@@ -144,10 +143,10 @@ public class ContainerConsoleViewModelTests
         await vm.SendCommand.ExecuteAsync(null);
 
         //Assert
-        var ok = await WaitUntilAsync(() => vm.Lines.Any(l => l.Text.Contains("[exit] 0")), TimeSpan.FromSeconds(2));
+        var ok = await WaitUntilAsync(() => vm.UIHandler.Output.Contains("[exit] 0"), TimeSpan.FromSeconds(2));
         Assert.True(ok);
-        Assert.Contains(vm.Lines, l => l.Text == "line1");
-        Assert.Contains(vm.Lines, l => l.Text == "err1");
+        Assert.Contains("line1", vm.UIHandler.Output);
+        Assert.Contains("err1", vm.UIHandler.Output);
         Assert.False(vm.IsCommandRunning);
     }
 
@@ -205,7 +204,20 @@ public class ContainerConsoleViewModelTests
         var Clipboard = Substitute.For<IClipboardService>();
 
         var vm = CreateViewModel(ContainerService, Clipboard);
-        vm.Lines.Add(new ConsoleLine(DateTime.Now, "sup", false));
+
+        ContainerService
+            .InspectAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ContainerInfo { Id = "abc", Names = ["abc"], Tty = false }));
+
+        ContainerService
+            .StreamLogsAsync(Arg.Any<string>(), true, Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(CreateCompletedReader([(false, "sup")])));
+
+        await vm.InitializeCommand.ExecuteAsync(null);
+        vm.ContainerId = "abc";
+        await vm.StartLogsCommand.ExecuteAsync(null);
+
+        await WaitUntilAsync(() => vm.UIHandler.Output.Contains("sup"), TimeSpan.FromSeconds(2));
 
         //Act
         await vm.CopyCommand.ExecuteAsync(null);

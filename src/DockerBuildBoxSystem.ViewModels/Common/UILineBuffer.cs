@@ -1,11 +1,14 @@
 ﻿using DockerBuildBoxSystem.Contracts;
-using DockerBuildBoxSystem.Models;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
+using System.Linq;
+using System.Text;
 using System.Collections.Specialized;
 using System.Data.Common;
 using System.Text.RegularExpressions;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace DockerBuildBoxSystem.ViewModels.Common
 {
@@ -28,16 +31,25 @@ namespace DockerBuildBoxSystem.ViewModels.Common
         /// </summary>
         public sealed record UiBatch(IReadOnlyList<ConsoleLine> Lines, IReadOnlyList<ConsoleLine> Important);
 
+        public event EventHandler<string>? OutputChunk;
+        public event EventHandler? OutputCleared;
+        public event EventHandler<int>? OutputTrimmed;
+
+        private readonly StringBuilder _buffer = new();
+        private readonly object _bufferLock = new();
+        public string Output
+        {
+            get { lock (_bufferLock) return _buffer.ToString(); }
+        }
         /// <summary>
         /// Lines currently displayed in the console UI.
         /// </summary>
-        public ObservableCollection<ConsoleLine> _lines;
+        private readonly RangeObservableCollection<ConsoleLine> _lines;
 
         private readonly SynchronizationContext? _uiContext;
 
         //global UI update
         private readonly ConcurrentQueue<ConsoleLine> _outputQueue = new();
-
         private CancellationTokenSource? _uiUpdateCts;
         private Task? _uiUpdateTask;
 
@@ -45,11 +57,9 @@ namespace DockerBuildBoxSystem.ViewModels.Common
         private static readonly Regex AnsiRegex =
             new(@"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])|\a|\r", RegexOptions.Compiled);
 
-
-        //To ensure UI is responsive
-        public int MaxConsoleLines { get; set; } = 2000;
-        public int MaxLinesPerTick { get; set; } = 200;
-        public TimeSpan Interval { get; }
+        public int MaxLinesPerTick { get; set; } = 50;
+        public int MaxLines { get; set; } = 1000;
+        public TimeSpan Interval { get; } = TimeSpan.FromMilliseconds(200);
 
         /// <summary>
         /// Raised whenever an important line is added to the UI, ex a error line that needs attention.
@@ -57,10 +67,10 @@ namespace DockerBuildBoxSystem.ViewModels.Common
         /// </summary>
         public event EventHandler<ConsoleLine>? ImportantLineArrived;
 
-        public UILineBuffer(ObservableCollection<ConsoleLine> lines, TimeSpan? interval = null, SynchronizationContext? uiContext = null)
+        public UILineBuffer(RangeObservableCollection<ConsoleLine> lines, TimeSpan? interval = null, SynchronizationContext? uiContext = null)
         {
             _lines = lines;
-            Interval = interval ?? TimeSpan.FromMilliseconds(50);
+            Interval = interval ?? Interval;
             _uiContext = uiContext ?? SynchronizationContext.Current;
         }
 
@@ -86,10 +96,14 @@ namespace DockerBuildBoxSystem.ViewModels.Common
                 {
                     while (await uiTimer.WaitForNextTickAsync(ct).ConfigureAwait(false))
                     {
+                        if (_outputQueue.IsEmpty)
+                            continue;
+
                         //Restrict the number of lines per tick
                         //If we dequeue everything at once it might overwhelm the UI
                         var batch = new List<ConsoleLine>(MaxLinesPerTick);
                         var important = new List<ConsoleLine>();
+
                         while (batch.Count < MaxLinesPerTick && _outputQueue.TryDequeue(out var line))
                         {
                             batch.Add(line);
@@ -134,7 +148,7 @@ namespace DockerBuildBoxSystem.ViewModels.Common
                     await _uiUpdateTask.WaitAsync(TimeSpan.FromSeconds(2));
                 }
                 catch (OperationCanceledException) { }
-                catch (TimeoutException) 
+                catch (TimeoutException)
                 {
                     //On cancellation, flush any remaining items
                     FlushOutputQueue();
@@ -173,23 +187,12 @@ namespace DockerBuildBoxSystem.ViewModels.Common
         /// <param name="batch">The batch of console lines to append to the UI.</param>
         private void PostBatchToUI(UiBatch batch)
         {
-            if (_uiContext is null)
-            {
-                //constructed without the UI context, assume we are already on UI thread.
+            //constructed without the UI context, assume we are already on UI thread.
+            if (_uiContext is null || SynchronizationContext.Current == _uiContext)
                 AddLinesToUI(batch);
-                return;
-            }
-
-            if (SynchronizationContext.Current == _uiContext)
-            {
-                //already on UI thread
-                AddLinesToUI(batch);
-            }
             else
-            {
-                //call to UI thread
+                //already on UI thread
                 _uiContext.Post(_ => AddLinesToUI(batch), null);
-            }
         }
 
         /// <summary>
@@ -203,35 +206,57 @@ namespace DockerBuildBoxSystem.ViewModels.Common
             var lines = batch.Lines;
             if (lines.Count == 0) return;
 
-            if (_lines is ContainerObservableCollection<ConsoleLine> contLines)
+            //append new lines first
+            _lines.AddRange(lines);
+
+            //remove old lines if the terminal starts to exceed the set max lines
+            TrimIfNeeded();
+
+            //output events
+            var chunk = new StringBuilder();
+            foreach (var line in lines)
             {
-                contLines.AddRange(lines);
-            }
-            else
-            {
-                foreach (var line in lines)
-                {
-                    _lines.Add(line);
-                }
+                chunk.Append(line.Text);
             }
 
-            //Trim the UI by removing old lines - why? keep it responsive! otherwise... lags
-            if (_lines.Count > MaxConsoleLines)
-            {
-                var toRemove = _lines.Count - MaxConsoleLines;
-                //remove from the start
-                for (int i = 0; i < toRemove; i++)
-                {
-                    _lines.RemoveAt(0);
-                }
-            }
+            var chunkString = chunk.ToString();
+            OutputChunk?.Invoke(this, chunkString);
+            lock (_bufferLock) _buffer.Append(chunkString);
 
-            //nnbotify only for the important lines captured during batching
-            foreach (var l in batch.Important)
-            {
-                ImportantLineArrived?.Invoke(this, l);
-            }
+            // Notify only for important lines captured during batching
+            foreach (var l in batch.Important) ImportantLineArrived?.Invoke(this, l);
         }
+
+        /// <summary>
+        /// Trims the collection of lines and the associated buffer if the number of lines exceeds the maximum allowed.
+        /// </summary>
+        private void TrimIfNeeded()
+        {
+            if (_lines.Count <= MaxLines)
+                return;
+
+            var linesToRemove = _lines.Count - MaxLines;
+
+            //compute character count for removed lines
+            var charsToRemove = 0;
+            for (int i = 0; i < linesToRemove; i++)
+            {
+                charsToRemove += _lines[i].Text.Length;
+            }
+
+            _lines.RemoveRangeAt(0, linesToRemove);
+
+            lock (_bufferLock)
+            {
+                if (_buffer.Length >= charsToRemove)
+                {
+                    _buffer.Remove(0, charsToRemove);
+                }
+            }
+
+            OutputTrimmed?.Invoke(this, charsToRemove);
+        }
+
 
         /// <summary>
         /// Enqueues a line to be added to the console output on the UI thread.
@@ -255,6 +280,14 @@ namespace DockerBuildBoxSystem.ViewModels.Common
             EnqueueLine(new ConsoleLine(DateTime.Now, cleanText, isError, isImportant));
         }
 
+        /// <summary>
+        /// Discards any pending lines that haven't yet been flushed to the UI. Use when switching data sources.
+        /// </summary>
+        public void DiscardPending()
+        {
+            while (_outputQueue.TryDequeue(out _)) { }
+        }
+
         public void ClearAsync()
         {
             void DoClear()
@@ -262,10 +295,13 @@ namespace DockerBuildBoxSystem.ViewModels.Common
                 _lines.Clear();
                 //clear pending queue so old lines don't repopulate.
                 while (_outputQueue.TryDequeue(out _)) { }
+                lock (_bufferLock) _buffer.Clear();
             }
 
             if (_uiContext is null) DoClear();
             else _uiContext.Post(_ => DoClear(), null);
+
+            OutputCleared?.Invoke(this, EventArgs.Empty);
         }
 
         public async Task CopyAsync(IClipboardService clipboard)

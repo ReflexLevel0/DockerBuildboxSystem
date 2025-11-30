@@ -10,5 +10,6 @@ namespace DockerBuildBoxSystem.Contracts
     public interface ICommandRunner : IStreamReader
     {
         public Task<long> ExitCode { get; }
+        public Task<bool> TryWriteToInteractiveAsync(string raw);
     }
 }
