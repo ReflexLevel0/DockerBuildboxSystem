@@ -18,7 +18,6 @@ namespace FileWatcherApp
         private readonly TimeSpan _debounceInterval = TimeSpan.FromMilliseconds(500);
 
         private List<Regex> _ignorePatterns = new();
-
         private string _rootPath;
 
         public MainWindow()
@@ -85,7 +84,6 @@ namespace FileWatcherApp
             }
 
             _rootPath = Path.GetFullPath(path);
-
             LoadIgnorePatterns();
             SetupWatcher(path);
 
@@ -185,9 +183,7 @@ namespace FileWatcherApp
         // ============================================================
         private string ToContainerPath(string fullHostPath)
         {
-            string relative = Path.GetRelativePath(_rootPath, fullHostPath)
-                                   .Replace('\\', '/');
-
+            string relative = Path.GetRelativePath(_rootPath, fullHostPath).Replace('\\', '/');
             return "/data/" + relative;
         }
 
@@ -199,13 +195,11 @@ namespace FileWatcherApp
             if (IsIgnored(e.FullPath) || IsDuplicateEvent(e.FullPath, "Copy"))
                 return;
 
-            // Sync to Docker
             if (File.Exists(e.FullPath))
             {
                 string containerPath = ToContainerPath(e.FullPath);
                 string result = DockerCopy(e.FullPath, containerPath);
-
-                Log($"Copy {e.FullPath}  →  {containerPath}  |  {result}");
+                Log($"Copy {e.FullPath} → {containerPath} | {result}");
             }
         }
 
@@ -216,8 +210,7 @@ namespace FileWatcherApp
 
             string containerPath = ToContainerPath(e.FullPath);
             string result = DockerDelete(containerPath);
-
-            Log($"Deleted   {e.FullPath}  |  {result}");
+            Log($"Deleted {e.FullPath} | {result}");
         }
 
         private void OnFileRenamed(object sender, RenamedEventArgs e)
@@ -227,10 +220,104 @@ namespace FileWatcherApp
 
             string oldPath = ToContainerPath(e.OldFullPath);
             string newPath = ToContainerPath(e.FullPath);
-
             string result = DockerRename(oldPath, newPath);
 
-            Log($"Renamed: {e.OldFullPath} → {e.FullPath}  |  {result}");
+            Log($"Renamed: {e.OldFullPath} → {e.FullPath} | {result}");
+        }
+
+        // ============================================================
+        // FORCE SYNC
+        // ============================================================
+        private void ForceSync_Click(object sender, RoutedEventArgs e)
+        {
+            string path = PathTextBox.Text.Trim();
+
+            if (!Directory.Exists(path))
+            {
+                MessageBox.Show("Invalid directory path.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+
+            // Setup root path & ignore patterns
+            _rootPath = Path.GetFullPath(path);
+            LoadIgnorePatterns();
+
+            // Perform full folder copy
+            CopyEntireFolderToDocker();
+        }
+
+
+        // ============================================================
+        // FULL FOLDER COPY (TEMP FOLDER, IGNORE SUPPORT)
+        // ============================================================
+        private void CopyEntireFolderToDocker()
+        {
+            if (string.IsNullOrWhiteSpace(_rootPath) || !Directory.Exists(_rootPath))
+            {
+                MessageBox.Show("Root folder does not exist.", "Error",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+
+            string tempRoot = Path.Combine(Path.GetTempPath(), "FileWatcherTemp_" + Guid.NewGuid());
+
+            try
+            {
+                Directory.CreateDirectory(tempRoot);
+
+                // Copy only non-ignored files into temp folder
+                CopyToTempRecursive(_rootPath, tempRoot);
+
+                // Copy temp folder to Docker (overwrite mode)
+                string result = RunDockerCommand($"cp \"{tempRoot}{Path.DirectorySeparatorChar}.\" TestContainer:/data");
+
+                Log($"Full Folder Sync → docker:/data | {result}");
+            }
+            catch (Exception ex)
+            {
+                Log("EXCEPTION during full folder copy: " + ex.Message);
+            }
+            finally
+            {
+                try
+                {
+                    Directory.Delete(tempRoot, true);
+                }
+                catch (Exception ex)
+                {
+                    Log("Failed to delete temp folder: " + ex.Message);
+                }
+            }
+        }
+
+        private void CopyToTempRecursive(string sourceDir, string tempRoot)
+        {
+            foreach (string file in Directory.GetFiles(sourceDir))
+            {
+                if (IsIgnored(file))
+                    continue;
+
+                string relative = Path.GetRelativePath(_rootPath, file);
+                string targetFile = Path.Combine(tempRoot, relative);
+                Directory.CreateDirectory(Path.GetDirectoryName(targetFile)!);
+
+                try
+                {
+                    File.Copy(file, targetFile, true);
+                }
+                catch (Exception ex)
+                {
+                    Log($"ERROR copying file {file}: {ex.Message}");
+                }
+            }
+
+            foreach (string subDir in Directory.GetDirectories(sourceDir))
+            {
+                if (IsIgnored(subDir))
+                    continue;
+
+                CopyToTempRecursive(subDir, tempRoot);
+            }
         }
 
         // ============================================================
