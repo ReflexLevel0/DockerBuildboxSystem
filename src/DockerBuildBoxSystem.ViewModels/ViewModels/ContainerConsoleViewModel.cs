@@ -32,7 +32,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// <summary>
         /// Lines currently displayed in the console UI.
         /// </summary>
-        public ObservableCollection<ConsoleLine> Lines { get; } = new ContainerObservableCollection<ConsoleLine>();
+        public RangeObservableCollection<ConsoleLine> Lines { get; } = new RangeObservableCollection<ConsoleLine>();
 
         /// <summary>
         /// List of available containers on the host.
@@ -60,7 +60,8 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [NotifyCanExecuteChangedFor(nameof(SendCommand))]
         [NotifyCanExecuteChangedFor(nameof(RunUserCommandCommand))]
         [NotifyPropertyChangedFor(nameof(CanUseUserControls))]
-        [NotifyCanExecuteChangedFor(nameof(StartSyncCommand))]
+        [NotifyCanExecuteChangedFor(nameof(StartSyncCommand))]       
+        [NotifyCanExecuteChangedFor(nameof(StartForceSyncCommand))]
         private string _containerId = "";
 
         public bool CanUseUserControls => CanSend();
@@ -86,6 +87,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [NotifyCanExecuteChangedFor(nameof(RunUserCommandCommand))]
         [NotifyPropertyChangedFor(nameof(CanUseUserControls))]
         [NotifyCanExecuteChangedFor(nameof(StartSyncCommand))]
+        [NotifyCanExecuteChangedFor(nameof(StartForceSyncCommand))]
         private ContainerInfo? _selectedContainer;
 
         /// <summary>
@@ -94,7 +96,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [ObservableProperty]
         [NotifyCanExecuteChangedFor(nameof(SendCommand))]
         [NotifyCanExecuteChangedFor(nameof(RunUserCommandCommand))]
+        [NotifyPropertyChangedFor(nameof(CanUseUserControls))]
         [NotifyCanExecuteChangedFor(nameof(StartSyncCommand))]
+        [NotifyCanExecuteChangedFor(nameof(StartForceSyncCommand))]
         public bool _isSyncRunning;
 
         /// <summary>
@@ -139,6 +143,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                     RunUserCommandCommand.NotifyCanExecuteChanged();
                     StopExecCommand.NotifyCanExecuteChanged();
                     StartSyncCommand.NotifyCanExecuteChanged();
+                    StartForceSyncCommand.NotifyCanExecuteChanged();
                 });
 
             _logRunner.RunningChanged += (_, __) =>
@@ -148,6 +153,13 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                     StartLogsCommand.NotifyCanExecuteChanged();
                     StopLogsCommand.NotifyCanExecuteChanged();
                 });
+
+            PropertyChanged += async (s, e) =>
+            {
+                if(string.Compare(e.PropertyName, nameof(SelectedContainer)) == 0) {
+                    await OnSelectedContainerChangedAsync(SelectedContainer);
+                }
+            };
 
             UIHandler = new UILineBuffer(Lines);
         }
@@ -218,7 +230,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// Updates dependent state when the selected container changes.
         /// </summary>
         /// <param name="value">The newly selected container info or null.</param>
-        partial void OnSelectedContainerChanged(ContainerInfo? value)
+        public async Task OnSelectedContainerChangedAsync(ContainerInfo? value)
         {
             var newContainer = value;
             var oldId = _previousContainerId ?? ContainerId; // fallback to current if previous not tracked yet
@@ -250,6 +262,12 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             else
             {
                 ContainerId = string.Empty;
+            }
+
+            // Starting the new container
+            if (newContainer != null && !newContainer.IsRunning)
+            {
+                await StartContainerAsync();
             }
 
             _previousContainerId = ContainerId; // update tracker (after change)
@@ -370,7 +388,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// <summary>
         /// Determines whether sending commands is currently allowed.
         /// </summary>
-        private bool CanSend() => !string.IsNullOrWhiteSpace(ContainerId) && !_cmdRunner.IsRunning && (SelectedContainer?.IsRunning == true) && !IsSyncRunning;
+        private bool CanSend() => !string.IsNullOrWhiteSpace(ContainerId) && (SelectedContainer?.IsRunning == true) && !IsSyncRunning;
 
      
         /// <summary>
@@ -575,6 +593,27 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         }
 
         /// <summary>
+        /// Starts the force sync operation (same constraints as startSync).
+        /// This functiona should delete all sync in data from docker volume and resync everything.
+        /// To be implemented once file sync functionality is in place.
+        /// </summary>
+        [RelayCommand(CanExecute = nameof(CanSync))]
+        private async Task StartForceSyncAsync()
+        {
+            IsSyncRunning = true;
+            try
+            {
+                PostLogMessage("[force-sync] Starting force sync operation", false);
+                await Task.Delay(1000);
+                PostLogMessage("[force-sync] Completed force sync operation", false);
+            }
+            finally
+            {
+                IsSyncRunning = false;
+            }
+        }
+
+        /// <summary>
         /// Determines whether sync operation can be stopped.
         /// </summary>
         private bool CanStopSync() => IsSyncRunning;
@@ -698,11 +737,11 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private void PostLogMessage(string message, bool isError, bool isImportant = false) => UIHandler.EnqueueLine(message + "\r\n", isError, isImportant);
         #endregion
 
-            #region Cleanup
+        #region Cleanup
 
-            /// <summary>
-            /// cancel and cleanup task
-            /// </summary>
+        /// <summary>
+        /// cancel and cleanup task
+        /// </summary>
         public override async ValueTask DisposeAsync()
         {
             await StopLogsAsync();
