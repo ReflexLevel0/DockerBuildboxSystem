@@ -1,16 +1,22 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
+
+
 
 namespace DockerBuildBoxSystem.Contracts
 {
-    public class EnvVariable
+    /// <summary>
+    /// Represents an environment variable with a key and a value.
+    /// </summary>
+    /// <remarks>
+    /// This class is used to store and manage environment variables for Docker containers.
+    /// It is observable, allowing for data binding in MVVM architectures.
+    /// </remarks>
+    public partial class EnvVariable : ObservableObject
     {
-        public EnvVariable() { }
-        public string? Key { get; set; }
-        public string? Value { get; set; }
+        [ObservableProperty]
+        private string? key;
+        [ObservableProperty]
+        private string? value;
 
     }
 }
