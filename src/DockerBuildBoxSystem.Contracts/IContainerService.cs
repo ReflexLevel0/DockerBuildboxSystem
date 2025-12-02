@@ -178,6 +178,18 @@ namespace DockerBuildBoxSystem.Contracts
 
 
         /// <summary>
+        /// Executes a command inside a running container and waits for it to complete.
+        /// </summary>
+        /// <param name="containerId">The id or name of the container</param>
+        /// <param name="cmd">Command arguments (e.g., ["sh", "-c", "echo hello"])</param>
+        /// <param name="ct">Cancellation token to stop reading</param>
+        /// <returns>A tuple containing the exit code, stdout, and stderr</returns>
+        Task<(long ExitCode, string Output, string Error)> ExecAsync(
+            string containerId,
+            IReadOnlyList<string> cmd,
+            CancellationToken ct = default);
+
+        /// <summary>
         /// Runs a command inside a running container and instead streams the output as it is produced.
         /// Similar (same impl) to ExecAsync but returns output line-by-line as a Channel instead of waiting for completion.
         /// The exit code can be retrieved by reading until the channel completes, then inspecting the exec.
@@ -191,6 +203,19 @@ namespace DockerBuildBoxSystem.Contracts
             string containerId,
             IReadOnlyList<string> cmd,
             bool tty = false,
+            CancellationToken ct = default);
+
+        /// <summary>
+        /// Copies a file from the host to the container.
+        /// </summary>
+        /// <param name="containerId">The id or name of the container</param>
+        /// <param name="hostPath">The absolute path to the file on the host</param>
+        /// <param name="containerPath">The absolute path to the destination in the container</param>
+        /// <param name="ct">Cancellation token</param>
+        Task CopyFileToContainerAsync(
+            string containerId,
+            string hostPath,
+            string containerPath,
             CancellationToken ct = default);
     }
 }

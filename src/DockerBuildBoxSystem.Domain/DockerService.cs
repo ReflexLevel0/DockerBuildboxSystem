@@ -4,6 +4,7 @@ using DockerBuildBoxSystem.Contracts;
 using System;
 using System.Buffers;
 using System.Collections.Generic;
+using System.Formats.Tar;
 using System.IO;
 using System.Linq;
 using System.Numerics;
@@ -371,6 +372,67 @@ namespace DockerBuildBoxSystem.Domain
 
 
             return (outCh.Reader, inCh.Writer, exitCodeTask);
+        }
+
+        public async Task<(long ExitCode, string Output, string Error)> ExecAsync(
+            string containerId,
+            IReadOnlyList<string> cmd,
+            CancellationToken ct = default)
+        {
+            var create = await _client.Exec.CreateContainerExecAsync(containerId,
+                new ContainerExecCreateParameters
+                {
+                    Cmd = cmd.ToList(),
+                    AttachStdout = true,
+                    AttachStderr = true,
+                    Tty = false
+                }, ct);
+
+            var execId = create.ID;
+
+            using var stream = await _client.Exec.StartContainerExecAsync(execId, new ContainerExecStartParameters { Detach = false, Tty = false }, ct);
+
+            var output = await stream.ReadOutputToEndAsync(ct);
+
+            var inspect = await _client.Exec.InspectContainerExecAsync(execId, ct);
+
+            return (inspect.ExitCode, output.stdout, output.stderr);
+        }
+
+        public async Task CopyFileToContainerAsync(
+            string containerId,
+            string hostPath,
+            string containerPath,
+            CancellationToken ct = default)
+        {
+            if (!File.Exists(hostPath))
+                throw new FileNotFoundException("File not found", hostPath);
+
+            /*
+                There are no "docker cp" equivelent in the docker.dotnet nuget package.
+                However, the "docker cp" is actually just a wrapper that uses compression, see the implementation:
+                    https://github.com/docker/cli/blob/master/cli/command/container/cp.go#L418
+                
+            */
+            string fileName = Path.GetFileName(containerPath);
+            string dirName = Path.GetDirectoryName(containerPath)?.Replace('\\', '/') ?? "/";
+
+            // Ensure directory exists
+            await ExecAsync(containerId, new[] { "mkdir", "-p", dirName }, ct);
+
+            using var memoryStream = new MemoryStream();
+            using (var tarWriter = new TarWriter(memoryStream, leaveOpen: true))
+            {
+                //create a tar entry from the host file, but rename it to the target filename
+                await tarWriter.WriteEntryAsync(hostPath, fileName, ct);
+            }
+
+            memoryStream.Position = 0;
+
+            await _client.Containers.ExtractArchiveToContainerAsync(containerId,
+                new ContainerPathStatParameters { Path = dirName },
+                memoryStream,
+                ct);
         }
         #endregion
 
