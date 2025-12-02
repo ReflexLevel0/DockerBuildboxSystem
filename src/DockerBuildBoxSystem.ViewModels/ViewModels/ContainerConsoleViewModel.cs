@@ -679,8 +679,22 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             try
             {
                 PostLogMessage("[force-sync] Starting force sync operation", false);
-                await Task.Delay(1000);
+                
+                if (string.IsNullOrWhiteSpace(HostSyncPath) || !Directory.Exists(HostSyncPath))
+                {
+                     PostLogMessage("[force-sync] Error: Host sync path is invalid.", true);
+                     return;
+                }
+                
+                _fileSyncService.Configure(HostSyncPath, ContainerId, ContainerSyncPath);
+                
+                await _fileSyncService.ForceSyncAsync();
+                
                 PostLogMessage("[force-sync] Completed force sync operation", false);
+            }
+            catch (Exception ex)
+            {
+                PostLogMessage($"[force-sync-error] {ex.Message}", true);
             }
             finally
             {

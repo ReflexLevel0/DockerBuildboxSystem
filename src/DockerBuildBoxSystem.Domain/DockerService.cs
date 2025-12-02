@@ -434,6 +434,41 @@ namespace DockerBuildBoxSystem.Domain
                 memoryStream,
                 ct);
         }
+
+        public async Task CopyDirectoryToContainerAsync(
+            string containerId,
+            string hostPath,
+            string containerPath,
+            CancellationToken ct = default)
+        {
+            if (!Directory.Exists(hostPath))
+                throw new DirectoryNotFoundException($"Directory not found: {hostPath}");
+
+            //ensure the destination directory exists
+            await ExecAsync(containerId, new[] { "mkdir", "-p", containerPath }, ct);
+
+            //create a temporary tar file
+            string tempTarPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString() + ".tar");
+            try
+            {
+                //create tarball from directory
+                TarFile.CreateFromDirectory(hostPath, tempTarPath, includeBaseDirectory: false);
+
+                using var fileStream = File.OpenRead(tempTarPath);
+                
+                await _client.Containers.ExtractArchiveToContainerAsync(containerId,
+                    new ContainerPathStatParameters { Path = containerPath },
+                    fileStream,
+                    ct);
+            }
+            finally
+            {
+                if (File.Exists(tempTarPath))
+                {
+                    try { File.Delete(tempTarPath); } catch { }
+                }
+            }
+        }
         #endregion
 
 

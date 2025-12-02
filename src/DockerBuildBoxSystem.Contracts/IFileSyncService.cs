@@ -1,5 +1,6 @@
 using System;
 using System.Collections.ObjectModel;
+using System.Threading.Tasks;
 
 namespace DockerBuildBoxSystem.Contracts
 {
@@ -9,8 +10,11 @@ namespace DockerBuildBoxSystem.Contracts
     public interface IFileSyncService : IDisposable
     {
         ObservableCollection<string> Changes { get; }
+        void Configure(string path, string containerId, string containerRootPath = "/data/");
         void StartWatching(string path, string containerId, string containerRootPath = "/data/");
         void StopWatching();
+        Task ForceSyncAsync();
         void UpdateIgnorePatterns(string patterns);
     }
 }
+

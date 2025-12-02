@@ -217,5 +217,18 @@ namespace DockerBuildBoxSystem.Contracts
             string hostPath,
             string containerPath,
             CancellationToken ct = default);
+
+        /// <summary>
+        /// Copies a directory from the host to the container.
+        /// </summary>
+        /// <param name="containerId">The id or name of the container</param>
+        /// <param name="hostPath">The absolute path to the directory on the host</param>
+        /// <param name="containerPath">The absolute path to the destination directory in the container</param>
+        /// <param name="ct">Cancellation token</param>
+        Task CopyDirectoryToContainerAsync(
+            string containerId,
+            string hostPath,
+            string containerPath,
+            CancellationToken ct = default);
     }
 }

@@ -31,20 +31,25 @@ namespace DockerBuildBoxSystem.Domain
             _ignorePatternMatcher = ignorePatternMatcher ?? throw new ArgumentNullException(nameof(ignorePatternMatcher));
         }
 
-        public void StartWatching(string path, string containerId, string containerRootPath = "/data/")
+        public void Configure(string path, string containerId, string containerRootPath = "/data/")
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Path cannot be empty", nameof(path));
             if (string.IsNullOrWhiteSpace(containerId)) throw new ArgumentException("ContainerId cannot be empty", nameof(containerId));
 
-            if (!Directory.Exists(path))
-            {
-                Log($"Error: Directory does not exist: {path}");
-                return;
-            }
-
             _rootPath = Path.GetFullPath(path);
             _containerId = containerId;
             _containerRootPath = containerRootPath;
+        }
+
+        public void StartWatching(string path, string containerId, string containerRootPath = "/data/")
+        {
+            Configure(path, containerId, containerRootPath);
+
+            if (!Directory.Exists(_rootPath))
+            {
+                Log($"Error: Directory does not exist: {_rootPath}");
+                return;
+            }
 
             //Stop if already running
             StopWatching();
@@ -82,6 +87,102 @@ namespace DockerBuildBoxSystem.Domain
                 _watcher.Dispose();
                 _watcher = null;
                 Log("Stopped watching.");
+            }
+        }
+
+        public async Task ForceSyncAsync()
+        {
+            if (string.IsNullOrWhiteSpace(_rootPath) || !Directory.Exists(_rootPath))
+            {
+                Log("Error: Invalid directory path.");
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(_containerId))
+            {
+                Log("Error: Container ID is not set.");
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(_containerRootPath))
+            {
+                Log("Error: Sync path is not set.");
+                return;
+            }
+
+            string tempRoot = Path.Combine(Path.GetTempPath(), "FileWatcherTemp_" + Guid.NewGuid());
+
+            try
+            {
+                Log("Starting Force Sync...");
+                Directory.CreateDirectory(tempRoot);
+
+                //copy only non-ignored files into temp folder
+                CopyToTempRecursive(_rootPath, tempRoot);
+
+                /*
+                //clean destination first to ensure mirror sync
+                Log($"Cleaning container directory: {_containerRootPath}");
+                var (cleanSuccess, cleanError) = await _fileTransferService.EmptyDirectoryInContainerAsync(_containerId, _containerRootPath);
+                if (!cleanSuccess)
+                {
+                    Log($"Warning: Failed to clean container directory: {cleanError}.");
+                }
+                */
+
+                //copy temp folder to Docker
+                var (success, error) = await _fileTransferService.CopyDirectoryToContainerAsync(_containerId, tempRoot, _containerRootPath);
+                
+                if (success)
+                    Log($"Full Folder Sync -> {_containerId}:{_containerRootPath} | Success");
+                else
+                    Log($"Full Folder Sync Failed | {error}");
+            }
+            catch (Exception ex)
+            {
+                Log("EXCEPTION during full folder copy: " + ex.Message);
+            }
+            finally
+            {
+                try
+                {
+                    if(Directory.Exists(tempRoot))
+                        Directory.Delete(tempRoot, true);
+                }
+                catch (Exception ex)
+                {
+                    Log("Failed to delete temp folder: " + ex.Message);
+                }
+            }
+        }
+
+        private void CopyToTempRecursive(string sourceDir, string tempRoot)
+        {
+            foreach (string file in Directory.GetFiles(sourceDir))
+            {
+                if (IsIgnored(file))
+                    continue;
+
+                string relative = Path.GetRelativePath(_rootPath!, file);
+                string targetFile = Path.Combine(tempRoot, relative);
+                Directory.CreateDirectory(Path.GetDirectoryName(targetFile)!);
+
+                try
+                {
+                    File.Copy(file, targetFile, true);
+                }
+                catch (Exception ex)
+                {
+                    Log($"ERROR copying file {file}: {ex.Message}");
+                }
+            }
+
+            foreach (string subDir in Directory.GetDirectories(sourceDir))
+            {
+                if (IsIgnored(subDir))
+                    continue;
+
+                CopyToTempRecursive(subDir, tempRoot);
             }
         }
 
