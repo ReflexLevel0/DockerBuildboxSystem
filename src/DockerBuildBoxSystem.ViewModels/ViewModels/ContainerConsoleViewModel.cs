@@ -103,6 +103,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [NotifyPropertyChangedFor(nameof(CanUseUserControls))]
         [NotifyCanExecuteChangedFor(nameof(StartSyncCommand))]
         [NotifyCanExecuteChangedFor(nameof(StartForceSyncCommand))]
+        [NotifyCanExecuteChangedFor(nameof(StopSyncCommand))]
         public bool _isSyncRunning;
 
         /// <summary>
@@ -662,9 +663,8 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             catch (Exception ex)
             {
                 PostLogMessage($"[sync-error] {ex.Message}", true);
+                IsSyncRunning = false;
             }
-
-            IsSyncRunning = false;
         }
 
         /// <summary>
