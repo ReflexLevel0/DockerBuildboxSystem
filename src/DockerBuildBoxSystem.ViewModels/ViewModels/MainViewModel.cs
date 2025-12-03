@@ -25,6 +25,12 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     private string? _sourcePath;
 
+    /// <summary>
+    /// The selected sync-out path from the folder picker.
+    /// </summary>
+    [ObservableProperty]
+    private string? _syncOutPath;
+
     public MainViewModel(IConfiguration configuration)
     {
         _configuration = configuration;
@@ -134,6 +140,18 @@ public partial class MainViewModel : ViewModelBase
                     _isLoadingSourcePath = false;
                 }
             }
+            // Also load SyncOutFolderPath if present
+            if (doc.RootElement.TryGetProperty("Application", out var appElem2) &&
+                appElem2.TryGetProperty("SyncOutFolderPath", out var syncOutElem))
+            {
+                var syncPersisted = syncOutElem.GetString();
+                if (!string.IsNullOrWhiteSpace(syncPersisted))
+                {
+                    _isLoadingSourcePath = true;
+                    SyncOutPath = syncPersisted; // suppressed
+                    _isLoadingSourcePath = false;
+                }
+            }
         }
         catch (Exception ex)
         {
@@ -147,6 +165,13 @@ public partial class MainViewModel : ViewModelBase
         if (string.IsNullOrWhiteSpace(value)) return;
         // fire and forget persistence
         _ = PersistSourcePathAsync(value);
+    }
+
+    partial void OnSyncOutPathChanged(string? value)
+    {
+        if (_isLoadingSourcePath) return;
+        if (string.IsNullOrWhiteSpace(value)) return;
+        _ = PersistSyncOutPathAsync(value);
     }
 
     /// <summary>
@@ -183,6 +208,37 @@ public partial class MainViewModel : ViewModelBase
     }
 
     /// <summary>
+    /// Writes the persisted SyncOutFolderPath to appsettings.json.
+    /// </summary>
+    private static async Task PersistSyncOutPathAsync(string path)
+    {
+        try
+        {
+            var configDir = Path.Combine(AppContext.BaseDirectory, "Config");
+            Directory.CreateDirectory(configDir);
+            var filePath = Path.Combine(configDir, "appsettings.json");
+
+            System.Text.Json.Nodes.JsonNode? rootNode = null;
+            if (File.Exists(filePath))
+            {
+                var existing = await File.ReadAllTextAsync(filePath);
+                try { rootNode = System.Text.Json.Nodes.JsonNode.Parse(existing); } catch { rootNode = null; }
+            }
+            rootNode ??= new System.Text.Json.Nodes.JsonObject();
+            var appNode = rootNode["Application"] as System.Text.Json.Nodes.JsonObject ?? new System.Text.Json.Nodes.JsonObject();
+            rootNode["Application"] = appNode;
+            appNode["SyncOutFolderPath"] = path;
+
+            var json = rootNode.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+            await File.WriteAllTextAsync(filePath, json);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[persist-syncoutpath-error] {ex.Message}", true, true);
+        }
+    }
+
+    /// <summary>
     /// Opens a folder picker (must run on UI thread) and assigns the selected path.
     /// Removed background Task.Run to ensure the dialog actually shows.
     /// </summary>
@@ -210,5 +266,34 @@ public partial class MainViewModel : ViewModelBase
         }
 
         await Task.CompletedTask; // Maintain async signature for RelayCommand
+    }
+
+    /// <summary>
+    /// Opens a folder picker for SyncOut directory and assigns the selected path.
+    /// </summary>
+    [RelayCommand(AllowConcurrentExecutions = false)]
+    private async Task SelectSyncOutPath()
+    {
+        try
+        {
+            using var dialog = new System.Windows.Forms.FolderBrowserDialog
+            {
+                Description = "Select a sync-out folder",
+                UseDescriptionForTitle = true,
+                ShowNewFolderButton = true
+            };
+
+            var result = dialog.ShowDialog();
+            if (result == System.Windows.Forms.DialogResult.OK && !string.IsNullOrWhiteSpace(dialog.SelectedPath))
+            {
+                SyncOutPath = dialog.SelectedPath;
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[folder-picker-error] {ex.Message}", true, true);
+        }
+
+        await Task.CompletedTask;
     }
 }

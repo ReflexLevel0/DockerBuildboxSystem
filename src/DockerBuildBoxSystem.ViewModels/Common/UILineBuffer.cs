@@ -33,6 +33,7 @@ namespace DockerBuildBoxSystem.ViewModels.Common
 
         public event EventHandler<string>? OutputChunk;
         public event EventHandler? OutputCleared;
+        public event EventHandler<int>? OutputTrimmed;
 
         private readonly StringBuilder _buffer = new();
         private readonly object _bufferLock = new();
@@ -43,7 +44,7 @@ namespace DockerBuildBoxSystem.ViewModels.Common
         /// <summary>
         /// Lines currently displayed in the console UI.
         /// </summary>
-        private readonly ObservableCollection<ConsoleLine> _lines;
+        private readonly RangeObservableCollection<ConsoleLine> _lines;
 
         private readonly SynchronizationContext? _uiContext;
 
@@ -52,18 +53,13 @@ namespace DockerBuildBoxSystem.ViewModels.Common
         private CancellationTokenSource? _uiUpdateCts;
         private Task? _uiUpdateTask;
 
-        public int MaxPendingLines { get; set; } = 2000;
-        private int _pendingCount;
-        private int _skippedLines;
-
         // ANSI escape code, RegexOptions.Compiled for better performance compiling regex 
         private static readonly Regex AnsiRegex =
             new(@"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])|\a|\r", RegexOptions.Compiled);
 
-
-        public int MaxConsoleLines { get; set; } = 500;
         public int MaxLinesPerTick { get; set; } = 50;
-        public TimeSpan Interval { get; }
+        public int MaxLines { get; set; } = 1000;
+        public TimeSpan Interval { get; } = TimeSpan.FromMilliseconds(200);
 
         /// <summary>
         /// Raised whenever an important line is added to the UI, ex a error line that needs attention.
@@ -71,10 +67,10 @@ namespace DockerBuildBoxSystem.ViewModels.Common
         /// </summary>
         public event EventHandler<ConsoleLine>? ImportantLineArrived;
 
-        public UILineBuffer(ObservableCollection<ConsoleLine> lines, TimeSpan? interval = null, SynchronizationContext? uiContext = null)
+        public UILineBuffer(RangeObservableCollection<ConsoleLine> lines, TimeSpan? interval = null, SynchronizationContext? uiContext = null)
         {
             _lines = lines;
-            Interval = interval ?? TimeSpan.FromMilliseconds(75);
+            Interval = interval ?? Interval;
             _uiContext = uiContext ?? SynchronizationContext.Current;
         }
 
@@ -100,18 +96,17 @@ namespace DockerBuildBoxSystem.ViewModels.Common
                 {
                     while (await uiTimer.WaitForNextTickAsync(ct).ConfigureAwait(false))
                     {
+                        if (_outputQueue.IsEmpty)
+                            continue;
+
                         //Restrict the number of lines per tick
                         //If we dequeue everything at once it might overwhelm the UI
                         var batch = new List<ConsoleLine>(MaxLinesPerTick);
                         var important = new List<ConsoleLine>();
-                        var skipped = Interlocked.Exchange(ref _skippedLines, 0);
-                        if (skipped > 0)
-                            batch.Add(new ConsoleLine(DateTime.Now, $"... {skipped} lines skipped ...\r\n", false, true));
 
                         while (batch.Count < MaxLinesPerTick && _outputQueue.TryDequeue(out var line))
                         {
                             batch.Add(line);
-                            Interlocked.Decrement(ref _pendingCount);
                             if (line.IsImportant)
                                 important.Add(line);
                         }
@@ -178,7 +173,6 @@ namespace DockerBuildBoxSystem.ViewModels.Common
                 while (batch.Count < MaxLinesPerTick && _outputQueue.TryDequeue(out var line))
                 {
                     batch.Add(line);
-                    Interlocked.Decrement(ref _pendingCount);
                     if (line.IsImportant)
                         important.Add(line);
                 }
@@ -213,24 +207,10 @@ namespace DockerBuildBoxSystem.ViewModels.Common
             if (lines.Count == 0) return;
 
             //append new lines first
-            foreach (var l in lines) _lines.Add(l);
+            _lines.AddRange(lines);
 
-            //force MaxConsoleLines by keeping only the last MaxConsoleLines entries
-            if (_lines.Count > MaxConsoleLines)
-            {
-                //comp how many to remove
-                int excess = _lines.Count - MaxConsoleLines;
-                if (_lines is ContainerObservableCollection<ConsoleLine> ranged)
-                {
-                    var newList = _lines.Skip(excess).ToList();
-                    ranged.ClearAndAddRange(newList);
-                }
-                else
-                {
-                    //remove oldest one by one
-                    for (int i = 0; i < excess; i++) _lines.RemoveAt(0);
-                }
-            }
+            //remove old lines if the terminal starts to exceed the set max lines
+            TrimIfNeeded();
 
             //output events
             var chunk = new StringBuilder();
@@ -238,12 +218,45 @@ namespace DockerBuildBoxSystem.ViewModels.Common
             {
                 chunk.Append(line.Text);
             }
-            OutputChunk?.Invoke(this, chunk.ToString());
-            lock (_bufferLock) _buffer.Append(chunk);
+
+            var chunkString = chunk.ToString();
+            OutputChunk?.Invoke(this, chunkString);
+            lock (_bufferLock) _buffer.Append(chunkString);
 
             // Notify only for important lines captured during batching
             foreach (var l in batch.Important) ImportantLineArrived?.Invoke(this, l);
         }
+
+        /// <summary>
+        /// Trims the collection of lines and the associated buffer if the number of lines exceeds the maximum allowed.
+        /// </summary>
+        private void TrimIfNeeded()
+        {
+            if (_lines.Count <= MaxLines)
+                return;
+
+            var linesToRemove = _lines.Count - MaxLines;
+
+            //compute character count for removed lines
+            var charsToRemove = 0;
+            for (int i = 0; i < linesToRemove; i++)
+            {
+                charsToRemove += _lines[i].Text.Length;
+            }
+
+            _lines.RemoveRangeAt(0, linesToRemove);
+
+            lock (_bufferLock)
+            {
+                if (_buffer.Length >= charsToRemove)
+                {
+                    _buffer.Remove(0, charsToRemove);
+                }
+            }
+
+            OutputTrimmed?.Invoke(this, charsToRemove);
+        }
+
 
         /// <summary>
         /// Enqueues a line to be added to the console output on the UI thread.
@@ -251,16 +264,7 @@ namespace DockerBuildBoxSystem.ViewModels.Common
         /// <param name="line">The console line to enqueue.</param>
         public void EnqueueLine(ConsoleLine line)
         {
-            //Volatile read to always fetch the latest value
-            while (Volatile.Read(ref _pendingCount) >= MaxPendingLines && _outputQueue.TryDequeue(out _))
-            {
-                //interlocked to modify the value safely without race conditions (esp. since we have a separate UI task decrementing it).
-                //Decrement -> - 1 to variable, Increment -> +1 to variable
-                Interlocked.Decrement(ref _pendingCount);
-                Interlocked.Increment(ref _skippedLines);
-            }
             _outputQueue.Enqueue(line);
-            Interlocked.Increment(ref _pendingCount);
         }
 
         /// <summary>
@@ -282,7 +286,6 @@ namespace DockerBuildBoxSystem.ViewModels.Common
         public void DiscardPending()
         {
             while (_outputQueue.TryDequeue(out _)) { }
-            Interlocked.Exchange(ref _pendingCount, 0);
         }
 
         public void ClearAsync()
@@ -292,7 +295,6 @@ namespace DockerBuildBoxSystem.ViewModels.Common
                 _lines.Clear();
                 //clear pending queue so old lines don't repopulate.
                 while (_outputQueue.TryDequeue(out _)) { }
-                Interlocked.Exchange(ref _pendingCount, 0);
                 lock (_bufferLock) _buffer.Clear();
             }
 

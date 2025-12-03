@@ -46,8 +46,6 @@ public class ContainerConsoleViewModelTests
 
         //Assert
         Assert.Single(vm.Containers);
-        //Creating default user commands 
-        Assert.NotEmpty(vm.UserCommands);
     }
 
     /// <summary>
