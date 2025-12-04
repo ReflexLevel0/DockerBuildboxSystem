@@ -4,6 +4,7 @@ using DockerBuildBoxSystem.Contracts;
 using DockerBuildBoxSystem.Domain;
 using DockerBuildBoxSystem.Models;
 using DockerBuildBoxSystem.ViewModels.Common;
+using Microsoft.Extensions.Configuration;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
@@ -23,6 +24,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
     public sealed partial class ContainerConsoleViewModel : ViewModelBase
     {
         private readonly IContainerService _service;
+        private readonly IFileSyncService _fileSyncService;
+        private readonly IConfiguration _configuration;
+        private readonly ISettingsService _settingsService;
         private readonly IClipboardService? _clipboard;
         private readonly ILogRunner _logRunner;
         private readonly ICommandRunner _cmdRunner;
@@ -99,6 +103,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [NotifyPropertyChangedFor(nameof(CanUseUserControls))]
         [NotifyCanExecuteChangedFor(nameof(StartSyncCommand))]
         [NotifyCanExecuteChangedFor(nameof(StartForceSyncCommand))]
+        [NotifyCanExecuteChangedFor(nameof(StopSyncCommand))]
         public bool _isSyncRunning;
 
         /// <summary>
@@ -119,6 +124,18 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [ObservableProperty]
         private bool _autoStartLogs = true;
 
+        /// <summary>
+        /// The host path to sync files from.
+        /// </summary>
+        [ObservableProperty]
+        private string _hostSyncPath = string.Empty;
+
+        /// <summary>
+        /// The container path to sync files to.
+        /// </summary>
+        [ObservableProperty]
+        private string _containerSyncPath = "/data/";
+
         // Track previous selected container id to manage stop-on-switch behavior
         private string? _previousContainerId;
 
@@ -126,15 +143,30 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// Initializes a new instance of the <see cref="ContainerConsoleViewModel"/> class.
         /// </summary>
         /// <param name="service">The container service used to interact with containers, ex Docker.</param>
+        /// <param name="fileSyncService">The file sync service.</param>
+        /// <param name="configuration">The application configuration.</param>
+        /// <param name="settingsService">The settings service.</param>
         /// <param name="clipboard">Optional clipboard service for copying the text output.</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="service"/> is null.</exception>
-        public ContainerConsoleViewModel(IContainerService service, IClipboardService? clipboard = null) : base()
+        public ContainerConsoleViewModel(
+            IContainerService service, 
+            IFileSyncService fileSyncService,
+            IConfiguration configuration,
+            ISettingsService settingsService,
+            IClipboardService? clipboard = null) : base()
         {
             _service = service ?? throw new ArgumentNullException(nameof(service));
+            _fileSyncService = fileSyncService ?? throw new ArgumentNullException(nameof(fileSyncService));
+            _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+            _settingsService = settingsService ?? throw new ArgumentNullException(nameof(settingsService));
             _clipboard = clipboard;
 
             _logRunner = new LogRunner();
             _cmdRunner = new CommandRunner();
+            
+            //initialize from settings service
+            _ = InitializeSettingsAsync();
+
             _cmdRunner.RunningChanged += (_, __) =>
                 SetOnUiThread(() =>
                 {
@@ -154,6 +186,20 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                     StopLogsCommand.NotifyCanExecuteChanged();
                 });
 
+            _fileSyncService.Changes.CollectionChanged += (s, e) =>
+            {
+                if (e.NewItems != null)
+                {
+                    foreach (string item in e.NewItems)
+                    {
+                        PostLogMessage($"[sync] {item}", false);
+                    }
+                }
+            };
+            
+            //listen for settings changes
+            _settingsService.SourcePathChanged += OnSourcePathChanged;
+
             PropertyChanged += async (s, e) =>
             {
                 if(string.Compare(e.PropertyName, nameof(SelectedContainer)) == 0) {
@@ -162,6 +208,22 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             };
 
             UIHandler = new UILineBuffer(Lines);
+        }
+
+        private async Task InitializeSettingsAsync()
+        {
+            await _settingsService.LoadSettingsAsync();
+            HostSyncPath = _settingsService.SourceFolderPath;
+        }
+
+        private void OnSourcePathChanged(object? sender, string newPath)
+        {
+            HostSyncPath = newPath;
+            //if sync is running, we might want to restart it or notify user
+            if (IsSyncRunning)
+            {
+                UIHandler.EnqueueLine($"[sync] Warning: Source path changed to {newPath}. Stop and restart sync to apply.", true);
+            }
         }
 
         /// <summary>
@@ -388,7 +450,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// <summary>
         /// Determines whether sending commands is currently allowed.
         /// </summary>
-        private bool CanSend() => !string.IsNullOrWhiteSpace(ContainerId) && (SelectedContainer?.IsRunning == true) && !IsSyncRunning;
+        private bool CanSend() => !string.IsNullOrWhiteSpace(ContainerId) && (SelectedContainer?.IsRunning == true);
 
      
         /// <summary>
@@ -577,17 +639,30 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// <summary>
         /// Starts the sync operation.
         /// </summary>
-        /// <remarks>Temporary implementation.</remarks>
         [RelayCommand(CanExecute = nameof(CanSync))]
         private async Task StartSyncAsync()
         {
+            if (string.IsNullOrWhiteSpace(HostSyncPath))
+            {
+                PostLogMessage("[sync-error] Error: Host sync path is not set!", true);
+                return;
+            }
+
+            if (!Directory.Exists(HostSyncPath))
+            {
+                PostLogMessage($"[sync-error] Error: Host directory does not exist: {HostSyncPath}", true);
+                return;
+            }
+
             IsSyncRunning = true;
             try
             {
-                await Task.Delay(1000);
+                _fileSyncService.StartWatching(HostSyncPath, ContainerId, ContainerSyncPath);
+                await Task.CompletedTask;
             }
-            finally
+            catch (Exception ex)
             {
+                PostLogMessage($"[sync-error] {ex.Message}", true);
                 IsSyncRunning = false;
             }
         }
@@ -604,8 +679,22 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             try
             {
                 PostLogMessage("[force-sync] Starting force sync operation", false);
-                await Task.Delay(1000);
+                
+                if (string.IsNullOrWhiteSpace(HostSyncPath) || !Directory.Exists(HostSyncPath))
+                {
+                     PostLogMessage("[force-sync] Error: Host sync path is invalid.", true);
+                     return;
+                }
+                
+                _fileSyncService.Configure(HostSyncPath, ContainerId, ContainerSyncPath);
+                
+                await _fileSyncService.ForceSyncAsync();
+                
                 PostLogMessage("[force-sync] Completed force sync operation", false);
+            }
+            catch (Exception ex)
+            {
+                PostLogMessage($"[force-sync-error] {ex.Message}", true);
             }
             finally
             {
@@ -621,10 +710,13 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// <summary>
         /// Stops the current sync task, if it is running.
         /// </summary>
-        [RelayCommand(CanExecute = nameof(CanStopLogs))]
+        [RelayCommand(CanExecute = nameof(CanStopSync))]
         private async Task StopSyncAsync()
         {
+            _fileSyncService.StopWatching();
             IsSyncRunning = false;
+            PostLogMessage("[sync] Stopped watching.", false);
+            await Task.CompletedTask;
         }
         #endregion
 
@@ -744,6 +836,8 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// </summary>
         public override async ValueTask DisposeAsync()
         {
+            _settingsService.SourcePathChanged -= OnSourcePathChanged;
+            _fileSyncService.StopWatching();
             await StopLogsAsync();
             await StopExecAsync();
             await UIHandler.StopAsync();
