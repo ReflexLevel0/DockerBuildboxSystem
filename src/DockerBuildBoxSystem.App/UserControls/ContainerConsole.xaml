@@ -15,7 +15,7 @@
     <UserControl.Resources>
         <converters:StateToColorConverter x:Key="StateToColorConverter" />
     </UserControl.Resources>
-    
+
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -82,7 +82,7 @@
                      Padding="8,4"
                      MinWidth="70"
                      Command="{Binding StartSyncCommand}"/>
-                 <Button Content="Force Sync"
+                <Button Content="Force Sync"
                      Margin="0,0,0,0"
                      Padding="8,4"
                      MinWidth="90"
@@ -137,12 +137,22 @@
                                  FontFamily="Consolas"
                                  FontSize="12"
                                  IsEnabled="{Binding DataContext.CanUseUserControls, RelativeSource={RelativeSource AncestorType=ItemsControl}}"/>
-
                     </StackPanel>
                 </DataTemplate>
             </ItemsControl.Resources>
 
-        </ItemsControl>
+            </ItemsControl>
+            <Grid Grid.Column="1">
+                <Button Content=".env"
+                     ToolTip="Edit Environmental Variables"
+                     Margin="0,0,6,0"
+                     Padding="8,4"
+                     Command="{Binding EnvironmentVM.OpenEnvFileCommand}"
+                     Width="40" Height="25">
+                </Button>
+            </Grid>
+
+        </Grid>
         <!-- Output TextBox -->
         <Grid Grid.Row="2" ClipToBounds="True">
             <TextBox x:Name="TerminalOutput" 
@@ -166,7 +176,7 @@
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="25" />
             </Grid.ColumnDefinitions>
-            
+
             <TextBox x:Name="Input"
                  Grid.Column="0"
                  FontFamily="Consolas"
@@ -177,12 +187,12 @@
                     <KeyBinding Key="Enter" Command="{Binding SendCommand}" />
                 </TextBox.InputBindings>
             </TextBox>
-            
+
             <Button Grid.Column="1"
                     Content="Send"
                     Padding="12,4"
                     Command="{Binding SendCommand}" />
-            
+
             <Button Grid.Column="2"
                     Content="Stop"
                     Padding="12,4"
