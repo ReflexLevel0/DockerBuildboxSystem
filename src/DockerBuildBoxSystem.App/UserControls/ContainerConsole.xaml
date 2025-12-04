@@ -82,6 +82,11 @@
                      Padding="8,4"
                      MinWidth="70"
                      Command="{Binding StartSyncCommand}"/>
+                 <Button Content="Force Sync"
+                     Margin="0,0,0,0"
+                     Padding="8,4"
+                     MinWidth="90"
+                     Command="{Binding StartForceSyncCommand}"/>
             </StackPanel>
         </Grid>
 
