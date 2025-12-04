@@ -23,6 +23,7 @@
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
+        
         <!-- Container Selector -->
         <Grid Grid.Row="0" Margin="6">
             <Grid.ColumnDefinitions>
@@ -145,19 +146,20 @@
                     </StackPanel>
                 </DataTemplate>
             </ItemsControl.Resources>
+        </ItemsControl>
 
-            </ItemsControl>
-            <Grid Grid.Column="1">
-                <Button Content=".env"
-                     ToolTip="Edit Environmental Variables"
-                     Margin="0,0,6,0"
-                     Padding="8,4"
-                     Command="{Binding EnvironmentVM.OpenEnvFileCommand}"
-                     Width="40" Height="25">
-                </Button>
-            </Grid>
-
+        <Grid Grid.Row="1">
+            <Button Content=".env"
+                    ToolTip="Edit Environmental Variables"
+                    Margin="0,0,6,0"
+                    Padding="8,4"
+                    Command="{Binding EnvironmentVM.OpenEnvFileCommand}"
+                    Width="40" Height="25"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Center">
+            </Button>
         </Grid>
+
         <!-- Output TextBox -->
         <Grid Grid.Row="2" ClipToBounds="True">
             <TextBox x:Name="TerminalOutput" 
@@ -173,6 +175,7 @@
                 <Button Content="Clear" Command="{Binding ClearCommand}" Padding="4,2"/>
             </StackPanel>
         </Grid>
+        
         <!-- Input -->
         <Grid Grid.Row="3" Margin="6">
             <Grid.ColumnDefinitions>
