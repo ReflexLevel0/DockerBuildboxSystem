@@ -2,6 +2,7 @@ using System.Threading.Channels;
 using DockerBuildBoxSystem.Contracts;
 using DockerBuildBoxSystem.ViewModels.ViewModels;
 using DockerBuildBoxSystem.ViewModels.Common;
+using Microsoft.Extensions.Configuration;
 using NSubstitute;
 using static DockerBuildBoxSystem.TestUtils.ChannelTestUtil;
 
@@ -11,12 +12,19 @@ public class ContainerConsoleViewModelTests
 {
     private static ContainerConsoleViewModel CreateViewModel(
         IContainerService? service = null,
+        IFileSyncService? fileSyncService = null,
+        IConfiguration? configuration = null,
+        ISettingsService? settingsService = null,
         IClipboardService? clipboard = null)
     {
         service ??= Substitute.For<IContainerService>();
+        fileSyncService ??= Substitute.For<IFileSyncService>();
+        fileSyncService.Changes.Returns(new System.Collections.ObjectModel.ObservableCollection<string>());
+        configuration ??= Substitute.For<IConfiguration>();
+        settingsService ??= Substitute.For<ISettingsService>();
         clipboard ??= Substitute.For<IClipboardService>();
 
-        return new ContainerConsoleViewModel(service, clipboard);
+        return new ContainerConsoleViewModel(service, fileSyncService, configuration, settingsService, clipboard);
     }
 
     /// <summary>
@@ -202,7 +210,7 @@ public class ContainerConsoleViewModelTests
         var ContainerService = Substitute.For<IContainerService>();
         var Clipboard = Substitute.For<IClipboardService>();
 
-        var vm = CreateViewModel(ContainerService, Clipboard);
+        var vm = CreateViewModel(service: ContainerService, clipboard: Clipboard);
 
         ContainerService
             .InspectAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())

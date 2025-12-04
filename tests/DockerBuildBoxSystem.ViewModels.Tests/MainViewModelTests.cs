@@ -1,3 +1,4 @@
+using DockerBuildBoxSystem.Contracts;
 using DockerBuildBoxSystem.ViewModels.Main;
 using Microsoft.Extensions.Configuration;
 using NSubstitute;
@@ -12,8 +13,9 @@ public class MainViewModelTests
         var cfg = Substitute.For<IConfiguration>();
         cfg["Application:Name"].Returns("CoolApp");
         cfg["Application:Version"].Returns("1.2.3");
+        var settingsService = Substitute.For<ISettingsService>();
 
-        var vm = new MainViewModel(cfg);
+        var vm = new MainViewModel(cfg, settingsService);
 
         Assert.Equal("CoolApp v1.2.3", vm.Title);
     }
@@ -24,8 +26,9 @@ public class MainViewModelTests
         var cfg = Substitute.For<IConfiguration>();
         cfg["Application:Name"].Returns("CoolApp");
         cfg["Application:Version"].Returns((string?)null);
+        var settingsService = Substitute.For<ISettingsService>();
 
-        var vm = new MainViewModel(cfg);
+        var vm = new MainViewModel(cfg, settingsService);
 
         Assert.Equal("CoolApp", vm.Title);
     }
@@ -34,7 +37,8 @@ public class MainViewModelTests
     public async Task ExitCommand_Raises_ExitRequested()
     {
         var cfg = Substitute.For<IConfiguration>();
-        var vm = new MainViewModel(cfg);
+        var settingsService = Substitute.For<ISettingsService>();
+        var vm = new MainViewModel(cfg, settingsService);
 
         var raised = false;
         vm.ExitRequested += (_, _) => raised = true;
