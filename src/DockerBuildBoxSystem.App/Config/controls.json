@@ -1,0 +1,62 @@
+﻿[
+
+  {
+    "Control": "dropdown",
+    "Id": "platform",
+    "Label": "Platform:",
+    "Values": [ "arm", "intel", "x86" ],
+    "Tooltip": "Choose your platform"
+  },
+  {
+    "Control": "dropdown",
+    "Id": "target",
+    "Label": "Target:",
+    "Values": [ "builder", "dev", "prod", "test" ],
+    "Tooltip": "Choose your target"
+  },
+  {
+    "Control": "textbox",
+    "Id": "username",
+    "Label": "username:",
+    "Tooltip": "Enter a username"
+  },
+  {
+    "Control": "textbox",
+    "Id": "password",
+    "Label": "password:",
+    "Tooltip": "Enter a password"
+  },
+  {
+    "Control": "button",
+    "Command": [ "ls", "${password}" ],
+    "Tooltip": "List app directory",
+    "IconPath": "Assets/icons/list.png"
+
+  },
+  {
+    "Control": "button",
+    "Command": [ "printenv" ],
+    "Tooltip": "Show environment variables",
+    "IconPath": "Assets/icons/show-env.png"
+  },
+  {
+    "Control": "button",
+    "Command": [ "df", "-h" ],
+    "Tooltip": "Check disk usage",
+    "IconPath": "Assets/icons/check-disk.png"
+  },
+  {
+    "Control": "button",
+    "Command": [ "uptime" ],
+    "Tooltip": "Show system uptime",
+    "IconPath": "Assets/icons/uptime.png"
+
+  },
+  {
+    "Control": "button",
+    "Command": [ "ps", "aux" ],
+    "Tooltip": "List running processes",
+    "IconPath": "Assets/icons/processes.png"
+  }
+
+]

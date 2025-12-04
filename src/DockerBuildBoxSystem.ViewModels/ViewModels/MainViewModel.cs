@@ -4,6 +4,7 @@ using DockerBuildBoxSystem.Contracts;
 using DockerBuildBoxSystem.ViewModels.Common;
 using Microsoft.Extensions.Configuration;
 using System.Text.Json;
+using DockerBuildBoxSystem.Contracts;
 
 namespace DockerBuildBoxSystem.ViewModels.Main;
 
@@ -14,6 +15,7 @@ public partial class MainViewModel : ViewModelBase
 {
     private readonly IConfiguration _configuration;
     private readonly IDialogService _dialogService;
+    private readonly ISettingsService _settingsService;
     // Suppress persisting SourcePath while we are loading the initial value
     private bool _isLoadingSourcePath;
 
@@ -33,11 +35,12 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     private string? _syncOutPath;
 
-    public MainViewModel(IConfiguration configuration, IDialogService dialogService)
+    public MainViewModel(IConfiguration configuration, IDialogService dialogService, ISettingsService settingsService)
     {
         _configuration = configuration;
         _dialogService = dialogService;
-
+        _settingsService = settingsService;
+        
         //load title from configuration
         var appName = _configuration["Application:Name"] ?? "Docker BuildBox System";
         var version = _configuration["Application:Version"];
@@ -123,38 +126,18 @@ public partial class MainViewModel : ViewModelBase
     {
         try
         {
-            // Only load if not already set (avoid overriding runtime assignment before init finishes)
-            if (!string.IsNullOrWhiteSpace(SourcePath)) return;
-
-            var configDir = Path.Combine(AppContext.BaseDirectory, "Config");
-            var filePath = Path.Combine(configDir, "appsettings.json");
-            if (!File.Exists(filePath)) return;
-
-            var json = await File.ReadAllTextAsync(filePath);
-            using var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.TryGetProperty("Application", out var appElem) &&
-                appElem.TryGetProperty("SourceFolderPath", out var pathElem))
+            await _settingsService.LoadSettingsAsync();
+            
+            _isLoadingSourcePath = true;
+            if (!string.IsNullOrWhiteSpace(_settingsService.SourceFolderPath))
             {
-                var persisted = pathElem.GetString();
-                if (!string.IsNullOrWhiteSpace(persisted))
-                {
-                    _isLoadingSourcePath = true;
-                    SourcePath = persisted; // triggers OnSourcePathChanged but suppressed via flag
-                    _isLoadingSourcePath = false;
-                }
+                SourcePath = _settingsService.SourceFolderPath;
             }
-            // Also load SyncOutFolderPath if present
-            if (doc.RootElement.TryGetProperty("Application", out var appElem2) &&
-                appElem2.TryGetProperty("SyncOutFolderPath", out var syncOutElem))
+            if (!string.IsNullOrWhiteSpace(_settingsService.SyncOutFolderPath))
             {
-                var syncPersisted = syncOutElem.GetString();
-                if (!string.IsNullOrWhiteSpace(syncPersisted))
-                {
-                    _isLoadingSourcePath = true;
-                    SyncOutPath = syncPersisted; // suppressed
-                    _isLoadingSourcePath = false;
-                }
+                SyncOutPath = _settingsService.SyncOutFolderPath;
             }
+            _isLoadingSourcePath = false;
         }
         catch (Exception ex)
         {
@@ -165,80 +148,17 @@ public partial class MainViewModel : ViewModelBase
     partial void OnSourcePathChanged(string? value)
     {
         if (_isLoadingSourcePath) return; // skip persisting initial load value
-        if (string.IsNullOrWhiteSpace(value)) return;
-        // fire and forget persistence
-        _ = PersistSourcePathAsync(value);
+        if (value == null) return;
+        
+        _settingsService.SourceFolderPath = value;
     }
 
     partial void OnSyncOutPathChanged(string? value)
     {
         if (_isLoadingSourcePath) return;
-        if (string.IsNullOrWhiteSpace(value)) return;
-        _ = PersistSyncOutPathAsync(value);
-    }
-
-    /// <summary>
-    /// Writes the persisted SourceFolderPath to appsettings.json.
-    /// </summary>
-    private static async Task PersistSourcePathAsync(string path)
-    {
-        try
-        {
-            var configDir = Path.Combine(AppContext.BaseDirectory, "Config");
-            Directory.CreateDirectory(configDir);
-            var filePath = Path.Combine(configDir, "appsettings.json");
-
-            // Load existing JSON (if any) using JsonNode for easy mutation
-            System.Text.Json.Nodes.JsonNode? rootNode = null;
-            if (File.Exists(filePath))
-            {
-                var existing = await File.ReadAllTextAsync(filePath);
-                try { rootNode = System.Text.Json.Nodes.JsonNode.Parse(existing); } catch { rootNode = null; }
-            }
-            rootNode ??= new System.Text.Json.Nodes.JsonObject();
-            var appNode = rootNode["Application"] as System.Text.Json.Nodes.JsonObject ?? new System.Text.Json.Nodes.JsonObject();
-            rootNode["Application"] = appNode;
-            appNode["SourceFolderPath"] = path;
-
-            var json = rootNode.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
-            await File.WriteAllTextAsync(filePath, json);
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[persist-sourcepath-error] {ex.Message}", true, true);
-            
-        }
-    }
-
-    /// <summary>
-    /// Writes the persisted SyncOutFolderPath to appsettings.json.
-    /// </summary>
-    private static async Task PersistSyncOutPathAsync(string path)
-    {
-        try
-        {
-            var configDir = Path.Combine(AppContext.BaseDirectory, "Config");
-            Directory.CreateDirectory(configDir);
-            var filePath = Path.Combine(configDir, "appsettings.json");
-
-            System.Text.Json.Nodes.JsonNode? rootNode = null;
-            if (File.Exists(filePath))
-            {
-                var existing = await File.ReadAllTextAsync(filePath);
-                try { rootNode = System.Text.Json.Nodes.JsonNode.Parse(existing); } catch { rootNode = null; }
-            }
-            rootNode ??= new System.Text.Json.Nodes.JsonObject();
-            var appNode = rootNode["Application"] as System.Text.Json.Nodes.JsonObject ?? new System.Text.Json.Nodes.JsonObject();
-            rootNode["Application"] = appNode;
-            appNode["SyncOutFolderPath"] = path;
-
-            var json = rootNode.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
-            await File.WriteAllTextAsync(filePath, json);
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[persist-syncoutpath-error] {ex.Message}", true, true);
-        }
+        if (value == null) return;
+        
+        _settingsService.SyncOutFolderPath = value;
     }
 
     /// <summary>
@@ -300,3 +220,4 @@ public partial class MainViewModel : ViewModelBase
         await Task.CompletedTask;
     }
 }
+
