@@ -114,6 +114,7 @@ public partial class App : Application
     {
         //register container services
         services.AddSingleton<IContainerService, DockerService>();
+        services.AddSingleton<IImageService>(provider => (IImageService)provider.GetRequiredService<IContainerService>());
         services.AddSingleton<IContainerFileTransferService, ContainerFileTransferService>();
         services.AddTransient<IIgnorePatternMatcher, IgnorePatternMatcher>();
         services.AddTransient<IFileSyncService, FileSyncService>();

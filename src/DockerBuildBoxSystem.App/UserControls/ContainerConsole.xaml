@@ -34,35 +34,21 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <TextBlock Grid.Column="0" 
-                       Text="Container:" 
+                       Text="Image:" 
                        VerticalAlignment="Center" 
                        Margin="0,0,6,0"/>
 
             <ComboBox Grid.Column="1" 
-                      ItemsSource="{Binding Containers}"
-                      SelectedItem="{Binding SelectedContainer}"
-                      IsEnabled="{Binding IsLoadingContainers, Converter={StaticResource InverseBooleanConverter}}"
-                      ToolTip="Select a container to interact with"
+                      ItemsSource="{Binding Images}"
+                      SelectedItem="{Binding SelectedImage}"
+                      IsEnabled="{Binding IsLoadingImages, Converter={StaticResource InverseBooleanConverter}}"
+                      ToolTip="Select a image to interact with"
                       MinWidth="200">
                 <ComboBox.ItemTemplate>
                     <DataTemplate>
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="{Binding Names[0]}" FontWeight="Bold" Margin="0,0,8,0"/>
-                            <TextBlock Text="{Binding State}" Foreground="Gray" Margin="0,0,8,0">
-                                <TextBlock.Style>
-                                    <Style TargetType="TextBlock">
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding State}" Value="running">
-                                                <Setter Property="Foreground" Value="Green"/>
-                                            </DataTrigger>
-                                            <DataTrigger Binding="{Binding State}" Value="exited">
-                                                <Setter Property="Foreground" Value="Red"/>
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </TextBlock.Style>
-                            </TextBlock>
-                            <TextBlock Text="{Binding Image}" Foreground="DarkGray" FontStyle="Italic"/>
+                            <TextBlock Text="{Binding RepoTags[0]}" FontWeight="Bold" Margin="0,0,8,0"/>
+                            <TextBlock Text="{Binding Id}" Foreground="DarkGray" FontStyle="Italic"/>
                         </StackPanel>
                     </DataTemplate>
                 </ComboBox.ItemTemplate>
@@ -76,8 +62,8 @@
 
             <Button Grid.Column="3" 
                     Content="Refresh" 
-                    Command="{Binding RefreshContainersCommand}"
-                    ToolTip="Refresh the list of containers"
+                    Command="{Binding RefreshImagesCommand}"
+                    ToolTip="Refresh the list of images"
                     Padding="8,4"
                     MinWidth="70"/>
             <StackPanel Grid.Column="4" Orientation="Horizontal" Margin="6,0,0,0" VerticalAlignment="Center">

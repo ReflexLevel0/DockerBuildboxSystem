@@ -12,19 +12,21 @@ public class ContainerConsoleViewModelTests
 {
     private static ContainerConsoleViewModel CreateViewModel(
         IContainerService? service = null,
+        IImageService? imageService = null,
         IFileSyncService? fileSyncService = null,
         IConfiguration? configuration = null,
         ISettingsService? settingsService = null,
         IClipboardService? clipboard = null)
     {
         service ??= Substitute.For<IContainerService>();
+        imageService ??= Substitute.For<IImageService>();
         fileSyncService ??= Substitute.For<IFileSyncService>();
         fileSyncService.Changes.Returns(new System.Collections.ObjectModel.ObservableCollection<string>());
         configuration ??= Substitute.For<IConfiguration>();
         settingsService ??= Substitute.For<ISettingsService>();
         clipboard ??= Substitute.For<IClipboardService>();
 
-        return new ContainerConsoleViewModel(service, fileSyncService, configuration, settingsService, clipboard);
+        return new ContainerConsoleViewModel(service, imageService, fileSyncService, configuration, settingsService, clipboard);
     }
 
     /// <summary>
@@ -33,26 +35,26 @@ public class ContainerConsoleViewModelTests
     /// <remarks>This test ensures that the <c>InitializeCommand</c> properly retrieves a list of running
     /// containers and populates the <c>Containers</c> and <c>UserCommands</c> collections in the view model.</remarks>
     [Fact]
-    public async Task Initialize_Loads_Containers_And_UserCommands()
+    public async Task Initialize_Loads_Images_And_UserCommands()
     {
         //Arrange
-        var ContainerService = Substitute.For<IContainerService>();
+        var imageService = Substitute.For<IImageService>();
 
-        //The ListContainersAsync method is subbed to return a list with one running container
-        ContainerService
-            .ListContainersAsync(true, null, default)
-            .Returns(Task.FromResult<IList<ContainerInfo>>(new List<ContainerInfo>
+        //The ListImagesAsync method is subbed to return a list with one image
+        imageService
+            .ListImagesAsync(true, default)
+            .Returns(Task.FromResult<IList<ImageInfo>>(new List<ImageInfo>
             {
-                new ContainerInfo { Id = "1", Names = new []{"n1"}, State = "running" }
+                new ImageInfo { Id = "1", RepoTags = new []{"n1"} }
             }));
 
-        var vm = CreateViewModel(ContainerService);
+        var vm = CreateViewModel(imageService: imageService);
 
         //Act
         await vm.InitializeCommand.ExecuteAsync(null);
 
         //Assert
-        Assert.Single(vm.Containers);
+        Assert.Single(vm.Images);
     }
 
     /// <summary>
