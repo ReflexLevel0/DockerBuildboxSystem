@@ -102,16 +102,12 @@ namespace DockerBuildBoxSystem.Contracts
         Task<bool> StartAsync(string containerId, CancellationToken ct = default);
 
         /// <summary>
-        /// Creates a new container from the specified image.
+        /// Creates a new container from the specified options.
         /// </summary>
-        /// <param name="imageName">The name of the image to use.</param>
-        /// <param name="containerName">Optional name for the container.</param>
-        /// <param name="volumeBindings">Optional volume bindings as tuples of (Source, Target, Options)</param>
+        /// <param name="options">The options for creating the container.</param>
         /// <param name="ct">Cancellation token</param>
         /// <returns>The ID of the created container.</returns>
-        Task<string> CreateContainerAsync(string imageName, string? containerName = null, 
-            IEnumerable<(string Source, string Target, string? Options)>? volumeBindings = null,  
-            CancellationToken ct = default);
+        Task<string> CreateContainerAsync(ContainerCreationOptions options, CancellationToken ct = default);
 
 
         /// <summary>

@@ -184,7 +184,7 @@ public class ContainerConsoleViewModelTests
         var vm = CreateViewModel(ContainerService);
         //start the UI update loop
         await vm.InitializeCommand.ExecuteAsync(null);
-        vm.ContainerId = "abc";
+        vm.SelectedContainer = new ContainerInfo { Id = "abc", Names = ["abc"] };
 
         //Act & Assert
         _ = vm.StartLogsCommand.ExecuteAsync(null);
@@ -223,7 +223,7 @@ public class ContainerConsoleViewModelTests
             .Returns(Task.FromResult(CreateCompletedReader([(false, "sup")])));
 
         await vm.InitializeCommand.ExecuteAsync(null);
-        vm.ContainerId = "abc";
+        vm.SelectedContainer = new ContainerInfo { Id = "abc", Names = ["abc"] };
         await vm.StartLogsCommand.ExecuteAsync(null);
 
         await WaitUntilAsync(() => vm.UIHandler.Output.Contains("sup"), TimeSpan.FromSeconds(2));

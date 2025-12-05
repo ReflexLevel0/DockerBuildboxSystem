@@ -47,17 +47,20 @@ namespace DockerBuildBoxSystem.Domain
         public async Task<bool> StartAsync(string containerId, CancellationToken ct = default) =>
             await _client.Containers.StartContainerAsync(containerId, new ContainerStartParameters(), ct);
 
-        public async Task<string> CreateContainerAsync(string imageName, 
-            string? containerName = null,
-            IEnumerable<(string Source, string Target, string? Options)>? volumeBindings = null,
-            CancellationToken ct = default)
+        public async Task<string> CreateContainerAsync(ContainerCreationOptions options, CancellationToken ct = default)
         {
-            var hostConfig = new HostConfig();
+            var hostConfig = new HostConfig
+            {
+                Memory = options.Memory ?? 0,
+                MemorySwap = options.MemorySwap ?? 0,
+                CPUShares = options.CpuShares ?? 0,
+                NanoCPUs = options.NanoCpus ?? 0
+            };
 
-            if (volumeBindings is not null)
+            if (options.VolumeBindings is not null)
             {
                 //Will build strings like this: "hostPath:/container/path:ro"
-                hostConfig.Binds = volumeBindings
+                hostConfig.Binds = options.VolumeBindings
                     .Select(v =>
                         string.IsNullOrWhiteSpace(v.Options)
                             ? $"{v.Source}:{v.Target}"
@@ -69,8 +72,8 @@ namespace DockerBuildBoxSystem.Domain
 
             var response = await _client.Containers.CreateContainerAsync(new CreateContainerParameters
             {
-                Image = imageName,
-                Name = containerName,
+                Image = options.ImageName,
+                Name = options.ContainerName,
                 Tty = true,
                 OpenStdin = true,
                 AttachStdin = true,

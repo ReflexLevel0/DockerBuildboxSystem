@@ -425,11 +425,11 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 {
                     PostLogMessage("[info] No existing container found for image. Creating a new one...", false);
 
-                    var newContainerId = await _service.CreateContainerAsync(imageName, ct: ct);
+                    var newContainerId = await _service.CreateContainerAsync(new ContainerCreationOptions { ImageName = imageName }, ct: ct);
                     container = await _service.InspectAsync(newContainerId, ct);
 
                     var createdName = container.Names.FirstOrDefault() ?? container.Id;
-                    PostLogMessage($"[info] Created new container with ID: {createdName}", false);
+                    PostLogMessage($"[info] Created new container: {createdName}", false);
                 }
 
                 SelectedContainer = container;
