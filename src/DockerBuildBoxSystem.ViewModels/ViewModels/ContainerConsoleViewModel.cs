@@ -7,6 +7,7 @@ using Microsoft.Extensions.Configuration;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
@@ -63,16 +64,19 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// <summary>
         /// Currently selected container id OR name.
         /// </summary>
-        [ObservableProperty]
-        [NotifyCanExecuteChangedFor(nameof(StartContainerCommand))]
-        [NotifyCanExecuteChangedFor(nameof(StopContainerCommand))]
-        [NotifyCanExecuteChangedFor(nameof(RestartContainerCommand))]
-        [NotifyCanExecuteChangedFor(nameof(SendCommand))]
-        [NotifyCanExecuteChangedFor(nameof(RunUserCommandCommand))]
-        [NotifyPropertyChangedFor(nameof(CanUseUserControls))]
-        [NotifyCanExecuteChangedFor(nameof(StartSyncCommand))]       
-        [NotifyCanExecuteChangedFor(nameof(StartForceSyncCommand))]
-        private string _containerId = string.Empty;
+        public string ContainerId
+        {
+            get => SelectedContainer?.Id ?? string.Empty;
+        }
+
+        /// <summary>
+        /// Currently selected image id OR name.
+        /// </summary>
+        public string ImageId
+        {
+            get => SelectedImage?.Id ?? string.Empty;
+        }
+
 
         public bool CanUseUserControls => CanSend();
 
@@ -141,6 +145,8 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [ObservableProperty]
         [NotifyCanExecuteChangedFor(nameof(SendCommand))]
         [NotifyCanExecuteChangedFor(nameof(RunUserCommandCommand))]
+        [NotifyCanExecuteChangedFor(nameof(StartSyncCommand))]
+        [NotifyCanExecuteChangedFor(nameof(StartForceSyncCommand))]
         [NotifyPropertyChangedFor(nameof(CanUseUserControls))]
         private bool _isSwitching;
         /// <summary>
@@ -155,10 +161,11 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [ObservableProperty]
         private string _containerSyncPath = "/data/";
 
-        // Track previous selected container id to manage stop-on-switch behavior
+        //track previous selected container and image id to manage stop-on-switch behavior
         private string? _previousContainerId;
+        private string? _previousImageId;
 
-        private readonly SemaphoreSlim _containerSwitchLock = new(1, 1);
+        private readonly SemaphoreSlim _imageSwitchLock = new(1, 1);
         private CancellationTokenSource? _switchCts;
 
         /// <summary>
@@ -331,6 +338,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             if (IsLoadingImages && value is null)
                 return;
 
+            if(value?.Id == _previousImageId)
+                return;
+
             Interlocked.Increment(ref _switchingCount);
             IsSwitching = true;
 
@@ -349,7 +359,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             try
             {
                 //make switch operation cancelable  to avoid releasing an unacquired lock.
-                await _containerSwitchLock.WaitAsync(ct);
+                await _imageSwitchLock.WaitAsync(ct);
                 takeLock = true;
 
                 ct.ThrowIfCancellationRequested();
@@ -357,21 +367,21 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 var newImage = value;
 
                 //fallback to current if previous not tracked yet
-                var oldId = string.IsNullOrWhiteSpace(_previousContainerId) ? ContainerId : _previousContainerId;
+                var oldContainerId = string.IsNullOrWhiteSpace(_previousContainerId) ? ContainerId : _previousContainerId;
 
                 //stop any running operations from previous container.
                 await StopLogsAsync();
                 await StopExecAsync();
                 UIHandler.DiscardPending();
 
-                if (!string.IsNullOrWhiteSpace(oldId))
+                if (!string.IsNullOrWhiteSpace(oldContainerId))
                 {
                     try
                     {
-                        var oldContainer = await _service.InspectAsync(oldId, ct);
+                        var oldContainer = await _service.InspectAsync(oldContainerId, ct);
                         if (oldContainer.IsRunning)
                         {
-                            await StopContainerByIdAsync(oldId);
+                            await StopContainerByIdAsync(oldContainer);
                         }
                     }
                     catch
@@ -384,8 +394,8 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
                 if(newImage is null)
                 {
-                    ContainerId = string.Empty;
-                    SelectedContainer = null;
+                    SelectedImage = null;
+                    _previousImageId = ImageId;
                     _previousContainerId = ContainerId;
                     return;
                 }
@@ -401,23 +411,25 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 var existingContainer = containers.FirstOrDefault(c =>
                     (!string.IsNullOrEmpty(primaryTag) && c.Image == primaryTag) || c.Image == newImage.Id);
 
-                if(existingContainer is not null)
+                string newContainerId;
+                if (existingContainer is not null)
                 {
-                    ContainerId = existingContainer.Id;
                     PostLogMessage(
                         $"[info] Found existing container: {existingContainer.Names.FirstOrDefault() ?? existingContainer.Id}",
                         false);
+
+                    newContainerId = existingContainer.Id;
                 }
                 else
                 {
                     PostLogMessage("[info] No existing container found for image. Creating a new one...", false);
 
-                    ContainerId = await _service.CreateContainerAsync(imageName, ct: ct);
+                    newContainerId = await _service.CreateContainerAsync(imageName, ct: ct);
 
-                    PostLogMessage($"[info] Created new container: {ContainerId}", false);
+                    PostLogMessage($"[info] Created new container: {newContainerId}", false);
                 }
 
-                var currentContainerInfo = await _service.InspectAsync(ContainerId, ct);
+                var currentContainerInfo = await _service.InspectAsync(newContainerId, ct);
 
                 SelectedContainer = currentContainerInfo;
 
@@ -435,6 +447,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                     _ = StartLogs();
                 }
 
+                _previousImageId = ImageId;
                 _previousContainerId = ContainerId;
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -447,7 +460,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             finally
             {
                 if (takeLock)
-                    _containerSwitchLock.Release();
+                    _imageSwitchLock.Release();
 
                 if (Interlocked.Decrement(ref _switchingCount) == 0)
                     IsSwitching = false;
@@ -458,17 +471,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         {
             // If we are switching images, the image switcher handles log starting.
             if (IsSwitching) return;
-
-            if (container is null)
-            {
-                ContainerId = string.Empty;
-                return;
-            }
-
-            if (ContainerId != container.Id)
-            {
-                ContainerId = container.Id;
-            }
 
             if (AutoStartLogs && !IsLogsRunning)
             {
@@ -490,47 +492,48 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [RelayCommand(CanExecute = nameof(CanStartContainer))]
         private async Task StartContainerAsync()
         {
-            await _containerSwitchLock.WaitAsync();
+            await _imageSwitchLock.WaitAsync();
             try
             {
                 await StartContainerInternalAsync(CancellationToken.None);
             }
             finally
             {
-                _containerSwitchLock.Release();
+                _imageSwitchLock.Release();
             }
         }
 
         private async Task StartContainerInternalAsync(CancellationToken ct)
         {
-            if (string.IsNullOrWhiteSpace(ContainerId)) return;
+            if (SelectedContainer is null) return;
 
             if (ct.IsCancellationRequested) return;
 
+            var name = SelectedContainer.Names.FirstOrDefault() ?? SelectedContainer.Id;
             try
             {
-                PostLogMessage($"[info] Starting container: {ContainerId}", false);
+                PostLogMessage($"[info] Starting container: {name}", false);
 
                 var status = await _service.StartAsync(ContainerId, ct);
 
                 if (ct.IsCancellationRequested)
                 {
-                    PostLogMessage($"[info] Startup cancelled for: {ContainerId}", false);
+                    PostLogMessage($"[info] Startup cancelled for: {name}", false);
                     return;
                 }
 
                 if (status)
                 {
-                    PostLogMessage($"[info] Started container: {ContainerId}", false);
+                    PostLogMessage($"[info] Started container: {name}", false);
                 }
                 else
                 {
-                    PostLogMessage($"[start-container] Container did not start: {ContainerId}", true);
+                    PostLogMessage($"[start-container] Container did not start: {name}", true);
                 }
             }
             catch (OperationCanceledException)
             {
-                PostLogMessage($"[info] Operation cancelled: {ContainerId}", false);
+                PostLogMessage($"[info] Operation cancelled: {name}", false);
             }
             catch (Exception ex)
             {
@@ -550,22 +553,23 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// Stops a running container.
         /// </summary>
         [RelayCommand(CanExecute = nameof(CanStopContainer))]
-        private async Task StopContainerAsync() => await StopContainerByIdAsync(ContainerId);
+        private async Task StopContainerAsync() => await StopContainerByIdAsync(SelectedContainer);
 
         private bool CanRestartContainer() => !string.IsNullOrWhiteSpace(ContainerId) && (SelectedContainer?.IsRunning == true);
 
         /// <summary>
         /// Stops a container by id (used when auto-stopping previous selection).
         /// </summary>
-        private async Task StopContainerByIdAsync(string id)
+        private async Task StopContainerByIdAsync(ContainerInfo? container)
         {
-            if (string.IsNullOrWhiteSpace(id)) return;
+            if (container is null) return;
 
             try
             {
-                PostLogMessage($"[info] Stopping container: {id}", false);
-                await _service.StopAsync(id, timeout: TimeSpan.FromSeconds(10));
-                PostLogMessage($"[info] Stopped container: {id}", false);
+                var name = container.Names.FirstOrDefault() ?? container.Id;
+                PostLogMessage($"[info] Stopping container: {name}", false);
+                await _service.StopAsync(container.Id, timeout: TimeSpan.FromSeconds(10));
+                PostLogMessage($"[info] Stopped container: {name}", false);
             }
             catch (Exception ex)
             {
@@ -805,7 +809,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// <summary>
         /// Determines whether sync can be started.
         /// </summary>
-        private bool CanSync() => !string.IsNullOrWhiteSpace(ContainerId) && (SelectedContainer?.IsRunning == true) && !IsSyncRunning && !IsCommandRunning;
+        private bool CanSync() => !string.IsNullOrWhiteSpace(ContainerId) && (SelectedContainer?.IsRunning == true) && !IsSyncRunning && !IsCommandRunning && !IsSwitching;
 
         /// <summary>
         /// Starts the sync operation.
@@ -1076,7 +1080,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 _switchCts = null;
             }
 
-            _containerSwitchLock?.Dispose();
+            _imageSwitchLock?.Dispose();
 
             _settingsService.SourcePathChanged -= OnSourcePathChanged;
             _fileSyncService.StopWatching();
