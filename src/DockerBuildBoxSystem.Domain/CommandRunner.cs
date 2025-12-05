@@ -80,10 +80,16 @@ namespace DockerBuildBoxSystem.Domain
                 await InputWriter!.WriteAsync(raw).ConfigureAwait(false);
                 return true;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return true;
             }
+        }
+
+        public async Task InterruptAsync()
+        {
+            if (!IsInteractive) return;
+            await TryWriteToInteractiveAsync(AnsiControlChars.ETX.ToString()).ConfigureAwait(false);
         }
 
         public async Task StopAsync()

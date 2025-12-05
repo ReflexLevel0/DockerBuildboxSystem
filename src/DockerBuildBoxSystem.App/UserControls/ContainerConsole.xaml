@@ -187,6 +187,7 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="25" />
             </Grid.ColumnDefinitions>
 
@@ -208,13 +209,19 @@
                     Command="{Binding SendCommand}" />
 
             <Button Grid.Column="2"
+                    Content="Interrupt"
+                    Padding="12,4"
+                    Command="{Binding InterruptExecCommand}" />
+
+            <Button Grid.Column="3"
                     Content="Stop"
                     Padding="12,4"
                     ToolTip="Stop the running command in the container"
                     Command="{Binding StopExecCommand}" />
 
             <!-- Container status indicator -->
-            <Canvas Grid.Column="3" ToolTip="Indicates the state of the selected container (Running, Exited, etc.)">
+            <Canvas Grid.Column="4"
+                    ToolTip="Indicates the state of the selected container (Running, Exited, etc.)">
                 <Ellipse Width="15" 
                          Height="15" 
                          Canvas.Top="5" 
