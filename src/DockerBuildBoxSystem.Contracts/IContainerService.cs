@@ -63,7 +63,7 @@ namespace DockerBuildBoxSystem.Contracts
         /// <summary>
         /// Strong typed state derived from <see cref="State"/>.
         /// </summary>
-        public ContainerState StateKind => ParseState(State);
+        public ContainerState StateKind => ParseState(Status);
 
         /// <summary>
         /// A flag indicating whether the container is currently running or not, based on the <see cref="StateKind"/>.
@@ -100,6 +100,18 @@ namespace DockerBuildBoxSystem.Contracts
         /// <param name="ct">Cancellation token</param>
         /// <returns>true if container was started successfully, otherwise false</returns>
         Task<bool> StartAsync(string containerId, CancellationToken ct = default);
+
+        /// <summary>
+        /// Creates a new container from the specified image.
+        /// </summary>
+        /// <param name="imageName">The name of the image to use.</param>
+        /// <param name="containerName">Optional name for the container.</param>
+        /// <param name="volumeBindings">Optional volume bindings as tuples of (Source, Target, Options)</param>
+        /// <param name="ct">Cancellation token</param>
+        /// <returns>The ID of the created container.</returns>
+        Task<string> CreateContainerAsync(string imageName, string? containerName = null, 
+            IEnumerable<(string Source, string Target, string? Options)>? volumeBindings = null,  
+            CancellationToken ct = default);
 
 
         /// <summary>

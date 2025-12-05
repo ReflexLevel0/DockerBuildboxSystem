@@ -20,7 +20,7 @@ namespace DockerBuildBoxSystem.Domain
     /// <summary>
     /// Class for interactions with the Docker Engine API using Docker.DotNet.
     /// </summary>
-    public sealed class DockerService : IContainerService, IAsyncDisposable, IDisposable
+    public sealed class DockerService : IContainerService, IImageService, IAsyncDisposable, IDisposable
     {
         #region Variables and Constructor
         private readonly DockerClient _client;
@@ -46,6 +46,41 @@ namespace DockerBuildBoxSystem.Domain
         #region Container Operations
         public async Task<bool> StartAsync(string containerId, CancellationToken ct = default) =>
             await _client.Containers.StartContainerAsync(containerId, new ContainerStartParameters(), ct);
+
+        public async Task<string> CreateContainerAsync(string imageName, 
+            string? containerName = null,
+            IEnumerable<(string Source, string Target, string? Options)>? volumeBindings = null,
+            CancellationToken ct = default)
+        {
+            var hostConfig = new HostConfig();
+
+            if (volumeBindings is not null)
+            {
+                //Will build strings like this: "hostPath:/container/path:ro"
+                hostConfig.Binds = volumeBindings
+                    .Select(v =>
+                        string.IsNullOrWhiteSpace(v.Options)
+                            ? $"{v.Source}:{v.Target}"
+                            : $"{v.Source}:{v.Target}:{v.Options}")
+                    .ToList();
+            }
+
+            //There are a AutoRemove option also that rmeoves the container when it exits
+
+            var response = await _client.Containers.CreateContainerAsync(new CreateContainerParameters
+            {
+                Image = imageName,
+                Name = containerName,
+                Tty = true,
+                OpenStdin = true,
+                AttachStdin = true,
+                AttachStdout = true,
+                AttachStderr = true,
+                HostConfig = hostConfig
+            }, ct);
+
+            return response.ID;
+        }
 
         public async Task StopAsync(string containerId, TimeSpan timeout, CancellationToken ct = default) =>
             await _client.Containers.StopContainerAsync(containerId,
@@ -469,6 +504,56 @@ namespace DockerBuildBoxSystem.Domain
                 }
             }
         }
+        #endregion
+
+        #region Image Operations
+
+        public async Task<IList<ImageInfo>> ListImagesAsync(bool all = false, CancellationToken ct = default)
+        {
+            var images = await _client.Images.ListImagesAsync(new ImagesListParameters { All = all }, ct);
+            return images.Select(img => new ImageInfo
+            {
+                Id = img.ID,
+                RepoTags = img.RepoTags is null ? Array.Empty<string>() : img.RepoTags.ToArray(),
+                Created = img.Created,
+                Size = img.Size,
+                VirtualSize = img.VirtualSize,
+                Labels = img.Labels is null ? new Dictionary<string, string>() : new Dictionary<string, string>(img.Labels)
+            }).ToList();
+        }
+
+        public async Task<ImageInfo> InspectImageAsync(string imageId, CancellationToken ct = default)
+        {
+            var inspect = await _client.Images.InspectImageAsync(imageId, ct);
+            return new ImageInfo
+            {
+                Id = inspect.ID,
+                RepoTags = inspect.RepoTags is null ? Array.Empty<string>() : inspect.RepoTags.ToArray(),
+                Created = inspect.Created,
+                Size = inspect.Size,
+                VirtualSize = inspect.VirtualSize,
+                Labels = inspect.Config?.Labels is null ? new Dictionary<string, string>() : new Dictionary<string, string>(inspect.Config.Labels)
+            };
+        }
+
+        public async Task RemoveImageAsync(string imageId, bool force = false, bool prune = false, CancellationToken ct = default)
+        {
+            await _client.Images.DeleteImageAsync(imageId, new ImageDeleteParameters { Force = force, NoPrune = prune }, ct);
+        }
+
+        public async Task PullImageAsync(string imageName, string tag = "latest", CancellationToken ct = default)
+        {
+            await _client.Images.CreateImageAsync(
+                new ImagesCreateParameters
+                {
+                    FromImage = imageName,
+                    Tag = tag
+                },
+                null,
+                new Progress<JSONMessage>(),
+                ct);
+        }
+
         #endregion
 
 
