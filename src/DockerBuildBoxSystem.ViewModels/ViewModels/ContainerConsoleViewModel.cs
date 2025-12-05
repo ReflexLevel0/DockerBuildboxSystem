@@ -411,32 +411,33 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 var existingContainer = containers.FirstOrDefault(c =>
                     (!string.IsNullOrEmpty(primaryTag) && c.Image == primaryTag) || c.Image == newImage.Id);
 
-                string newContainerId;
+                ContainerInfo container;
                 if (existingContainer is not null)
                 {
                     PostLogMessage(
                         $"[info] Found existing container: {existingContainer.Names.FirstOrDefault() ?? existingContainer.Id}",
                         false);
 
-                    newContainerId = existingContainer.Id;
+                    //ensure we get the latest state
+                    container = await _service.InspectAsync(existingContainer.Id, ct);
                 }
                 else
                 {
                     PostLogMessage("[info] No existing container found for image. Creating a new one...", false);
 
-                    newContainerId = await _service.CreateContainerAsync(imageName, ct: ct);
+                    var newContainerId = await _service.CreateContainerAsync(imageName, ct: ct);
+                    container = await _service.InspectAsync(newContainerId, ct);
 
-                    PostLogMessage($"[info] Created new container: {newContainerId}", false);
+                    var createdName = container.Names.FirstOrDefault() ?? container.Id;
+                    PostLogMessage($"[info] Created new container with ID: {createdName}", false);
                 }
 
-                var currentContainerInfo = await _service.InspectAsync(newContainerId, ct);
-
-                SelectedContainer = currentContainerInfo;
+                SelectedContainer = container;
 
                 ct.ThrowIfCancellationRequested();
 
                 //start the container
-                if (!currentContainerInfo.IsRunning)
+                if (!container.IsRunning)
                 {
                     await StartContainerInternalAsync(ct);
                 }
