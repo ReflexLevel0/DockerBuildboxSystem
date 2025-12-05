@@ -162,6 +162,7 @@
                     Height="28"
                     Command="{Binding ExitCommand}"
                     Content="Exit"
+                    ToolTip="Exit the application"
                     Style="{StaticResource ExitButtonStyle}" />
             </Grid>
     </Grid>
