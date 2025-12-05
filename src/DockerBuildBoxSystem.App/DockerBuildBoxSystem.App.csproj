@@ -4,7 +4,6 @@
 		<ProjectReference Include="..\DockerBuildBoxSystem.ViewModels\DockerBuildBoxSystem.ViewModels.csproj" />
 		<ProjectReference Include="..\DockerBuildBoxSystem.Contracts\DockerBuildBoxSystem.Contracts.csproj" />
 		<ProjectReference Include="..\DockerBuildBoxSystem.Domain\DockerBuildBoxSystem.Domain.csproj" />
-		<ProjectReference Include="..\DockerBuildBoxSystem.Models\DockerBuildBoxSystem.Models.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -13,6 +12,10 @@
 		<PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.10" />
 	</ItemGroup>
 
+  <ItemGroup>
+    <Reference Include="System.Windows.Forms" />
+  </ItemGroup>
+  
 	<ItemGroup>
 		<!-- Copying the configuration files to output directory -->
 		<None Update="Config\appsettings.json">
@@ -21,10 +24,10 @@
 		<None Update="Config\appsettings.Development.json">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
-		<!-- Copy the command.json to the bin\Debug\net9.0 at build -->
-		<None Update="Config\commands.json">
+		<None Update="Config\controls.json">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
+		<!--Copy user variables to the bin\Debug\net9.0 at build-->
 
 	</ItemGroup>
 

@@ -114,9 +114,15 @@ public partial class App : Application
     {
         //register container services
         services.AddSingleton<IContainerService, DockerService>();
+        services.AddSingleton<IContainerFileTransferService, ContainerFileTransferService>();
+        services.AddTransient<IIgnorePatternMatcher, IgnorePatternMatcher>();
+        services.AddTransient<IFileSyncService, FileSyncService>();
         
+        //register settings service
+        services.AddSingleton<ISettingsService, SettingsService>();
+
         //register UI services
-        services.AddSingleton<Services.IDialogService, Services.DialogService>();
+        services.AddSingleton<IDialogService, Services.WPFDialogService>();
         services.AddSingleton<Services.IViewLocator, Services.ViewLocator>();
         services.AddSingleton<IClipboardService, Services.WPFClipboardService>();
     }

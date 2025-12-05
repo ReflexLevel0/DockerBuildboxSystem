@@ -1,8 +1,8 @@
-using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using DockerBuildBoxSystem.Contracts;
 using DockerBuildBoxSystem.ViewModels.Common;
 using Microsoft.Extensions.Configuration;
-using System.Text.Json;
 
 namespace DockerBuildBoxSystem.ViewModels.Main;
 
@@ -12,6 +12,8 @@ namespace DockerBuildBoxSystem.ViewModels.Main;
 public partial class MainViewModel : ViewModelBase
 {
     private readonly IConfiguration _configuration;
+    private readonly IDialogService _dialogService;
+    private readonly ISettingsService _settingsService;
     // Suppress persisting SourcePath while we are loading the initial value
     private bool _isLoadingSourcePath;
 
@@ -25,9 +27,17 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     private string? _sourcePath;
 
-    public MainViewModel(IConfiguration configuration)
+    /// <summary>
+    /// The selected sync-out path from the folder picker.
+    /// </summary>
+    [ObservableProperty]
+    private string? _syncOutPath;
+
+    public MainViewModel(IConfiguration configuration, IDialogService dialogService, ISettingsService settingsService)
     {
         _configuration = configuration;
+        _dialogService = dialogService;
+        _settingsService = settingsService;
         
         //load title from configuration
         var appName = _configuration["Application:Name"] ?? "Docker BuildBox System";
@@ -114,26 +124,18 @@ public partial class MainViewModel : ViewModelBase
     {
         try
         {
-            // Only load if not already set (avoid overriding runtime assignment before init finishes)
-            if (!string.IsNullOrWhiteSpace(SourcePath)) return;
-
-            var configDir = Path.Combine(AppContext.BaseDirectory, "Config");
-            var filePath = Path.Combine(configDir, "appsettings.json");
-            if (!File.Exists(filePath)) return;
-
-            var json = await File.ReadAllTextAsync(filePath);
-            using var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.TryGetProperty("Application", out var appElem) &&
-                appElem.TryGetProperty("SourceFolderPath", out var pathElem))
+            await _settingsService.LoadSettingsAsync();
+            
+            _isLoadingSourcePath = true;
+            if (!string.IsNullOrWhiteSpace(_settingsService.SourceFolderPath))
             {
-                var persisted = pathElem.GetString();
-                if (!string.IsNullOrWhiteSpace(persisted))
-                {
-                    _isLoadingSourcePath = true;
-                    SourcePath = persisted; // triggers OnSourcePathChanged but suppressed via flag
-                    _isLoadingSourcePath = false;
-                }
+                SourcePath = _settingsService.SourceFolderPath;
             }
+            if (!string.IsNullOrWhiteSpace(_settingsService.SyncOutFolderPath))
+            {
+                SyncOutPath = _settingsService.SyncOutFolderPath;
+            }
+            _isLoadingSourcePath = false;
         }
         catch (Exception ex)
         {
@@ -144,42 +146,17 @@ public partial class MainViewModel : ViewModelBase
     partial void OnSourcePathChanged(string? value)
     {
         if (_isLoadingSourcePath) return; // skip persisting initial load value
-        if (string.IsNullOrWhiteSpace(value)) return;
-        // fire and forget persistence
-        _ = PersistSourcePathAsync(value);
+        if (value == null) return;
+        
+        _settingsService.SourceFolderPath = value;
     }
 
-    /// <summary>
-    /// Writes the persisted SourceFolderPath to appsettings.json.
-    /// </summary>
-    private static async Task PersistSourcePathAsync(string path)
+    partial void OnSyncOutPathChanged(string? value)
     {
-        try
-        {
-            var configDir = Path.Combine(AppContext.BaseDirectory, "Config");
-            Directory.CreateDirectory(configDir);
-            var filePath = Path.Combine(configDir, "appsettings.json");
-
-            // Load existing JSON (if any) using JsonNode for easy mutation
-            System.Text.Json.Nodes.JsonNode? rootNode = null;
-            if (File.Exists(filePath))
-            {
-                var existing = await File.ReadAllTextAsync(filePath);
-                try { rootNode = System.Text.Json.Nodes.JsonNode.Parse(existing); } catch { rootNode = null; }
-            }
-            rootNode ??= new System.Text.Json.Nodes.JsonObject();
-            var appNode = rootNode["Application"] as System.Text.Json.Nodes.JsonObject ?? new System.Text.Json.Nodes.JsonObject();
-            rootNode["Application"] = appNode;
-            appNode["SourceFolderPath"] = path;
-
-            var json = rootNode.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
-            await File.WriteAllTextAsync(filePath, json);
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[persist-sourcepath-error] {ex.Message}", true, true);
-            
-        }
+        if (_isLoadingSourcePath) return;
+        if (value == null) return;
+        
+        _settingsService.SyncOutFolderPath = value;
     }
 
     /// <summary>
@@ -191,17 +168,11 @@ public partial class MainViewModel : ViewModelBase
     {
         try
         {
-            using var dialog = new System.Windows.Forms.FolderBrowserDialog
-            {
-                Description = "Select a source folder",
-                UseDescriptionForTitle = true,
-                ShowNewFolderButton = true
-            };
+            var result = _dialogService.ShowFolderBrowser("Select a source folder");
 
-            var result = dialog.ShowDialog(); // Runs on UI thread
-            if (result == System.Windows.Forms.DialogResult.OK && !string.IsNullOrWhiteSpace(dialog.SelectedPath))
+            if (!string.IsNullOrWhiteSpace(result))
             {
-                SourcePath = dialog.SelectedPath;
+                SourcePath = result;
             }
         }
         catch (Exception ex)
@@ -211,4 +182,28 @@ public partial class MainViewModel : ViewModelBase
 
         await Task.CompletedTask; // Maintain async signature for RelayCommand
     }
+
+    /// <summary>
+    /// Opens a folder picker for SyncOut directory and assigns the selected path.
+    /// </summary>
+    [RelayCommand(AllowConcurrentExecutions = false)]
+    private async Task SelectSyncOutPath()
+    {
+        try
+        {
+            var result = _dialogService.ShowFolderBrowser("Select a sync-out folder");
+
+            if (!string.IsNullOrWhiteSpace(result))
+            {
+                SyncOutPath = result;
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[folder-picker-error] {ex.Message}", true, true);
+        }
+
+        await Task.CompletedTask;
+    }
 }
+
