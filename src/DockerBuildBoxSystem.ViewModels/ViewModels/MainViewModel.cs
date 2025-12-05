@@ -1,9 +1,8 @@
-using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using DockerBuildBoxSystem.Contracts;
 using DockerBuildBoxSystem.ViewModels.Common;
 using Microsoft.Extensions.Configuration;
-using System.Text.Json;
-using DockerBuildBoxSystem.Contracts;
 
 namespace DockerBuildBoxSystem.ViewModels.Main;
 
@@ -13,6 +12,7 @@ namespace DockerBuildBoxSystem.ViewModels.Main;
 public partial class MainViewModel : ViewModelBase
 {
     private readonly IConfiguration _configuration;
+    private readonly IDialogService _dialogService;
     private readonly ISettingsService _settingsService;
     // Suppress persisting SourcePath while we are loading the initial value
     private bool _isLoadingSourcePath;
@@ -33,9 +33,10 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     private string? _syncOutPath;
 
-    public MainViewModel(IConfiguration configuration, ISettingsService settingsService)
+    public MainViewModel(IConfiguration configuration, IDialogService dialogService, ISettingsService settingsService)
     {
         _configuration = configuration;
+        _dialogService = dialogService;
         _settingsService = settingsService;
         
         //load title from configuration
@@ -167,17 +168,11 @@ public partial class MainViewModel : ViewModelBase
     {
         try
         {
-            using var dialog = new System.Windows.Forms.FolderBrowserDialog
-            {
-                Description = "Select a source folder",
-                UseDescriptionForTitle = true,
-                ShowNewFolderButton = true
-            };
+            var result = _dialogService.ShowFolderBrowser("Select a source folder");
 
-            var result = dialog.ShowDialog(); // Runs on UI thread
-            if (result == System.Windows.Forms.DialogResult.OK && !string.IsNullOrWhiteSpace(dialog.SelectedPath))
+            if (!string.IsNullOrWhiteSpace(result))
             {
-                SourcePath = dialog.SelectedPath;
+                SourcePath = result;
             }
         }
         catch (Exception ex)
@@ -196,17 +191,11 @@ public partial class MainViewModel : ViewModelBase
     {
         try
         {
-            using var dialog = new System.Windows.Forms.FolderBrowserDialog
-            {
-                Description = "Select a sync-out folder",
-                UseDescriptionForTitle = true,
-                ShowNewFolderButton = true
-            };
+            var result = _dialogService.ShowFolderBrowser("Select a sync-out folder");
 
-            var result = dialog.ShowDialog();
-            if (result == System.Windows.Forms.DialogResult.OK && !string.IsNullOrWhiteSpace(dialog.SelectedPath))
+            if (!string.IsNullOrWhiteSpace(result))
             {
-                SyncOutPath = dialog.SelectedPath;
+                SyncOutPath = result;
             }
         }
         catch (Exception ex)

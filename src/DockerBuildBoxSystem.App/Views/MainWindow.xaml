@@ -82,7 +82,10 @@
                     BorderThickness="1"
                     BorderBrush="Gray"
                     CornerRadius="2"
-                    Background="#08000000">
+                    Background="#08000000"
+                    AllowDrop="True" 
+                    DragEnter="Path_DragEnter" 
+                    Drop="SourcePath_Drop">
                     <TextBlock
                         Text="{Binding SourcePath}"
                         ToolTip="Source folder path"
@@ -138,7 +141,10 @@
                     BorderThickness="1"
                     BorderBrush="Gray"
                     CornerRadius="2"
-                    Background="#08000000">
+                    Background="#08000000"
+                    AllowDrop="True" 
+                    DragEnter="Path_DragEnter" 
+                    Drop="SyncOutPath_Drop">
                     <TextBlock
                         Text="{Binding SyncOutPath}"
                         ToolTip="Sync-out folder path"
@@ -162,6 +168,7 @@
                     Height="28"
                     Command="{Binding ExitCommand}"
                     Content="Exit"
+                    ToolTip="Exit the application"
                     Style="{StaticResource ExitButtonStyle}" />
             </Grid>
     </Grid>
