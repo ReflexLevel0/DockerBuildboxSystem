@@ -17,11 +17,14 @@ namespace DockerBuildBoxSystem.Domain
     public class EnvironmentService: IEnvironmentService
     {
         private readonly string _envFilePath;
-        public EnvironmentService(string filename = ".env")
+        private readonly IExternalProcessService _externalProcessService;
+        public EnvironmentService(IExternalProcessService externalProcessService, string filename = ".env")
         {
+            _externalProcessService = externalProcessService;
+
             _envFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config", filename);
             Directory.CreateDirectory(Path.GetDirectoryName(_envFilePath)!);
-
+            
             if (!File.Exists(_envFilePath))
             {
                 File.WriteAllText(_envFilePath, "");
@@ -80,17 +83,10 @@ namespace DockerBuildBoxSystem.Domain
         /// Opens the environment file in the default text editor for viewing or editing.
         /// </summary>
         /// <remarks>This method launches Notepad to open the environment file specified by the internal
-        /// file path. If the file does not exist, Notepad will prompt to create a new file. The method does not block
-        /// execution while the editor is open.</remarks>
+        /// file path.</remarks>
         public void OpenEnvFile()
         {
-            var psi = new ProcessStartInfo
-            {
-                FileName = "notepad.exe",
-                Arguments = $"\"{_envFilePath}\"",
-                UseShellExecute = true
-            };
-            Process.Start(psi);
+            _externalProcessService.OpenFileInEditor(_envFilePath);
         }
     }
 }

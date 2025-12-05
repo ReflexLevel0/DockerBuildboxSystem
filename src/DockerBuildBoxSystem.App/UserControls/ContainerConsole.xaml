@@ -153,18 +153,6 @@
             </ItemsControl.Resources>
         </ItemsControl>
 
-        <Grid Grid.Row="1">
-            <Button Content=".env"
-                    ToolTip="Edit Environmental Variables"
-                    Margin="0,0,6,0"
-                    Padding="8,4"
-                    Command="{Binding EnvironmentVM.OpenEnvFileCommand}"
-                    Width="40" Height="25"
-                    HorizontalAlignment="Right"
-                    VerticalAlignment="Center">
-            </Button>
-        </Grid>
-
         <!-- Output TextBox -->
         <Grid Grid.Row="2" ClipToBounds="True">
             <TextBox x:Name="TerminalOutput" 
