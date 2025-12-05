@@ -122,7 +122,7 @@ public partial class App : Application
         services.AddSingleton<ISettingsService, SettingsService>();
 
         //register UI services
-        services.AddSingleton<IDialogService, Services.DialogService>();
+        services.AddSingleton<IDialogService, Services.WPFDialogService>();
         services.AddSingleton<Services.IViewLocator, Services.ViewLocator>();
         services.AddSingleton<IClipboardService, Services.WPFClipboardService>();
     }

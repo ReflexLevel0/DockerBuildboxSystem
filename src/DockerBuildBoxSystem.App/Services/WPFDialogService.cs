@@ -1,12 +1,13 @@
 using DockerBuildBoxSystem.Contracts;
 using System.Windows;
+using WinForms = System.Windows.Forms;
 
 namespace DockerBuildBoxSystem.App.Services;
 
 /// <summary>
 /// Default implementation of IDialogService using WPF MessageBox.
 /// </summary>
-public class DialogService : IDialogService
+public class WPFDialogService : IDialogService
 {
     public void ShowInformation(string message, string title = "Information")
     {
@@ -27,5 +28,21 @@ public class DialogService : IDialogService
     {
         var result = MessageBox.Show(message, title, MessageBoxButton.YesNo, MessageBoxImage.Question);
         return result == MessageBoxResult.Yes;
+    }
+
+    public string? ShowFolderBrowser(string description = "Select folder")
+    {
+        using var dialog = new WinForms.FolderBrowserDialog
+        {
+            Description = description,
+            UseDescriptionForTitle = true,
+            ShowNewFolderButton = true
+        };
+
+        var result = dialog.ShowDialog();
+        if (result == WinForms.DialogResult.OK && !string.IsNullOrWhiteSpace(dialog.SelectedPath))
+            return dialog.SelectedPath;
+
+        return null;
     }
 }

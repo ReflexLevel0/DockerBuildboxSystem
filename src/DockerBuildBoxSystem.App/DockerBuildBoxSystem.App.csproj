@@ -12,6 +12,10 @@
 		<PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.10" />
 	</ItemGroup>
 
+  <ItemGroup>
+    <Reference Include="System.Windows.Forms" />
+  </ItemGroup>
+  
 	<ItemGroup>
 		<!-- Copying the configuration files to output directory -->
 		<None Update="Config\appsettings.json">

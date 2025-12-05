@@ -31,5 +31,12 @@ namespace DockerBuildBoxSystem.Contracts
         /// </summary>
         /// <returns>True if user clicked Yes, false otherwise.</returns>
         bool ShowConfirmation(string message, string title = "Confirm");
+
+        /// <summary>
+        /// Displays a folder browser dialog that allows the user to select a folder.
+        /// </summary>
+        /// <param name="description">The description text displayed in the folder browser dialog.</param>
+        /// <returns>The path of the selected folder as a string, or <see langword="null"/> if the user cancels the dialog.</returns>
+        string? ShowFolderBrowser(string description = "Select folder");
     }
 }
