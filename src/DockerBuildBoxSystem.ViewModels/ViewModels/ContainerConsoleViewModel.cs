@@ -372,6 +372,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 //stop any running operations from previous container.
                 await StopLogsAsync();
                 await StopExecAsync();
+                await StopSyncAsync();
                 UIHandler.DiscardPending();
 
                 if (!string.IsNullOrWhiteSpace(oldContainerId))
