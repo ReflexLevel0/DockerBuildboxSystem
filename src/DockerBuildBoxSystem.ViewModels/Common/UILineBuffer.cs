@@ -54,8 +54,14 @@ namespace DockerBuildBoxSystem.ViewModels.Common
         private Task? _uiUpdateTask;
 
         // ANSI escape code, RegexOptions.Compiled for better performance compiling regex 
-        private static readonly Regex AnsiRegex =
-            new(@"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])|\a|\r", RegexOptions.Compiled);
+        //https://github.com/chalk/ansi-regex/blob/main/index.js
+        //https://www.npmjs.com/package/ansi-regex
+        private static readonly Regex AnsiRegex = new(
+            @"(?:\u001B\][\s\S]*?(?:\u0007|\u001B\u005C|\u009C))" +
+            @"|" +
+            @"(?:[\u001B\u009B][\[\]\(\)#;?]*(?:\d{1,4}(?:[;:]\d{0,4})*)?[\dA-PR-TZcf-nq-uy=><~])",
+            RegexOptions.Compiled
+        );
 
         public int MaxLinesPerTick { get; set; } = 50;
         public int MaxLines { get; set; } = 1000;
@@ -341,7 +347,7 @@ namespace DockerBuildBoxSystem.ViewModels.Common
         /// <param name="s">The input string from which ANSI escape sequences will be removed. Cannot be <see langword="null"/>.</param>
         /// <returns>A string with all ANSI escape sequences removed. If the input string is empty, an empty string is returned.</returns>
         private static string CleanAnsi(string s)
-            => AnsiRegex.Replace(s, "");
+            => AnsiRegex.Replace(s, "").Replace("\r\n", "\n").Replace("\r", "");
         #endregion
 
 

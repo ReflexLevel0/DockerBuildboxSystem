@@ -11,5 +11,6 @@ namespace DockerBuildBoxSystem.Contracts
     {
         public Task<long> ExitCode { get; }
         public Task<bool> TryWriteToInteractiveAsync(string raw);
+        public Task InterruptAsync();
     }
 }
