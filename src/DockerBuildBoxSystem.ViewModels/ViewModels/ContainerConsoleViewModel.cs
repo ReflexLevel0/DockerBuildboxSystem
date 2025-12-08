@@ -57,6 +57,8 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [ObservableProperty]
         private string? _input;
 
+        private SynchronizationContext? _synchronizationContext;
+
         /// <summary>
         /// Currently selected container id OR name.
         /// </summary>
@@ -224,6 +226,17 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             };
 
             UIHandler = new UILineBuffer(Lines);
+
+            // Periodically refreshing container info 
+            var refreshContainersTimer = new System.Timers.Timer(new TimeSpan(0, 0, 5));
+            refreshContainersTimer.Elapsed += async (_, _) =>
+            {
+                if (_synchronizationContext != null)
+                {
+                    _synchronizationContext.Post(async _ => await RefreshContainersAsync(), null);
+                }
+            };
+            refreshContainersTimer.Enabled = true;
         }
 
         private async Task InitializeSettingsAsync()
@@ -991,5 +1004,10 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         }
 
         #endregion
+
+        public void SetSynchronizationContext(SynchronizationContext? context)
+        {
+            _synchronizationContext = context;
+        }
     }
 }

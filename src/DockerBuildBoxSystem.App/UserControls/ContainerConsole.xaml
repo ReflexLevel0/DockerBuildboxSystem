@@ -14,6 +14,7 @@
 
     <UserControl.Resources>
         <converters:StateToColorConverter x:Key="StateToColorConverter" />
+        <converters:IntToBoolConverter x:Key="IntToBoolConverter" />
     </UserControl.Resources>
 
     <Grid>
@@ -41,7 +42,7 @@
             <ComboBox Grid.Column="1" 
                       ItemsSource="{Binding Containers}"
                       SelectedItem="{Binding SelectedContainer}"
-                      IsEnabled="{Binding IsLoadingContainers, Converter={StaticResource InverseBooleanConverter}}"
+                      IsEnabled="{Binding Containers.Count, Converter={StaticResource IntToBoolConverter}}"
                       ToolTip="Select a container to interact with"
                       MinWidth="200">
                 <ComboBox.ItemTemplate>
