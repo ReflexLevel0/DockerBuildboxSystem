@@ -125,6 +125,10 @@ public partial class App : Application
         services.AddSingleton<IDialogService, Services.WPFDialogService>();
         services.AddSingleton<Services.IViewLocator, Services.ViewLocator>();
         services.AddSingleton<IClipboardService, Services.WPFClipboardService>();
+
+        // register external process service
+        services.AddSingleton<IExternalProcessService, ExternalProcessService>();
+        services.AddSingleton<ISyncIgnoreService, SyncIgnoreService>();
     }
 }
 
