@@ -86,7 +86,7 @@ namespace DockerBuildBoxSystem.Domain
         /// file path.</remarks>
         public void OpenEnvFile()
         {
-            _externalProcessService.OpenFileInEditor(_envFilePath);
+            _externalProcessService.StartProcess("notepad.exe", $"\"{_envFilePath}\"");
         }
     }
 }

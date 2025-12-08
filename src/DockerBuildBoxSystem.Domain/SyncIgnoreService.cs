@@ -63,7 +63,7 @@ namespace DockerBuildBoxSystem.Domain
         /// </summary>
         public void OpenSyncIgnore()
         {
-            _externalProcessService.OpenFileInEditor(_filePath);
+            _externalProcessService.StartProcess("notepad.exe", $"\"{_filePath}\"");
         }
 
         /// <summary>

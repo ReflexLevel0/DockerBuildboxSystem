@@ -7,12 +7,11 @@ using System.Threading.Tasks;
 namespace DockerBuildBoxSystem.Contracts
 {
     /// <summary>
-    /// Provides methods for interacting with external processes, such as opening files in an editor or executing system
-    /// commands.
+    /// Provides a method for interacting with external processes, such as opening files in an editor or opening 
+    /// a container in windows terminal.
     /// </summary>
     public interface IExternalProcessService
     {
-        void OpenFileInEditor(string filePath);
-        void RunCommand(string command, string arguments);
+        void StartProcess(string command, string arguments);
     }
 }
