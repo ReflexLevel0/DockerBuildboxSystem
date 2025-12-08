@@ -38,8 +38,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
         public readonly UILineBuffer UIHandler;
 
-        public EnvironmentViewModel EnvironmentVM { get; } = new EnvironmentViewModel();
-
         /// <summary>
         /// Lines currently displayed in the console UI.
         /// </summary>
@@ -200,7 +198,8 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
             _logRunner = new LogRunner();
             _cmdRunner = new CommandRunner();
-            
+
+
             //initialize from settings service
             _ = InitializeSettingsAsync();
 
@@ -297,9 +296,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
             // Load available images on initialization
             await RefreshImagesCommand.ExecuteAsync(null);
-
-            // Load environment variables
-            await EnvironmentVM.LoadEnvASync();
 
             // Load user-defined controls
             await LoadUserControlsAsync();

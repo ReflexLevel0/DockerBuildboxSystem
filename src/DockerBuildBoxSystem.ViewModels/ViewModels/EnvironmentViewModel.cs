@@ -25,9 +25,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private readonly IEnvironmentService _envService;
 
         public ObservableCollection<EnvVariable> EnvVariables { get; }
-        public EnvironmentViewModel()
+        public EnvironmentViewModel(IExternalProcessService externalProcessService)
         {
-            _envService = new EnvironmentService();
+            _envService = new EnvironmentService(externalProcessService);
             EnvVariables = new ObservableCollection<EnvVariable>();
 
         }

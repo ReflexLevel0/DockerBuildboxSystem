@@ -22,14 +22,14 @@
   },
   {
     "Control": "textbox",
-    "Id": "password",
-    "Label": "password:",
-    "Tooltip": "Enter a password"
+    "Id": "dir",
+    "Label": "Directory:",
+    "Tooltip": "Enter a path"
   },
   {
     "Control": "button",
-    "Command": [ "ls", "${password}" ],
-    "Tooltip": "List app directory",
+    "Command": [ "ls", "${dir}" ],
+    "Tooltip": "List data directory",
     "IconPath": "Assets/icons/list.png"
 
   },
