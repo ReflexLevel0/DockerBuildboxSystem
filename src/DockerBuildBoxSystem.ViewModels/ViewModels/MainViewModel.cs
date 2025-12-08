@@ -223,7 +223,9 @@ public partial class MainViewModel : ViewModelBase
         await Task.CompletedTask;
     }
 
-
+    /// <summary>
+    /// Opens the .syncignore file in notepad for viewing/editing.
+    /// </summary>
     [RelayCommand]
     private void OpenSyncIgnoreFile()
     {
