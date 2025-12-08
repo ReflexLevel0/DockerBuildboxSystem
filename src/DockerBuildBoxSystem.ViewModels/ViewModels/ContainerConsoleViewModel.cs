@@ -931,10 +931,11 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             if (string.IsNullOrWhiteSpace(raw))
                 return;
 
-            if (await _cmdRunner.TryWriteToInteractiveAsync(raw))
-                return;
             // resolve user variables from input
             var resolvedCommand = await _userControlService.RetrieveVariableAsync(raw, _userVariables);
+
+            if (await _cmdRunner.TryWriteToInteractiveAsync(resolvedCommand))
+                return;
 
             var args = ShellSplitter.SplitShellLike(resolvedCommand);
             await ExecuteAndLog(args);
