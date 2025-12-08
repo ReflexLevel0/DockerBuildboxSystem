@@ -44,6 +44,7 @@ namespace DockerBuildBoxSystem.App.UserControls
             if(viewModel is null)
                 throw new InvalidOperationException("ContainerConsoleViewModel could not be resolved from the service provider!");
 
+            viewModel.SetSynchronizationContext(SynchronizationContext.Current);
             _viewModel = viewModel;
 
             DataContext = _viewModel;
