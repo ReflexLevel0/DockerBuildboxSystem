@@ -82,6 +82,8 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
         public bool CanUseUserControls => CanSend();
 
+        public bool IsContainerRunning => SelectedContainer?.IsRunning == true;
+
         /// <summary>
         /// True while logs are currently being streamed.
         /// </summary>
@@ -248,16 +250,20 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
             UIHandler = new UILineBuffer(Lines);
 
-            // Periodically refreshing container info 
-            var refreshContainersTimer = new System.Timers.Timer(new TimeSpan(0, 0, 5));
-            refreshContainersTimer.Elapsed += async (_, _) =>
+            // Periodically refreshing container and image info 
+            var refreshImagesContainersTimer = new System.Timers.Timer(new TimeSpan(0, 0, 5));
+            refreshImagesContainersTimer.Elapsed += async (_, _) =>
             {
                 if (_synchronizationContext != null)
                 {
-                    _synchronizationContext.Post(async _ => await RefreshContainersAsync(), null);
+                    _synchronizationContext.Post(async _ =>
+                    {
+                        await RefreshSelectedContainerAsync();
+                        await RefreshImagesAsync();
+                    }, null);
                 }
             };
-            refreshContainersTimer.Enabled = true;
+            refreshImagesContainersTimer.Enabled = true;
         }
 
         private async Task InitializeSettingsAsync()
@@ -487,7 +493,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             // If we are switching images, the image switcher handles log starting.
             if (IsSwitching) return;
 
-            if (AutoStartLogs && !IsLogsRunning)
+            if (AutoStartLogs && !IsLogsRunning && container?.IsRunning == true)
             {
                 await StartLogsCommand.ExecuteAsync(null);
             }
@@ -499,7 +505,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// <param name="value">The new value of the "Show All Images" setting.
         /// <see langword="true"/> if all images should be shown; otherwise, <see langword="false"/>.</param>
         partial void OnShowAllImagesChanged(bool value) => RefreshImagesCommand.ExecuteAsync(null);
-        private bool CanStartContainer() => !string.IsNullOrWhiteSpace(ContainerId) && (SelectedContainer?.IsRunning == false);
+        private bool CanStartContainer() => !string.IsNullOrWhiteSpace(ContainerId) && !IsContainerRunning;
 
         /// <summary>
         /// Starts the selected container.
@@ -562,7 +568,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 }
             }
         }
-        private bool CanStopContainer() => !string.IsNullOrWhiteSpace(ContainerId) && (SelectedContainer?.IsRunning == true);
+        private bool CanStopContainer() => !string.IsNullOrWhiteSpace(ContainerId) && IsContainerRunning;
 
         /// <summary>
         /// Stops a running container.
@@ -570,7 +576,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [RelayCommand(CanExecute = nameof(CanStopContainer))]
         private async Task StopContainerAsync() => await StopContainerByIdAsync(SelectedContainer);
 
-        private bool CanRestartContainer() => !string.IsNullOrWhiteSpace(ContainerId) && (SelectedContainer?.IsRunning == true);
+        private bool CanRestartContainer() => !string.IsNullOrWhiteSpace(ContainerId) && IsContainerRunning;
 
         /// <summary>
         /// Stops a container by id (used when auto-stopping previous selection).
@@ -626,7 +632,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// <summary>
         /// Determines whether sending commands is currently allowed.
         /// </summary>
-        private bool CanSend() => !string.IsNullOrWhiteSpace(ContainerId) && (SelectedContainer?.IsRunning == true) && !IsSyncRunning && !IsSwitching;
+        private bool CanSend() => !string.IsNullOrWhiteSpace(ContainerId) && IsContainerRunning && !IsSyncRunning && !IsSwitching;
 
 
         /// <summary>
@@ -824,7 +830,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// <summary>
         /// Determines whether sync can be started.
         /// </summary>
-        private bool CanSync() => !string.IsNullOrWhiteSpace(ContainerId) && (SelectedContainer?.IsRunning == true) && !IsSyncRunning && !IsCommandRunning && !IsSwitching;
+        private bool CanSync() => !string.IsNullOrWhiteSpace(ContainerId) && IsContainerRunning && !IsSyncRunning && !IsCommandRunning && !IsSwitching;
 
         /// <summary>
         /// Starts the sync operation.
