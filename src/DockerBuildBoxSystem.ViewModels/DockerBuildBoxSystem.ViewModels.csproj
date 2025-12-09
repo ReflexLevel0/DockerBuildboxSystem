@@ -2,7 +2,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\DockerBuildBoxSystem.Contracts\DockerBuildBoxSystem.Contracts.csproj" />
-    <ProjectReference Include="..\DockerBuildBoxSystem.Domain\DockerBuildBoxSystem.Domain.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -91,6 +91,7 @@ public partial class App : Application
     {
         //register ViewModels as Transient (creates a new instance each time)
         services.AddTransient<MainViewModel>();
+        services.AddTransient<DockerBuildBoxSystem.ViewModels.ViewModels.EnvironmentViewModel>();
         //The DockerConsoleViewModel depends on IContainerService, which has beem registered as a Singleton
         services.AddTransient<DockerBuildBoxSystem.ViewModels.ViewModels.ContainerConsoleViewModel>();
     }
@@ -118,6 +119,13 @@ public partial class App : Application
         services.AddTransient<IIgnorePatternMatcher, IgnorePatternMatcher>();
         services.AddTransient<IFileSyncService, FileSyncService>();
         
+        //register user control service
+        services.AddSingleton<IUserControlService, UserControlService>();
+        
+        //register runners used by ContainerConsoleViewModel
+        services.AddTransient<ILogRunner, LogRunner>();
+        services.AddTransient<ICommandRunner, CommandRunner>();
+        
         //register settings service
         services.AddSingleton<ISettingsService, SettingsService>();
 
@@ -129,6 +137,9 @@ public partial class App : Application
         // register external process service
         services.AddSingleton<IExternalProcessService, ExternalProcessService>();
         services.AddSingleton<ISyncIgnoreService, SyncIgnoreService>();
+
+        // register environment service abstraction
+        services.AddSingleton<IEnvironmentService, EnvironmentService>();
     }
 }
 

@@ -16,7 +16,6 @@ public partial class MainViewModel : ViewModelBase
     private readonly IDialogService _dialogService;
     private readonly ISettingsService _settingsService;
     private readonly ISyncIgnoreService _syncIgnoreService;
-    private readonly IExternalProcessService _externalProcessService;
     // Suppress persisting SourcePath while we are loading the initial value
     private bool _isLoadingSourcePath;
 
@@ -43,15 +42,13 @@ public partial class MainViewModel : ViewModelBase
                         IDialogService dialogService,
                         ISettingsService settingsService,
                         ISyncIgnoreService syncIgnoreService,
-                        IExternalProcessService externalProcessService)
+                        EnvironmentViewModel environmentViewModel)
     {
         _configuration = configuration;
         _dialogService = dialogService;
         _settingsService = settingsService;
         _syncIgnoreService = syncIgnoreService;
-        _externalProcessService = externalProcessService;
-
-        EnvironmentVM = new EnvironmentViewModel(_externalProcessService);
+        EnvironmentVM = environmentViewModel;
 
         //load title from configuration
         var appName = _configuration["Application:Name"] ?? "Docker BuildBox System";

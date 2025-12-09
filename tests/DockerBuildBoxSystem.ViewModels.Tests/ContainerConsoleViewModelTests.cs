@@ -15,16 +15,23 @@ public class ContainerConsoleViewModelTests
         IFileSyncService? fileSyncService = null,
         IConfiguration? configuration = null,
         ISettingsService? settingsService = null,
-        IClipboardService? clipboard = null)
+        IUserControlService? userControlService = null,
+        ILogRunner? logRunner = null,
+        ICommandRunner? commandRunner = null,
+        IClipboardService? clipboard = null
+        )
     {
         service ??= Substitute.For<IContainerService>();
         fileSyncService ??= Substitute.For<IFileSyncService>();
         fileSyncService.Changes.Returns(new System.Collections.ObjectModel.ObservableCollection<string>());
         configuration ??= Substitute.For<IConfiguration>();
         settingsService ??= Substitute.For<ISettingsService>();
+        userControlService ??= Substitute.For<IUserControlService>();
+        logRunner ??= Substitute.For<ILogRunner>();
+        commandRunner ??= Substitute.For<ICommandRunner>();
         clipboard ??= Substitute.For<IClipboardService>();
 
-        return new ContainerConsoleViewModel(service, fileSyncService, configuration, settingsService, clipboard);
+        return new ContainerConsoleViewModel(service, fileSyncService, configuration, settingsService, userControlService, logRunner, commandRunner, clipboard);
     }
 
     /// <summary>
