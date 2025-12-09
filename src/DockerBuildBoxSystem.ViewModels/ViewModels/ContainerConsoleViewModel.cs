@@ -1,7 +1,6 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DockerBuildBoxSystem.Contracts;
-using DockerBuildBoxSystem.Domain;
 using DockerBuildBoxSystem.ViewModels.Common;
 using Microsoft.Extensions.Configuration;
 using System;
@@ -168,17 +167,19 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             IFileSyncService fileSyncService,
             IConfiguration configuration,
             ISettingsService settingsService,
+            IUserControlService userControlService,
+            ILogRunner logRunner,
+            ICommandRunner cmdRunner,
             IClipboardService? clipboard = null) : base()
         {
             _service = service ?? throw new ArgumentNullException(nameof(service));
             _fileSyncService = fileSyncService ?? throw new ArgumentNullException(nameof(fileSyncService));
             _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
             _settingsService = settingsService ?? throw new ArgumentNullException(nameof(settingsService));
+            _userControlService = userControlService ?? throw new ArgumentNullException(nameof(userControlService));
+            _logRunner = logRunner ?? throw new ArgumentNullException(nameof(logRunner));
+            _cmdRunner = cmdRunner ?? throw new ArgumentNullException(nameof(cmdRunner));
             _clipboard = clipboard;
-            _userControlService = new UserControlService();
-
-            _logRunner = new LogRunner();
-            _cmdRunner = new CommandRunner();
 
 
             //initialize from settings service
@@ -850,7 +851,8 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// <returns> a task representing the asynchronous operation</returns>
         private async Task LoadUserControlsAsync()
         {
-            var controls = await _userControlService.LoadUserControlsAsync();
+            var controls = await _userControlService.LoadUserControlsAsync() 
+                           ?? new List<UserControlDefinition>();
 
             if (controls.Count > maxControls)
             {
