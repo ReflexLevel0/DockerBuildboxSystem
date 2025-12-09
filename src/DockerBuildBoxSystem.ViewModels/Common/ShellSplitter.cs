@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace DockerBuildBoxSystem.Domain
+namespace DockerBuildBoxSystem.ViewModels.Common
 {
     public static class ShellSplitter
     {
