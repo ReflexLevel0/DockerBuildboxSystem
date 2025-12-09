@@ -1,5 +1,4 @@
-﻿using System.IO;
-using System.Windows;
+﻿using System.Windows;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -7,6 +6,8 @@ using DockerBuildBoxSystem.ViewModels.Main;
 using DockerBuildBoxSystem.Contracts;
 using DockerBuildBoxSystem.Domain;
 using DockerBuildBoxSystem.ViewModels.ViewModels;
+using DockerBuildBoxSystem.App.UserControls;
+using DockerBuildBoxSystem.App.Services;
 
 namespace DockerBuildBoxSystem.App;
 
@@ -106,7 +107,7 @@ public partial class App : Application
         services.AddTransient<MainWindow>();
         
         //register UserControls as Transient
-        services.AddTransient<UserControls.ContainerConsole>();
+        services.AddTransient<ContainerConsole>();
     }
 
     /// <summary>
@@ -131,9 +132,9 @@ public partial class App : Application
         services.AddSingleton<ISettingsService, SettingsService>();
 
         //register UI services
-        services.AddSingleton<IDialogService, Services.WPFDialogService>();
-        services.AddSingleton<Services.IViewLocator, Services.ViewLocator>();
-        services.AddSingleton<IClipboardService, Services.WPFClipboardService>();
+        services.AddSingleton<IDialogService, WPFDialogService>();
+        services.AddSingleton<IViewLocator, ViewLocator>();
+        services.AddSingleton<IClipboardService, WPFClipboardService>();
 
         // register external process service
         services.AddSingleton<IExternalProcessService, ExternalProcessService>();
