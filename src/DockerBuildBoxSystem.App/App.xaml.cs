@@ -6,6 +6,7 @@ using Microsoft.Extensions.Hosting;
 using DockerBuildBoxSystem.ViewModels.Main;
 using DockerBuildBoxSystem.Contracts;
 using DockerBuildBoxSystem.Domain;
+using DockerBuildBoxSystem.ViewModels.ViewModels;
 
 namespace DockerBuildBoxSystem.App;
 
@@ -91,9 +92,9 @@ public partial class App : Application
     {
         //register ViewModels as Transient (creates a new instance each time)
         services.AddTransient<MainViewModel>();
-        services.AddTransient<DockerBuildBoxSystem.ViewModels.ViewModels.EnvironmentViewModel>();
+        services.AddTransient<EnvironmentViewModel>();
         //The DockerConsoleViewModel depends on IContainerService, which has beem registered as a Singleton
-        services.AddTransient<DockerBuildBoxSystem.ViewModels.ViewModels.ContainerConsoleViewModel>();
+        services.AddTransient<ContainerConsoleViewModel>();
     }
 
     /// <summary>
