@@ -75,6 +75,8 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
         public bool CanUseUserControls => CanSend();
 
+        public bool IsRunning => SelectedContainer?.IsRunning == true;
+
         /// <summary>
         /// True while logs are currently being streamed.
         /// </summary>
@@ -97,6 +99,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [NotifyPropertyChangedFor(nameof(CanUseUserControls))]
         [NotifyCanExecuteChangedFor(nameof(StartSyncCommand))]
         [NotifyCanExecuteChangedFor(nameof(StartForceSyncCommand))]
+        [NotifyCanExecuteChangedFor(nameof(OpenContainerInCmdCommand))]
         private ContainerInfo? _selectedContainer;
 
         /// <summary>
@@ -533,6 +536,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 _ = RefreshContainersCommand.ExecuteAsync(null);
             }
         }
+<<<<<<< HEAD
         /// <summary>
         /// Open the selected container in a Windows command prompt.
         /// </summary>
@@ -541,6 +545,11 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// </remarks>
         /// <returns>the task representing the asynchronous operation.</returns>
         [RelayCommand]
+=======
+
+
+        [RelayCommand(CanExecute = nameof(IsRunning))]
+>>>>>>> 935da9631e90aebd901109d5e7080f442bba3f83
         private async Task OpenContainerInCmd()
         {
             if (string.IsNullOrWhiteSpace(SelectedContainer?.Id)) return;
