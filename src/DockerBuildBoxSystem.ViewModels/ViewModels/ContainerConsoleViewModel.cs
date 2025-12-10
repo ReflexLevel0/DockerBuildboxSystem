@@ -1,5 +1,6 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Docker.DotNet.Models;
 using DockerBuildBoxSystem.Contracts;
 using DockerBuildBoxSystem.ViewModels.Common;
 using Microsoft.Extensions.Configuration;
@@ -162,6 +163,12 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [ObservableProperty]
         private string _containerSyncPath = "/data/";
 
+        /// <summary>
+        /// Config parameters for creating the docker container
+        /// </summary>
+        [ObservableProperty]
+        private HostConfig? _hostConfig;
+
         //track previous selected container and image id to manage stop-on-switch behavior
         private string? _previousContainerId;
         private string? _previousImageId;
@@ -188,6 +195,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             IUserControlService userControlService,
             ILogRunner logRunner,
             ICommandRunner cmdRunner,
+            HostConfig hostConfig,
             IClipboardService? clipboard = null) : base()
         {
             _service = service ?? throw new ArgumentNullException(nameof(service));
@@ -198,6 +206,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             _userControlService = userControlService ?? throw new ArgumentNullException(nameof(userControlService));
             _logRunner = logRunner ?? throw new ArgumentNullException(nameof(logRunner));
             _cmdRunner = cmdRunner ?? throw new ArgumentNullException(nameof(cmdRunner));
+            _hostConfig = hostConfig ?? throw new ArgumentNullException(nameof(hostConfig));
             _clipboard = clipboard;
 
 
@@ -444,7 +453,13 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 {
                     PostLogMessage("[info] No existing container found for image. Creating a new one...", false);
 
-                    var newContainerId = await _service.CreateContainerAsync(new ContainerCreationOptions { ImageName = imageName }, ct: ct);
+                    var newContainerId = await _service.CreateContainerAsync(
+                        new ContainerCreationOptions 
+                        {
+                            ImageName = imageName, 
+                            Config = HostConfig
+                        }, 
+                        ct: ct);
                     container = await _service.InspectAsync(newContainerId, ct);
 
                     var createdName = container.Names.FirstOrDefault() ?? container.Id;

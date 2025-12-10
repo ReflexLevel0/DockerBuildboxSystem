@@ -49,27 +49,6 @@ namespace DockerBuildBoxSystem.Domain
 
         public async Task<string> CreateContainerAsync(ContainerCreationOptions options, CancellationToken ct = default)
         {
-            var hostConfig = new HostConfig
-            {
-                Memory = options.Memory ?? 0,
-                MemorySwap = options.MemorySwap ?? 0,
-                CPUShares = options.CpuShares ?? 0,
-                NanoCPUs = options.NanoCpus ?? 0
-            };
-
-            if (options.VolumeBindings is not null)
-            {
-                //Will build strings like this: "hostPath:/container/path:ro"
-                hostConfig.Binds = options.VolumeBindings
-                    .Select(v =>
-                        string.IsNullOrWhiteSpace(v.Options)
-                            ? $"{v.Source}:{v.Target}"
-                            : $"{v.Source}:{v.Target}:{v.Options}")
-                    .ToList();
-            }
-
-            //There are a AutoRemove option also that rmeoves the container when it exits
-
             var response = await _client.Containers.CreateContainerAsync(new CreateContainerParameters
             {
                 Image = options.ImageName,
@@ -79,7 +58,7 @@ namespace DockerBuildBoxSystem.Domain
                 AttachStdin = true,
                 AttachStdout = true,
                 AttachStderr = true,
-                HostConfig = hostConfig
+                HostConfig = options.Config
             }, ct);
 
             return response.ID;

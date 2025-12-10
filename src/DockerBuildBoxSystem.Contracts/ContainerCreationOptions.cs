@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using Docker.DotNet;
+using Docker.DotNet.Models;
 
 namespace DockerBuildBoxSystem.Contracts
 {
@@ -6,10 +8,6 @@ namespace DockerBuildBoxSystem.Contracts
     {
         public required string ImageName { get; init; }
         public string? ContainerName { get; init; }
-        public IEnumerable<(string Source, string Target, string? Options)>? VolumeBindings { get; init; }
-        public long? Memory { get; init; }
-        public long? MemorySwap { get; init; }
-        public long? CpuShares { get; init; }
-        public long? NanoCpus { get; init; }
+        public HostConfig? Config { get; init; }
     }
 }

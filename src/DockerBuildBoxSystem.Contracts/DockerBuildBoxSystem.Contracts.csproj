@@ -2,6 +2,7 @@
 
 	<ItemGroup>
 		<PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+		<PackageReference Include="Docker.DotNet.Enhanced" Version="3.127.0" />
 	</ItemGroup>
 	
   <PropertyGroup>
