@@ -536,7 +536,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 _ = RefreshContainersCommand.ExecuteAsync(null);
             }
         }
-<<<<<<< HEAD
+
         /// <summary>
         /// Open the selected container in a Windows command prompt.
         /// </summary>
@@ -544,12 +544,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// The container must be running for this command to succeed. It syncs with the currently selected container.
         /// </remarks>
         /// <returns>the task representing the asynchronous operation.</returns>
-        [RelayCommand]
-=======
-
-
         [RelayCommand(CanExecute = nameof(IsRunning))]
->>>>>>> 935da9631e90aebd901109d5e7080f442bba3f83
         private async Task OpenContainerInCmd()
         {
             if (string.IsNullOrWhiteSpace(SelectedContainer?.Id)) return;
