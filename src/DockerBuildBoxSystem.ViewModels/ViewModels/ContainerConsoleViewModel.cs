@@ -29,6 +29,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private readonly ILogRunner _logRunner;
         private readonly ICommandRunner _cmdRunner;
         private readonly IUserControlService _userControlService;
+        private readonly IExternalProcessService _externalProcessService;
         private readonly int maxControls = 15;
         private List<UserVariables> _userVariables = new();
 
@@ -74,6 +75,8 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
         public bool CanUseUserControls => CanSend();
 
+        public bool IsRunning => SelectedContainer?.IsRunning == true;
+
         /// <summary>
         /// True while logs are currently being streamed.
         /// </summary>
@@ -96,6 +99,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [NotifyPropertyChangedFor(nameof(CanUseUserControls))]
         [NotifyCanExecuteChangedFor(nameof(StartSyncCommand))]
         [NotifyCanExecuteChangedFor(nameof(StartForceSyncCommand))]
+        [NotifyCanExecuteChangedFor(nameof(OpenContainerInCmdCommand))]
         private ContainerInfo? _selectedContainer;
 
         /// <summary>
@@ -170,6 +174,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             IUserControlService userControlService,
             ILogRunner logRunner,
             ICommandRunner cmdRunner,
+            IExternalProcessService externalProcessService,
             IClipboardService? clipboard = null) : base()
         {
             _service = service ?? throw new ArgumentNullException(nameof(service));
@@ -177,6 +182,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
             _settingsService = settingsService ?? throw new ArgumentNullException(nameof(settingsService));
             _userControlService = userControlService ?? throw new ArgumentNullException(nameof(userControlService));
+            _externalProcessService = externalProcessService ?? throw new ArgumentNullException(nameof(externalProcessService));
             _logRunner = logRunner ?? throw new ArgumentNullException(nameof(logRunner));
             _cmdRunner = cmdRunner ?? throw new ArgumentNullException(nameof(cmdRunner));
             _clipboard = clipboard;
@@ -528,6 +534,28 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             finally
             {
                 _ = RefreshContainersCommand.ExecuteAsync(null);
+            }
+        }
+
+        /// <summary>
+        /// Open the selected container in a Windows command prompt.
+        /// </summary>
+        /// <remarks>This command opens a new command prompt window with the specified container's shell.
+        /// The container must be running for this command to succeed. It syncs with the currently selected container.
+        /// </remarks>
+        /// <returns>the task representing the asynchronous operation.</returns>
+        [RelayCommand(CanExecute = nameof(IsRunning))]
+        private async Task OpenContainerInCmd()
+        {
+            if (string.IsNullOrWhiteSpace(SelectedContainer?.Id)) return;
+            try
+            {
+                PostLogMessage($"[info] Opening container in windows cmd: {SelectedContainer.Id}", false);
+                _externalProcessService.StartProcess("cmd.exe", $"/K docker exec -it {SelectedContainer.Id} bash");
+            }
+            catch (Exception ex)
+            {
+                PostLogMessage($"[open-shell-error] {ex.Message}", true);
             }
         }
 
