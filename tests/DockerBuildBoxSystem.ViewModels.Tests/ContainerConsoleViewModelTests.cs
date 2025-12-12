@@ -20,8 +20,9 @@ public class ContainerConsoleViewModelTests
         IUserControlService? userControlService = null,
         ILogRunner? logRunner = null,
         ICommandRunner? commandRunner = null,
+        IClipboardService? clipboard = null,
         HostConfig? hostConfig = null,
-        IClipboardService? clipboard = null
+        IExternalProcessService? externalProcessService = null
         )
     {
         service ??= Substitute.For<IContainerService>();
@@ -33,10 +34,11 @@ public class ContainerConsoleViewModelTests
         userControlService ??= Substitute.For<IUserControlService>();
         logRunner ??= Substitute.For<ILogRunner>();
         commandRunner ??= Substitute.For<ICommandRunner>();
-        hostConfig ??= Substitute.For<HostConfig>();
         clipboard ??= Substitute.For<IClipboardService>();
+        hostConfig ??= new HostConfig();
+        externalProcessService ??= Substitute.For<IExternalProcessService>();
 
-        return new ContainerConsoleViewModel(service, imageService, fileSyncService, configuration, settingsService, userControlService, logRunner, commandRunner, hostConfig, clipboard);
+        return new ContainerConsoleViewModel(service, imageService, fileSyncService, configuration, settingsService, userControlService, logRunner, commandRunner, hostConfig, externalProcessService, clipboard);
     }
 
     /// <summary>
