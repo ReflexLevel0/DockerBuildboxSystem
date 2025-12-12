@@ -14,6 +14,7 @@ namespace DockerBuildBoxSystem.Contracts
         void StartWatching(string path, string containerId, string containerRootPath = "/data/");
         void StopWatching();
         Task ForceSyncAsync();
+        Task CleanDirectoryAsync(IEnumerable<string>? excludedPaths = null);
         void UpdateIgnorePatterns(string patterns);
     }
 }
