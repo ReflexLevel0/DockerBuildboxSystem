@@ -20,11 +20,12 @@ namespace DockerBuildBoxSystem.Domain
     /// <summary>
     /// Class for interactions with the Docker Engine API using Docker.DotNet.
     /// </summary>
-    public sealed class DockerService : IContainerService, IImageService, IAsyncDisposable, IDisposable
+    public sealed class DockerService : IContainerService, IImageService, IVolumeService, IAsyncDisposable, IDisposable
     {
         #region Variables and Constructor
         private readonly DockerClient _client;
         private bool _disposed;
+        private static readonly string _sharedVolumeName = "BuildBoxShared";
 
         /// <summary>
         /// Initializes a new instance of the <see cref="DockerService"/> class.
@@ -49,6 +50,17 @@ namespace DockerBuildBoxSystem.Domain
 
         public async Task<string> CreateContainerAsync(ContainerCreationOptions options, CancellationToken ct = default)
         {
+            // Getting (or creating a new) shared volume and setting it as container mount
+            var sharedVolume = await GetSharedVolumeAsync(ct, true);
+            if (options.Config.Mounts == null) options.Config.Mounts = new List<Mount>();
+            options.Config?.Mounts.Add(new Mount()
+            {
+                Type = "volume",
+                Source = sharedVolume?.Name,
+                Target = options.ContainerRootPath
+            });
+
+            // Creating the container
             var response = await _client.Containers.CreateContainerAsync(new CreateContainerParameters
             {
                 Image = options.ImageName,
@@ -223,7 +235,7 @@ namespace DockerBuildBoxSystem.Domain
                 {
                     //unregister the cancellation callback
                     registration?.Dispose();
-                    
+
                     //ensure the stream is disposed even if cancelled! This resolves the issue of the application keeps running even though window was closed! :D
                     stream?.Dispose();
                     ch.Writer.TryComplete();
@@ -472,7 +484,7 @@ namespace DockerBuildBoxSystem.Domain
                 TarFile.CreateFromDirectory(hostPath, tempTarPath, includeBaseDirectory: false);
 
                 using var fileStream = File.OpenRead(tempTarPath);
-                
+
                 await _client.Containers.ExtractArchiveToContainerAsync(containerId,
                     new ContainerPathStatParameters { Path = containerPath },
                     fileStream,
@@ -538,6 +550,27 @@ namespace DockerBuildBoxSystem.Domain
 
         #endregion
 
+        #region Volume operations
+        public async Task<VolumeResponse?> GetSharedVolumeAsync(CancellationToken ct, bool createIfNotExists = false)
+        {
+            // Finding a volume named "BuildBoxShared"
+            var volumes = (await _client.Volumes.ListAsync(ct)).Volumes;
+            var sharedVolume = volumes
+                .Where(v => string.CompareOrdinal(v.Name, _sharedVolumeName) == 0)
+                .FirstOrDefault();
+
+            // Returning the volume
+            // (or creating and returning a new volume if shared volume doesn't exist)
+            return sharedVolume == null ? await CreateSharedVolumeAsync(ct) : sharedVolume;
+        }
+
+        public async Task<VolumeResponse?> CreateSharedVolumeAsync(CancellationToken ct)
+        {
+            // Creates a volume named "BuildBoxShared"
+            var volumeParams = new VolumesCreateParameters() { Name = _sharedVolumeName };
+            return await _client.Volumes.CreateAsync(volumeParams, ct);
+        }
+        #endregion
 
         #region Helpers
 

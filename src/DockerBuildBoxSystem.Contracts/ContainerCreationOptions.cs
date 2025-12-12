@@ -8,6 +8,7 @@ namespace DockerBuildBoxSystem.Contracts
     {
         public required string ImageName { get; init; }
         public string? ContainerName { get; init; }
-        public HostConfig? Config { get; init; }
+        public string? ContainerRootPath { get; init; } = "/data";
+        public required HostConfig Config { get; init; }
     }
 }
