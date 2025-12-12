@@ -5,6 +5,7 @@ using DockerBuildBoxSystem.ViewModels.Common;
 using Microsoft.Extensions.Configuration;
 using NSubstitute;
 using static DockerBuildBoxSystem.TestUtils.ChannelTestUtil;
+using Docker.DotNet.Models;
 
 namespace DockerBuildBoxSystem.ViewModels.Tests;
 
@@ -19,6 +20,7 @@ public class ContainerConsoleViewModelTests
         IUserControlService? userControlService = null,
         ILogRunner? logRunner = null,
         ICommandRunner? commandRunner = null,
+        HostConfig? hostConfig = null,
         IClipboardService? clipboard = null
         )
     {
@@ -31,9 +33,10 @@ public class ContainerConsoleViewModelTests
         userControlService ??= Substitute.For<IUserControlService>();
         logRunner ??= Substitute.For<ILogRunner>();
         commandRunner ??= Substitute.For<ICommandRunner>();
+        hostConfig ??= Substitute.For<HostConfig>();
         clipboard ??= Substitute.For<IClipboardService>();
 
-        return new ContainerConsoleViewModel(service, imageService, fileSyncService, configuration, settingsService, userControlService, logRunner, commandRunner, clipboard);
+        return new ContainerConsoleViewModel(service, imageService, fileSyncService, configuration, settingsService, userControlService, logRunner, commandRunner, hostConfig, clipboard);
     }
 
     /// <summary>

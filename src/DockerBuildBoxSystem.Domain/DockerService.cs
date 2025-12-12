@@ -20,11 +20,12 @@ namespace DockerBuildBoxSystem.Domain
     /// <summary>
     /// Class for interactions with the Docker Engine API using Docker.DotNet.
     /// </summary>
-    public sealed class DockerService : IContainerService, IImageService, IAsyncDisposable, IDisposable
+    public sealed class DockerService : IContainerService, IImageService, IVolumeService, IAsyncDisposable, IDisposable
     {
         #region Variables and Constructor
         private readonly DockerClient _client;
         private bool _disposed;
+        private static readonly string _sharedVolumeName = "BuildBoxShared";
 
         /// <summary>
         /// Initializes a new instance of the <see cref="DockerService"/> class.
@@ -49,6 +50,17 @@ namespace DockerBuildBoxSystem.Domain
 
         public async Task<string> CreateContainerAsync(ContainerCreationOptions options, CancellationToken ct = default)
         {
+            // Getting (or creating a new) shared volume and setting it as container mount
+            var sharedVolume = await GetSharedVolumeAsync(ct, true);
+            if(options.Config.Mounts == null) options.Config.Mounts = new List<Mount>();
+            options.Config?.Mounts.Add(new Mount() 
+            {
+                Type = "volume", 
+                Source = sharedVolume?.Name, 
+                Target = options.ContainerRootPath
+            });
+            
+            // Creating the container
             var response = await _client.Containers.CreateContainerAsync(new CreateContainerParameters
             {
                 Image = options.ImageName,
@@ -422,34 +434,7 @@ namespace DockerBuildBoxSystem.Domain
             string containerPath,
             CancellationToken ct = default)
         {
-            if (!File.Exists(hostPath))
-                throw new FileNotFoundException("File not found", hostPath);
-
-            /*
-                There are no "docker cp" equivelent in the docker.dotnet nuget package.
-                However, the "docker cp" is actually just a wrapper that uses compression, see the implementation:
-                    https://github.com/docker/cli/blob/master/cli/command/container/cp.go#L418
-                
-            */
-            string fileName = Path.GetFileName(containerPath);
-            string dirName = Path.GetDirectoryName(containerPath)?.Replace('\\', '/') ?? "/";
-
-            // Ensure directory exists
-            await ExecAsync(containerId, new[] { "mkdir", "-p", dirName }, ct);
-
-            using var memoryStream = new MemoryStream();
-            using (var tarWriter = new TarWriter(memoryStream, leaveOpen: true))
-            {
-                //create a tar entry from the host file, but rename it to the target filename
-                await tarWriter.WriteEntryAsync(hostPath, fileName, ct);
-            }
-
-            memoryStream.Position = 0;
-
-            await _client.Containers.ExtractArchiveToContainerAsync(containerId,
-                new ContainerPathStatParameters { Path = dirName },
-                memoryStream,
-                ct);
+            throw new NotImplementedException();
         }
 
         public async Task CopyDirectoryToContainerAsync(
@@ -538,6 +523,27 @@ namespace DockerBuildBoxSystem.Domain
 
         #endregion
 
+        #region Volume operations
+        public async Task<VolumeResponse?> GetSharedVolumeAsync(CancellationToken ct, bool createIfNotExists = false)
+        {
+            // Finding a volume named "BuildBoxShared"
+            var volumes = (await _client.Volumes.ListAsync(ct)).Volumes;
+            var sharedVolume = volumes
+                .Where(v => string.CompareOrdinal(v.Name, _sharedVolumeName) == 0)
+                .FirstOrDefault();
+
+            // Returning the volume
+            // (or creating and returning a new volume if shared volume doesn't exist)
+            return sharedVolume == null ? await CreateSharedVolumeAsync(ct) : sharedVolume;
+        }
+
+        public async Task<VolumeResponse?> CreateSharedVolumeAsync(CancellationToken ct)
+        {
+            // Creates a volume named "BuildBoxShared"
+            var volumeParams = new VolumesCreateParameters() { Name = _sharedVolumeName };
+            return await _client.Volumes.CreateAsync(volumeParams, ct);
+        }
+        #endregion
 
         #region Helpers
 
