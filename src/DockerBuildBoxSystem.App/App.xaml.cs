@@ -8,6 +8,9 @@ using DockerBuildBoxSystem.Domain;
 using DockerBuildBoxSystem.ViewModels.ViewModels;
 using DockerBuildBoxSystem.App.UserControls;
 using DockerBuildBoxSystem.App.Services;
+using Docker.DotNet.Models;
+using Newtonsoft.Json;
+using System.IO;
 
 namespace DockerBuildBoxSystem.App;
 
@@ -117,6 +120,7 @@ public partial class App : Application
     {
         //register container services
         services.AddSingleton<IContainerService, DockerService>();
+        services.AddSingleton<IImageService>(provider => (IImageService)provider.GetRequiredService<IContainerService>());
         services.AddSingleton<IContainerFileTransferService, ContainerFileTransferService>();
         services.AddTransient<IIgnorePatternMatcher, IgnorePatternMatcher>();
         services.AddTransient<IFileSyncService, FileSyncService>();
@@ -142,6 +146,9 @@ public partial class App : Application
 
         // register environment service abstraction
         services.AddSingleton<IEnvironmentService, EnvironmentService>();
+
+        // reading the container creation arguments from the file and creating a HostConfig from it
+        string hostConfigStr = File.ReadAllText(Path.Combine("Config", "container_creation_args.json"));
+        services.AddScoped<HostConfig>(_ => JsonConvert.DeserializeObject<HostConfig>(hostConfigStr)!);
     }
 }
-
