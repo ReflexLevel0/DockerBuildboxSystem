@@ -23,6 +23,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
     /// </summary>
     public sealed partial class ContainerConsoleViewModel : ViewModelBase
     {
+        private readonly IServiceProvider _serviceProvider;
         private readonly IContainerService _service;
         private readonly IImageService _imageService;
         private readonly IFileSyncService _fileSyncService;
@@ -165,12 +166,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [ObservableProperty]
         private string _containerSyncPath = "/data/";
 
-        /// <summary>
-        /// Config parameters for creating the docker container
-        /// </summary>
-        [ObservableProperty]
-        private HostConfig? _hostConfig;
-
         //track previous selected container and image id to manage stop-on-switch behavior
         private string? _previousContainerId;
         private string? _previousImageId;
@@ -189,6 +184,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// <param name="clipboard">Optional clipboard service for copying the text output.</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="service"/> is null.</exception>
         public ContainerConsoleViewModel(
+            IServiceProvider serviceProvider,
             IContainerService service, 
             IImageService imageService,
             IFileSyncService fileSyncService,
@@ -197,10 +193,10 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             IUserControlService userControlService,
             ILogRunner logRunner,
             ICommandRunner cmdRunner,
-            HostConfig hostConfig,
             IExternalProcessService externalProcessService,
             IClipboardService? clipboard = null) : base()
         {
+            _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
             _service = service ?? throw new ArgumentNullException(nameof(service));
             _imageService = imageService ?? throw new ArgumentNullException(nameof(imageService));
             _fileSyncService = fileSyncService ?? throw new ArgumentNullException(nameof(fileSyncService));
@@ -210,7 +206,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             _externalProcessService = externalProcessService ?? throw new ArgumentNullException(nameof(externalProcessService));
             _logRunner = logRunner ?? throw new ArgumentNullException(nameof(logRunner));
             _cmdRunner = cmdRunner ?? throw new ArgumentNullException(nameof(cmdRunner));
-            _hostConfig = hostConfig ?? throw new ArgumentNullException(nameof(hostConfig));
             _clipboard = clipboard;
 
 
@@ -458,11 +453,11 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                     PostLogMessage("[info] No existing container found for image. Creating a new one...", false);
 
                     var newContainerId = await _service.CreateContainerAsync(
-                        new ContainerCreationOptions 
+                        new ContainerCreationOptions
                         {
-                            ImageName = imageName, 
-                            Config = HostConfig
-                        }, 
+                            ImageName = imageName,
+                            Config = (HostConfig)_serviceProvider.GetService(typeof(HostConfig))!
+                        },
                         ct: ct);
                     container = await _service.InspectAsync(newContainerId, ct);
 

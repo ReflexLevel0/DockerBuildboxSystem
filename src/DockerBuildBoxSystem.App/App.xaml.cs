@@ -150,6 +150,6 @@ public partial class App : Application
 
         // reading the container creation arguments from the file and creating a HostConfig from it
         string hostConfigStr = File.ReadAllText(Path.Combine("Config", "container_creation_args.json"));
-        services.AddScoped<HostConfig>(_ => JsonConvert.DeserializeObject<HostConfig>(hostConfigStr)!);
+        services.AddTransient<HostConfig>(_ => JsonConvert.DeserializeObject<HostConfig>(hostConfigStr)!);
     }
 }
