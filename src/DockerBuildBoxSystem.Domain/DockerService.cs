@@ -52,14 +52,14 @@ namespace DockerBuildBoxSystem.Domain
         {
             // Getting (or creating a new) shared volume and setting it as container mount
             var sharedVolume = await GetSharedVolumeAsync(ct, true);
-            if(options.Config.Mounts == null) options.Config.Mounts = new List<Mount>();
-            options.Config?.Mounts.Add(new Mount() 
+            if (options.Config.Mounts == null) options.Config.Mounts = new List<Mount>();
+            options.Config?.Mounts.Add(new Mount()
             {
-                Type = "volume", 
-                Source = sharedVolume?.Name, 
+                Type = "volume",
+                Source = sharedVolume?.Name,
                 Target = options.ContainerRootPath
             });
-            
+
             // Creating the container
             var response = await _client.Containers.CreateContainerAsync(new CreateContainerParameters
             {
@@ -235,7 +235,7 @@ namespace DockerBuildBoxSystem.Domain
                 {
                     //unregister the cancellation callback
                     registration?.Dispose();
-                    
+
                     //ensure the stream is disposed even if cancelled! This resolves the issue of the application keeps running even though window was closed! :D
                     stream?.Dispose();
                     ch.Writer.TryComplete();
@@ -434,7 +434,34 @@ namespace DockerBuildBoxSystem.Domain
             string containerPath,
             CancellationToken ct = default)
         {
-            throw new NotImplementedException();
+            if (!File.Exists(hostPath))
+                throw new FileNotFoundException("File not found", hostPath);
+
+            /*
+                There are no "docker cp" equivelent in the docker.dotnet nuget package.
+                However, the "docker cp" is actually just a wrapper that uses compression, see the implementation:
+                    https://github.com/docker/cli/blob/master/cli/command/container/cp.go#L418
+                
+            */
+            string fileName = Path.GetFileName(containerPath);
+            string dirName = Path.GetDirectoryName(containerPath)?.Replace('\\', '/') ?? "/";
+
+            // Ensure directory exists
+            await ExecAsync(containerId, new[] { "mkdir", "-p", dirName }, ct);
+
+            using var memoryStream = new MemoryStream();
+            using (var tarWriter = new TarWriter(memoryStream, leaveOpen: true))
+            {
+                //create a tar entry from the host file, but rename it to the target filename
+                await tarWriter.WriteEntryAsync(hostPath, fileName, ct);
+            }
+
+            memoryStream.Position = 0;
+
+            await _client.Containers.ExtractArchiveToContainerAsync(containerId,
+                new ContainerPathStatParameters { Path = dirName },
+                memoryStream,
+                ct);
         }
 
         public async Task CopyDirectoryToContainerAsync(
@@ -457,7 +484,7 @@ namespace DockerBuildBoxSystem.Domain
                 TarFile.CreateFromDirectory(hostPath, tempTarPath, includeBaseDirectory: false);
 
                 using var fileStream = File.OpenRead(tempTarPath);
-                
+
                 await _client.Containers.ExtractArchiveToContainerAsync(containerId,
                     new ContainerPathStatParameters { Path = containerPath },
                     fileStream,
