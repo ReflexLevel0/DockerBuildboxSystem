@@ -10,6 +10,7 @@
     <!-- https://github.com/dotnet/Docker.DotNet/issues/628#issuecomment-2810547338 -->
     <PackageReference Include="Docker.DotNet.Enhanced" Version="3.127.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.0" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
   </ItemGroup>
 
   <ItemGroup>
