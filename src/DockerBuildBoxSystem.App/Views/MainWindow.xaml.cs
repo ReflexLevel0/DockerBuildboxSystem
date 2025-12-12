@@ -1,6 +1,8 @@
-﻿using System.Windows;
+﻿using DockerBuildBoxSystem.ViewModels.Main;
 using System.ComponentModel;
-using DockerBuildBoxSystem.ViewModels.Main;
+using System.Diagnostics.CodeAnalysis;
+using System.IO;
+using System.Windows;
 
 namespace DockerBuildBoxSystem.App;
 
@@ -64,4 +66,52 @@ public partial class MainWindow : Window
             });
         }
     }
+
+    #region Helpers
+    /// <summary>
+    /// When the user drags something into the window, for instance a folder.
+    /// </summary>
+    /// <param name="sender">The source of the drag event</param>
+    /// <param name="e">Contains relevant information for drag-and-drop events</param>
+    private void Path_DragEnter(object sender, DragEventArgs e)
+    {
+        e.Effects = HasFolder(e, out _) ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private void SourcePath_Drop(object sender, DragEventArgs e)
+    {
+        if (HasFolder(e, out var folder))
+        {
+            _viewModel.SourcePath = folder;
+        }
+    }
+
+    private void SyncOutPath_Drop(object sender, DragEventArgs e)
+    {
+        if (HasFolder(e, out var folder))
+        {
+            _viewModel.SyncOutPath = folder;
+        }
+    }
+
+    /// <summary>
+    /// Determines whether the drag-and-drop event contains a valid folder path.
+    /// </summary>
+    /// <param name="e">Contains relevant information for drag-and-drop events</param>
+    /// <param name="folder">Contains the first valid folder path if one exists, otherwise <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> if the drag-and-drop event contains a valid folder path, otherwise <see
+    /// langword="false"/>.</returns>
+    private bool HasFolder(DragEventArgs e, [NotNullWhen(true)] out string? folder)
+    {
+        folder = null;
+
+        if (e.Data?.GetData(DataFormats.FileDrop) is not string[] paths || paths.Length == 0)
+            return false;
+
+        folder = paths.FirstOrDefault(Directory.Exists);
+        return folder is not null;
+    }
+
+    #endregion
 }

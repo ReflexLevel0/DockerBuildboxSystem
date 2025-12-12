@@ -1,9 +1,9 @@
-using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
-using DockerBuildBoxSystem.ViewModels.Common;
-using Microsoft.Extensions.Configuration;
-using System.Text.Json;
+using CommunityToolkit.Mvvm.Input;
 using DockerBuildBoxSystem.Contracts;
+using DockerBuildBoxSystem.ViewModels.Common;
+using DockerBuildBoxSystem.ViewModels.ViewModels;
+using Microsoft.Extensions.Configuration;
 
 namespace DockerBuildBoxSystem.ViewModels.Main;
 
@@ -13,9 +13,14 @@ namespace DockerBuildBoxSystem.ViewModels.Main;
 public partial class MainViewModel : ViewModelBase
 {
     private readonly IConfiguration _configuration;
+    private readonly IDialogService _dialogService;
     private readonly ISettingsService _settingsService;
+    private readonly ISyncIgnoreService _syncIgnoreService;
     // Suppress persisting SourcePath while we are loading the initial value
     private bool _isLoadingSourcePath;
+
+
+    public EnvironmentViewModel EnvironmentVM { get; }
 
     /// <summary>
     /// Event raised when the application should exit.
@@ -33,11 +38,18 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     private string? _syncOutPath;
 
-    public MainViewModel(IConfiguration configuration, ISettingsService settingsService)
+    public MainViewModel(IConfiguration configuration,
+                        IDialogService dialogService,
+                        ISettingsService settingsService,
+                        ISyncIgnoreService syncIgnoreService,
+                        EnvironmentViewModel environmentViewModel)
     {
         _configuration = configuration;
+        _dialogService = dialogService;
         _settingsService = settingsService;
-        
+        _syncIgnoreService = syncIgnoreService;
+        EnvironmentVM = environmentViewModel;
+
         //load title from configuration
         var appName = _configuration["Application:Name"] ?? "Docker BuildBox System";
         var version = _configuration["Application:Version"];
@@ -61,6 +73,9 @@ public partial class MainViewModel : ViewModelBase
 
             // Load persisted source folder path if available
             await LoadSourcePathFromConfigAsync();
+
+            // Load environment variables
+            await EnvironmentVM.LoadEnvASync();
         }
         finally
         {
@@ -112,7 +127,7 @@ public partial class MainViewModel : ViewModelBase
     {
         //clean up event handlers
         ExitRequested = null;
-        
+
         await base.DisposeAsync();
     }
 
@@ -124,7 +139,7 @@ public partial class MainViewModel : ViewModelBase
         try
         {
             await _settingsService.LoadSettingsAsync();
-            
+
             _isLoadingSourcePath = true;
             if (!string.IsNullOrWhiteSpace(_settingsService.SourceFolderPath))
             {
@@ -146,7 +161,7 @@ public partial class MainViewModel : ViewModelBase
     {
         if (_isLoadingSourcePath) return; // skip persisting initial load value
         if (value == null) return;
-        
+
         _settingsService.SourceFolderPath = value;
     }
 
@@ -154,7 +169,7 @@ public partial class MainViewModel : ViewModelBase
     {
         if (_isLoadingSourcePath) return;
         if (value == null) return;
-        
+
         _settingsService.SyncOutFolderPath = value;
     }
 
@@ -167,17 +182,11 @@ public partial class MainViewModel : ViewModelBase
     {
         try
         {
-            using var dialog = new System.Windows.Forms.FolderBrowserDialog
-            {
-                Description = "Select a source folder",
-                UseDescriptionForTitle = true,
-                ShowNewFolderButton = true
-            };
+            var result = _dialogService.ShowFolderBrowser("Select a source folder");
 
-            var result = dialog.ShowDialog(); // Runs on UI thread
-            if (result == System.Windows.Forms.DialogResult.OK && !string.IsNullOrWhiteSpace(dialog.SelectedPath))
+            if (!string.IsNullOrWhiteSpace(result))
             {
-                SourcePath = dialog.SelectedPath;
+                SourcePath = result;
             }
         }
         catch (Exception ex)
@@ -196,17 +205,11 @@ public partial class MainViewModel : ViewModelBase
     {
         try
         {
-            using var dialog = new System.Windows.Forms.FolderBrowserDialog
-            {
-                Description = "Select a sync-out folder",
-                UseDescriptionForTitle = true,
-                ShowNewFolderButton = true
-            };
+            var result = _dialogService.ShowFolderBrowser("Select a sync-out folder");
 
-            var result = dialog.ShowDialog();
-            if (result == System.Windows.Forms.DialogResult.OK && !string.IsNullOrWhiteSpace(dialog.SelectedPath))
+            if (!string.IsNullOrWhiteSpace(result))
             {
-                SyncOutPath = dialog.SelectedPath;
+                SyncOutPath = result;
             }
         }
         catch (Exception ex)
@@ -216,5 +219,15 @@ public partial class MainViewModel : ViewModelBase
 
         await Task.CompletedTask;
     }
+
+    /// <summary>
+    /// Opens the .syncignore file in notepad for viewing/editing.
+    /// </summary>
+    [RelayCommand]
+    private void OpenSyncIgnoreFile()
+    {
+        _syncIgnoreService.OpenSyncIgnore();
+    }
 }
+
 
