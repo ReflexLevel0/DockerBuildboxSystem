@@ -5,6 +5,7 @@ using DockerBuildBoxSystem.ViewModels.Common;
 using Microsoft.Extensions.Configuration;
 using NSubstitute;
 using static DockerBuildBoxSystem.TestUtils.ChannelTestUtil;
+using Docker.DotNet.Models;
 
 namespace DockerBuildBoxSystem.ViewModels.Tests;
 
@@ -12,16 +13,20 @@ public class ContainerConsoleViewModelTests
 {
     private static ContainerConsoleViewModel CreateViewModel(
         IContainerService? service = null,
+        IImageService? imageService = null,
         IFileSyncService? fileSyncService = null,
         IConfiguration? configuration = null,
         ISettingsService? settingsService = null,
         IUserControlService? userControlService = null,
         ILogRunner? logRunner = null,
         ICommandRunner? commandRunner = null,
-        IClipboardService? clipboard = null
+        IClipboardService? clipboard = null,
+        HostConfig? hostConfig = null,
+        IExternalProcessService? externalProcessService = null
         )
     {
         service ??= Substitute.For<IContainerService>();
+        imageService ??= Substitute.For<IImageService>();
         fileSyncService ??= Substitute.For<IFileSyncService>();
         fileSyncService.Changes.Returns(new System.Collections.ObjectModel.ObservableCollection<string>());
         configuration ??= Substitute.For<IConfiguration>();
@@ -30,8 +35,10 @@ public class ContainerConsoleViewModelTests
         logRunner ??= Substitute.For<ILogRunner>();
         commandRunner ??= Substitute.For<ICommandRunner>();
         clipboard ??= Substitute.For<IClipboardService>();
+        hostConfig ??= new HostConfig();
+        externalProcessService ??= Substitute.For<IExternalProcessService>();
 
-        return new ContainerConsoleViewModel(service, fileSyncService, configuration, settingsService, userControlService, logRunner, commandRunner, clipboard);
+        return new ContainerConsoleViewModel(service, imageService, fileSyncService, configuration, settingsService, userControlService, logRunner, commandRunner, hostConfig, externalProcessService, clipboard);
     }
 
     /// <summary>
@@ -40,26 +47,26 @@ public class ContainerConsoleViewModelTests
     /// <remarks>This test ensures that the <c>InitializeCommand</c> properly retrieves a list of running
     /// containers and populates the <c>Containers</c> and <c>UserCommands</c> collections in the view model.</remarks>
     [Fact]
-    public async Task Initialize_Loads_Containers_And_UserCommands()
+    public async Task Initialize_Loads_Images_And_UserCommands()
     {
         //Arrange
-        var ContainerService = Substitute.For<IContainerService>();
+        var imageService = Substitute.For<IImageService>();
 
-        //The ListContainersAsync method is subbed to return a list with one running container
-        ContainerService
-            .ListContainersAsync(true, null, default)
-            .Returns(Task.FromResult<IList<ContainerInfo>>(new List<ContainerInfo>
+        //The ListImagesAsync method is subbed to return a list with one image
+        imageService
+            .ListImagesAsync(true, default)
+            .Returns(Task.FromResult<IList<ImageInfo>>(new List<ImageInfo>
             {
-                new ContainerInfo { Id = "1", Names = new []{"n1"}, State = "running" }
+                new ImageInfo { Id = "1", RepoTags = new []{"n1"} }
             }));
 
-        var vm = CreateViewModel(ContainerService);
+        var vm = CreateViewModel(imageService: imageService);
 
         //Act
         await vm.InitializeCommand.ExecuteAsync(null);
 
         //Assert
-        Assert.Single(vm.Containers);
+        Assert.Single(vm.Images);
     }
 
     /// <summary>
@@ -108,10 +115,12 @@ public class ContainerConsoleViewModelTests
             });
 
         var vm = CreateViewModel(ContainerService, logRunner: LogsService);
-        await vm.InitializeCommand.ExecuteAsync(null);
 
         vm.AutoStartLogs = true;
         vm.SelectedContainer = new ContainerInfo { Id = "abc", Names = ["abc"] };
+
+        await vm.InitializeCommand.ExecuteAsync(null);
+
 
         //Act
         //Wait until line appears., with timeout after 2 seconds...
@@ -256,7 +265,7 @@ public class ContainerConsoleViewModelTests
         var vm = CreateViewModel(ContainerService, logRunner: LogsService);
         //start the UI update loop
         await vm.InitializeCommand.ExecuteAsync(null);
-        vm.ContainerId = "abc";
+        vm.SelectedContainer = new ContainerInfo { Id = "abc", Names = ["abc"] };
 
         //Act & Assert
         _ = vm.StartLogsCommand.ExecuteAsync(null);
@@ -309,7 +318,7 @@ public class ContainerConsoleViewModelTests
             });
 
         await vm.InitializeCommand.ExecuteAsync(null);
-        vm.ContainerId = "abc";
+        vm.SelectedContainer = new ContainerInfo { Id = "abc", Names = ["abc"] };
         await vm.StartLogsCommand.ExecuteAsync(null);
 
         await WaitUntilAsync(() => vm.UIHandler.Output.Contains("sup"), TimeSpan.FromSeconds(2));

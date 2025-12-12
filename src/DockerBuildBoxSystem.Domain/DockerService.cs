@@ -20,11 +20,12 @@ namespace DockerBuildBoxSystem.Domain
     /// <summary>
     /// Class for interactions with the Docker Engine API using Docker.DotNet.
     /// </summary>
-    public sealed class DockerService : IContainerService, IAsyncDisposable, IDisposable
+    public sealed class DockerService : IContainerService, IImageService, IVolumeService, IAsyncDisposable, IDisposable
     {
         #region Variables and Constructor
         private readonly DockerClient _client;
         private bool _disposed;
+        private static readonly string _sharedVolumeName = "BuildBoxShared";
 
         /// <summary>
         /// Initializes a new instance of the <see cref="DockerService"/> class.
@@ -46,6 +47,34 @@ namespace DockerBuildBoxSystem.Domain
         #region Container Operations
         public async Task<bool> StartAsync(string containerId, CancellationToken ct = default) =>
             await _client.Containers.StartContainerAsync(containerId, new ContainerStartParameters(), ct);
+
+        public async Task<string> CreateContainerAsync(ContainerCreationOptions options, CancellationToken ct = default)
+        {
+            // Getting (or creating a new) shared volume and setting it as container mount
+            var sharedVolume = await GetSharedVolumeAsync(ct, true);
+            if (options.Config.Mounts == null) options.Config.Mounts = new List<Mount>();
+            options.Config?.Mounts.Add(new Mount()
+            {
+                Type = "volume",
+                Source = sharedVolume?.Name,
+                Target = options.ContainerRootPath
+            });
+
+            // Creating the container
+            var response = await _client.Containers.CreateContainerAsync(new CreateContainerParameters
+            {
+                Image = options.ImageName,
+                Name = options.ContainerName,
+                Tty = true,
+                OpenStdin = true,
+                AttachStdin = true,
+                AttachStdout = true,
+                AttachStderr = true,
+                HostConfig = options.Config
+            }, ct);
+
+            return response.ID;
+        }
 
         public async Task StopAsync(string containerId, TimeSpan timeout, CancellationToken ct = default) =>
             await _client.Containers.StopContainerAsync(containerId,
@@ -206,7 +235,7 @@ namespace DockerBuildBoxSystem.Domain
                 {
                     //unregister the cancellation callback
                     registration?.Dispose();
-                    
+
                     //ensure the stream is disposed even if cancelled! This resolves the issue of the application keeps running even though window was closed! :D
                     stream?.Dispose();
                     ch.Writer.TryComplete();
@@ -455,7 +484,7 @@ namespace DockerBuildBoxSystem.Domain
                 TarFile.CreateFromDirectory(hostPath, tempTarPath, includeBaseDirectory: false);
 
                 using var fileStream = File.OpenRead(tempTarPath);
-                
+
                 await _client.Containers.ExtractArchiveToContainerAsync(containerId,
                     new ContainerPathStatParameters { Path = containerPath },
                     fileStream,
@@ -471,6 +500,77 @@ namespace DockerBuildBoxSystem.Domain
         }
         #endregion
 
+        #region Image Operations
+
+        public async Task<IList<ImageInfo>> ListImagesAsync(bool all = false, CancellationToken ct = default)
+        {
+            var images = await _client.Images.ListImagesAsync(new ImagesListParameters { All = all }, ct);
+            return images.Select(img => new ImageInfo
+            {
+                Id = img.ID,
+                RepoTags = img.RepoTags is null ? Array.Empty<string>() : img.RepoTags.ToArray(),
+                Created = img.Created,
+                Size = img.Size,
+                VirtualSize = img.VirtualSize,
+                Labels = img.Labels is null ? new Dictionary<string, string>() : new Dictionary<string, string>(img.Labels)
+            }).ToList();
+        }
+
+        public async Task<ImageInfo> InspectImageAsync(string imageId, CancellationToken ct = default)
+        {
+            var inspect = await _client.Images.InspectImageAsync(imageId, ct);
+            return new ImageInfo
+            {
+                Id = inspect.ID,
+                RepoTags = inspect.RepoTags is null ? Array.Empty<string>() : inspect.RepoTags.ToArray(),
+                Created = inspect.Created,
+                Size = inspect.Size,
+                VirtualSize = inspect.VirtualSize,
+                Labels = inspect.Config?.Labels is null ? new Dictionary<string, string>() : new Dictionary<string, string>(inspect.Config.Labels)
+            };
+        }
+
+        public async Task RemoveImageAsync(string imageId, bool force = false, bool prune = false, CancellationToken ct = default)
+        {
+            await _client.Images.DeleteImageAsync(imageId, new ImageDeleteParameters { Force = force, NoPrune = prune }, ct);
+        }
+
+        public async Task PullImageAsync(string imageName, string tag = "latest", CancellationToken ct = default)
+        {
+            await _client.Images.CreateImageAsync(
+                new ImagesCreateParameters
+                {
+                    FromImage = imageName,
+                    Tag = tag
+                },
+                null,
+                new Progress<JSONMessage>(),
+                ct);
+        }
+
+        #endregion
+
+        #region Volume operations
+        public async Task<VolumeResponse?> GetSharedVolumeAsync(CancellationToken ct, bool createIfNotExists = false)
+        {
+            // Finding a volume named "BuildBoxShared"
+            var volumes = (await _client.Volumes.ListAsync(ct)).Volumes;
+            var sharedVolume = volumes
+                .Where(v => string.CompareOrdinal(v.Name, _sharedVolumeName) == 0)
+                .FirstOrDefault();
+
+            // Returning the volume
+            // (or creating and returning a new volume if shared volume doesn't exist)
+            return sharedVolume == null ? await CreateSharedVolumeAsync(ct) : sharedVolume;
+        }
+
+        public async Task<VolumeResponse?> CreateSharedVolumeAsync(CancellationToken ct)
+        {
+            // Creates a volume named "BuildBoxShared"
+            var volumeParams = new VolumesCreateParameters() { Name = _sharedVolumeName };
+            return await _client.Volumes.CreateAsync(volumeParams, ct);
+        }
+        #endregion
 
         #region Helpers
 
