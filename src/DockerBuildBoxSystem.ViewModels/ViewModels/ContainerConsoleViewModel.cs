@@ -132,6 +132,10 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [ObservableProperty]
         private bool _autoStartLogs = true;
 
+        [ObservableProperty]
+        private bool _runAutoSyncOnStart = true;
+
+
         private int _switchingCount;
 
         [ObservableProperty]
@@ -392,6 +396,13 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                     //auto start logs if enabled
                     if (AutoStartLogs && !string.IsNullOrWhiteSpace(ContainerId))
                         _ = StartLogs();
+
+                    //auto start sync if enabled
+                    if (RunAutoSyncOnStart && !string.IsNullOrWhiteSpace(ContainerId) && newContainer.IsRunning)
+                    {
+                        await StartForceSyncAsync();
+                        if (CanSync()) await StartSyncAsync();
+                    }
                 }
                 else
                 {
@@ -476,6 +487,12 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 if (status)
                 {
                     PostLogMessage($"[info] Started container: {ContainerId}", false);
+
+                    if (RunAutoSyncOnStart)
+                    {
+                        await StartForceSyncAsync();
+                        if (CanSync()) await StartSyncAsync();
+                    }
                 }
                 else
                 {
