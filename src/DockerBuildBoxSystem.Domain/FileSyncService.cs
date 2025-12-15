@@ -272,7 +272,7 @@ namespace DockerBuildBoxSystem.Domain
         {
             lock (_changesLock)
             {
-                Changes.Add($"[{DateTime.Now:T}] {msg}");
+                Changes.Add($"{msg}");
             }
         }
 

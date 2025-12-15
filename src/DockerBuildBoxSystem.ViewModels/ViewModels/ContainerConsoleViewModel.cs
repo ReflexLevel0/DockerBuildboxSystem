@@ -1,4 +1,4 @@
-﻿using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Docker.DotNet.Models;
 using DockerBuildBoxSystem.Contracts;
@@ -148,6 +148,10 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [ObservableProperty]
         private bool _autoStartLogs = true;
 
+        [ObservableProperty]
+        private bool _runAutoSyncOnStart = true;
+
+
         private int _switchingCount;
 
         [ObservableProperty]
@@ -235,6 +239,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                     StopLogsCommand.NotifyCanExecuteChanged();
                 });
 
+
             _fileSyncService.Changes.CollectionChanged += (s, e) =>
             {
                 if (e.NewItems != null)
@@ -291,7 +296,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             //if sync is running, we might want to restart it or notify user
             if (IsSyncRunning)
             {
-                UIHandler.EnqueueLine($"[sync] Warning: Source path changed to {newPath}. Stop and restart sync to apply.", true);
+                PostLogMessage($"[sync] Warning: Source path changed to {newPath}. Stop and restart sync to apply.", true);
             }
         }
 
@@ -387,12 +392,20 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             _switchCts = new CancellationTokenSource();
             var ct = _switchCts.Token;
 
+            bool wasSyncing = false;
             var takeLock = false;
             try
             {
                 //make switch operation cancelable  to avoid releasing an unacquired lock.
                 await _imageSwitchLock.WaitAsync(ct);
                 takeLock = true;
+
+                wasSyncing = IsSyncRunning;
+                if (wasSyncing)
+                {
+                    await StopSyncAsync();
+                    PostLogMessage("[sync] Paused for container switch...", false);
+                }
 
                 ct.ThrowIfCancellationRequested();
 
@@ -480,10 +493,14 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                     await StartContainerInternalAsync(ct);
                 }
 
-                //auto-start logs
+                //auto start logs if enabled
                 if (AutoStartLogs && !string.IsNullOrWhiteSpace(ContainerId))
-                {
                     _ = StartLogs();
+
+                //auto start sync if enabled
+                if (RunAutoSyncOnStart && IsContainerRunning)
+                {
+                    await StartSyncAsync();
                 }
 
                 _previousContainerId = ContainerId;
@@ -502,6 +519,12 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
                 if (Interlocked.Decrement(ref _switchingCount) == 0)
                     IsSwitching = false;
+
+                    if (wasSyncing && CanSync())
+                    {
+                        await StartSyncAsync();
+                        PostLogMessage("[sync] Resumed after container switch.", false);
+                    }
             }
         }
 
@@ -530,15 +553,18 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [RelayCommand(CanExecute = nameof(CanStartContainer))]
         private async Task StartContainerAsync()
         {
-            await _imageSwitchLock.WaitAsync();
-            try
+            await ExecuteWithSyncPauseAsync(async () =>
             {
-                await StartContainerInternalAsync(CancellationToken.None);
-            }
-            finally
-            {
-                _imageSwitchLock.Release();
-            }
+                await _imageSwitchLock.WaitAsync();
+                try
+                {
+                    await StartContainerInternalAsync(CancellationToken.None);
+                }
+                finally
+                {
+                    _imageSwitchLock.Release();
+                }
+            });
         }
 
         private async Task StartContainerInternalAsync(CancellationToken ct)
@@ -565,6 +591,12 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                     PostLogMessage($"[info] Started container: {name}", false);
                     //Adding the container to track it:
                     _containersStartedByApp.Add(SelectedContainer.Id);
+
+                    if (RunAutoSyncOnStart)
+                    {
+                        await StartForceSyncAsync();
+                        if (CanSync()) await StartSyncAsync();
+                    }
                 }
                 else
                 {
@@ -593,7 +625,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// Stops a running container.
         /// </summary>
         [RelayCommand(CanExecute = nameof(CanStopContainer))]
-        private async Task StopContainerAsync() => await StopContainerByIdAsync(SelectedContainer);
+        private async Task StopContainerAsync() => await ExecuteWithSyncPauseAsync(() => StopContainerByIdAsync(SelectedContainer));
 
         private bool CanRestartContainer() => !string.IsNullOrWhiteSpace(ContainerId) && IsContainerRunning;
 
@@ -628,21 +660,24 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [RelayCommand(CanExecute = nameof(CanRestartContainer))]
         private async Task RestartContainerAsync()
         {
-            if (string.IsNullOrWhiteSpace(ContainerId)) return;
-            try
+            await ExecuteWithSyncPauseAsync(async () =>
             {
-                PostLogMessage($"[info] Restarting container: {ContainerId}", false);
-                await _service.RestartAsync(ContainerId, timeout: TimeSpan.FromSeconds(10));
-                PostLogMessage($"[info] Restarted container: {ContainerId}", false);
-            }
-            catch (Exception ex)
-            {
-                PostLogMessage($"[restart-container-error] {ex.Message}", true);
-            }
-            finally
-            {
-                await RefreshSelectedContainerAsync();
-            }
+                if (string.IsNullOrWhiteSpace(ContainerId)) return;
+                try
+                {
+                    PostLogMessage($"[info] Restarting container: {ContainerId}", false);
+                    await _service.RestartAsync(ContainerId, timeout: TimeSpan.FromSeconds(10));
+                    PostLogMessage($"[info] Restarted container: {ContainerId}", false);
+                }
+                catch (Exception ex)
+                {
+                    PostLogMessage($"[restart-container-error] {ex.Message}", true);
+                }
+                finally
+                {
+                    await RefreshSelectedContainerAsync();
+                }
+            });
         }
 
         /// <summary>
@@ -674,7 +709,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// <summary>
         /// Determines whether sending commands is currently allowed.
         /// </summary>
-        private bool CanSend() => !string.IsNullOrWhiteSpace(ContainerId) && IsContainerRunning && !IsSyncRunning && !IsSwitching;
+        private bool CanSend() => !string.IsNullOrWhiteSpace(ContainerId) && IsContainerRunning && !IsSwitching;
 
 
         /// <summary>
@@ -735,31 +770,34 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// Executes a command inside the selected container and streams output to the console UI.
         /// </summary>
         /// <param name="args">The command and its arguments (argv form).</param>
-        private Task ExecuteAndLog(string[] args)
+        private async Task ExecuteAndLog(string[] args)
         {
-            //add command to console on UI thread
-            PostLogMessage($"> {string.Join(' ', args)}", false);
-
-            return Task.Run(async () =>
+            await ExecuteWithSyncPauseAsync(async () =>
             {
-                try
-                {
-                    await foreach (var (isErr, line) in _cmdRunner.RunAsync(_service, ContainerId, args).ConfigureAwait(false))
-                    {
-                        UIHandler.EnqueueLine(line, isErr);
-                    }
+                //add command to console on UI thread
+                PostLogMessage($"> {string.Join(' ', args)}", false);
 
-                    var exitCode = await _cmdRunner.ExitCode.ConfigureAwait(false);
-                    PostLogMessage($"[exit] {exitCode}", false, true);
-                }
-                catch (OperationCanceledException)
+                await Task.Run(async () =>
                 {
-                    PostLogMessage("[exec] canceled", false, true);
-                }
-                catch (Exception ex)
-                {
-                    PostLogMessage($"[exec-error] {ex.Message}", true, true);
-                }
+                    try
+                    {
+                        await foreach (var (isErr, line) in _cmdRunner.RunAsync(_service, ContainerId, args).ConfigureAwait(false))
+                        {
+                            UIHandler.EnqueueLine(line, isErr);
+                        }
+
+                        var exitCode = await _cmdRunner.ExitCode.ConfigureAwait(false);
+                        PostLogMessage($"[exit] {exitCode}", false, true);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        PostLogMessage("[exec] canceled", false, true);
+                    }
+                    catch (Exception ex)
+                    {
+                        PostLogMessage($"[exec-error] {ex.Message}", true, true);
+                    }
+                });
             });
         }
 
@@ -905,39 +943,47 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             }
         }
 
+        private bool CanForceSync() => !string.IsNullOrWhiteSpace(ContainerId) && (SelectedContainer?.IsRunning == true) && !IsCommandRunning;
+
+
         /// <summary>
         /// Starts the force sync operation (same constraints as startSync).
         /// This functiona should delete all sync in data from docker volume and resync everything.
         /// To be implemented once file sync functionality is in place.
         /// </summary>
-        [RelayCommand(CanExecute = nameof(CanSync))]
+        [RelayCommand(CanExecute = nameof(CanForceSync))]
         private async Task StartForceSyncAsync()
         {
-            IsSyncRunning = true;
-            try
+            await ExecuteWithSyncPauseAsync(async () =>
             {
-                PostLogMessage("[force-sync] Starting force sync operation", false);
+                IsSyncRunning = true;
 
-                if (string.IsNullOrWhiteSpace(HostSyncPath) || !Directory.Exists(HostSyncPath))
+                try
                 {
-                    PostLogMessage("[force-sync] Error: Host sync path is invalid.", true);
-                    return;
+                    PostLogMessage("[force-sync] Starting force sync operation", false);
+
+                    if (string.IsNullOrWhiteSpace(HostSyncPath) || !Directory.Exists(HostSyncPath))
+                    {
+                        PostLogMessage("[force-sync] Error: Host sync path is invalid.", true);
+                        return;
+                    }
+
+                    _fileSyncService.Configure(HostSyncPath, ContainerId, ContainerSyncPath);
+
+                    await _fileSyncService.ForceSyncAsync();
+
+                    PostLogMessage("[force-sync] Completed force sync operation", false);
+                }
+                catch (Exception ex)
+                {
+                    PostLogMessage($"[force-sync-error] {ex.Message}", true);
+                }
+                finally
+                {
+                    IsSyncRunning = false;
                 }
 
-                _fileSyncService.Configure(HostSyncPath, ContainerId, ContainerSyncPath);
-
-                await _fileSyncService.ForceSyncAsync();
-
-                PostLogMessage("[force-sync] Completed force sync operation", false);
-            }
-            catch (Exception ex)
-            {
-                PostLogMessage($"[force-sync-error] {ex.Message}", true);
-            }
-            finally
-            {
-                IsSyncRunning = false;
-            }
+            });
         }
 
         /// <summary>
@@ -953,12 +999,41 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         {
             _fileSyncService.StopWatching();
             IsSyncRunning = false;
-            PostLogMessage("[sync] Stopped watching.", false);
             await Task.CompletedTask;
         }
         #endregion
 
         #region Helpers
+        private async Task ExecuteWithSyncPauseAsync(Func<Task> action)
+        {
+            bool wasSyncing = IsSyncRunning;
+            if (wasSyncing)
+            {
+                await StopSyncAsync();
+                PostLogMessage("[sync] Paused for operation...", false);
+            }
+
+            try
+            {
+                await action();
+            }
+            finally
+            {
+                if (wasSyncing)
+                {
+                    if (CanSync())
+                    {
+                        await StartSyncAsync();
+                        PostLogMessage("[sync] Resumed after operation.", false);
+                    }
+                    else
+                    {
+                        PostLogMessage("[sync] Could not resume sync (container not running or other reason).", true);
+                    }
+                }
+            }
+        }
+
         private async Task RefreshSelectedContainerAsync()
         {
             if (string.IsNullOrWhiteSpace(ContainerId)) return;
