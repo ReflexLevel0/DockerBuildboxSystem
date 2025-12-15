@@ -39,7 +39,7 @@ public class ContainerConsoleViewModelTests
         clipboard ??= Substitute.For<IClipboardService>();
         externalProcessService ??= Substitute.For<IExternalProcessService>();
 
-        return new ContainerConsoleViewModel(serviceProvider, service, imageService, fileSyncService, configuration, settingsService, userControlService, logRunner, commandRunner, externalProcessService, clipboard);
+        return new ContainerConsoleViewModel(serviceProvider, imageService, service, fileSyncService, configuration, settingsService, userControlService, logRunner, commandRunner, externalProcessService, clipboard);
     }
 
     /// <summary>
@@ -67,7 +67,7 @@ public class ContainerConsoleViewModelTests
         await vm.InitializeCommand.ExecuteAsync(null);
 
         //Assert
-        Assert.Single(vm.Images);
+        Assert.Single(vm.ContainerList.Images);
     }
 
     /// <summary>
@@ -117,15 +117,15 @@ public class ContainerConsoleViewModelTests
 
         var vm = CreateViewModel(service: ContainerService, logRunner: LogsService);
 
-        vm.AutoStartLogs = true;
-        vm.SelectedContainer = new ContainerInfo { Id = "abc", Names = ["abc"] };
+        vm.Logs.AutoStartLogs = true;
+        vm.ContainerList.SelectedContainer = new ContainerInfo { Id = "abc", Names = ["abc"] };
 
         await vm.InitializeCommand.ExecuteAsync(null);
 
 
         //Act
         //Wait until line appears., with timeout after 2 seconds...
-        var logsStarted = await WaitUntilAsync(() => vm.IsLogsRunning, TimeSpan.FromSeconds(2));
+        var logsStarted = await WaitUntilAsync(() => vm.Logs.IsLogsRunning, TimeSpan.FromSeconds(2));
         Assert.True(logsStarted, "Logs should have started!");
 
         //wait until line appears, with timeout after 2 seconds...
@@ -133,10 +133,10 @@ public class ContainerConsoleViewModelTests
 
         //Assert
         Assert.True(ok, "Line 'sup' should have appeared!");
-        Assert.True(vm.IsLogsRunning, "Logs should still be running!");
+        Assert.True(vm.Logs.IsLogsRunning, "Logs should still be running!");
      
         //cleanup
-        await vm.StopLogsCommand.ExecuteAsync(null);
+        await vm.Logs.StopLogsCommand.ExecuteAsync(null);
     }
 
     /// <summary>
@@ -206,19 +206,19 @@ public class ContainerConsoleViewModelTests
 
         //start the UI update loop
         await vm.InitializeCommand.ExecuteAsync(null);
-        vm.SelectedContainer = new ContainerInfo { Id = "abc", Names = ["abc"] };
+        vm.ContainerList.SelectedContainer = new ContainerInfo { Id = "abc", Names = ["abc"] };
         //Example command to send
-        vm.Input = "echo hi";
+        vm.Commands.Input = "echo hi";
 
         //Act
-        await vm.SendCommand.ExecuteAsync(null);
+        await vm.Commands.SendCommand.ExecuteAsync(null);
 
         //Assert
         var ok = await WaitUntilAsync(() => vm.UIHandler.Output.Contains("[exit] 0"), TimeSpan.FromSeconds(2));
         Assert.True(ok);
         Assert.Contains("line1", vm.UIHandler.Output);
         Assert.Contains("err1", vm.UIHandler.Output);
-        Assert.False(vm.IsCommandRunning);
+        Assert.False(vm.Commands.IsCommandRunning);
     }
 
     /// <summary>
@@ -266,18 +266,18 @@ public class ContainerConsoleViewModelTests
         var vm = CreateViewModel(service: ContainerService, logRunner: LogsService);
         //start the UI update loop
         await vm.InitializeCommand.ExecuteAsync(null);
-        vm.SelectedContainer = new ContainerInfo { Id = "abc", Names = ["abc"] };
+        vm.ContainerList.SelectedContainer = new ContainerInfo { Id = "abc", Names = ["abc"] };
 
         //Act & Assert
-        _ = vm.StartLogsCommand.ExecuteAsync(null);
+        _ = vm.Logs.StartLogsCommand.ExecuteAsync(null);
 
         //wait for logs to actually start streaming
-        var logsStarted = await WaitUntilAsync(() => vm.IsLogsRunning == true, TimeSpan.FromSeconds(2));
+        var logsStarted = await WaitUntilAsync(() => vm.Logs.IsLogsRunning == true, TimeSpan.FromSeconds(2));
         Assert.True(logsStarted, "Logs should have started");
 
-        await vm.StopLogsCommand.ExecuteAsync(null);
+        await vm.Logs.StopLogsCommand.ExecuteAsync(null);
 
-        var ok = await WaitUntilAsync(() => vm.IsLogsRunning == false, TimeSpan.FromSeconds(2));
+        var ok = await WaitUntilAsync(() => vm.Logs.IsLogsRunning == false, TimeSpan.FromSeconds(2));
         Assert.True(ok);
     }
 
@@ -319,8 +319,8 @@ public class ContainerConsoleViewModelTests
             });
 
         await vm.InitializeCommand.ExecuteAsync(null);
-        vm.SelectedContainer = new ContainerInfo { Id = "abc", Names = ["abc"] };
-        await vm.StartLogsCommand.ExecuteAsync(null);
+        vm.ContainerList.SelectedContainer = new ContainerInfo { Id = "abc", Names = ["abc"] };
+        await vm.Logs.StartLogsCommand.ExecuteAsync(null);
 
         await WaitUntilAsync(() => vm.UIHandler.Output.Contains("sup"), TimeSpan.FromSeconds(2));
 

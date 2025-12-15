@@ -41,9 +41,9 @@
                        Margin="0,0,6,0"/>
 
             <ComboBox Grid.Column="1" 
-                      ItemsSource="{Binding Images}"
-                      SelectedItem="{Binding SelectedImage}"
-                      IsEnabled="{Binding Images.Count, Converter={StaticResource IntToBoolConverter}}"
+                      ItemsSource="{Binding ContainerList.Images}"
+                      SelectedItem="{Binding ContainerList.SelectedImage}"
+                      IsEnabled="{Binding ContainerList.Images.Count, Converter={StaticResource IntToBoolConverter}}"
                       ToolTip="Select a image to interact with"
                       MinWidth="200">
                 <ComboBox.ItemTemplate>
@@ -57,14 +57,14 @@
             </ComboBox>
             <CheckBox Grid.Column="2" 
                       Content="Show All" 
-                      IsChecked="{Binding ShowAllContainers}"
+                      IsChecked="{Binding ContainerList.ShowAllImages}"
                       VerticalAlignment="Center"
                       ToolTip="Show all containers, including stopped ones"
                       Margin="6,0,6,0"/>
 
             <Button Grid.Column="3" 
                     Content="Refresh" 
-                    Command="{Binding RefreshImagesCommand}"
+                    Command="{Binding ContainerList.RefreshImagesCommand}"
                     ToolTip="Refresh the list of images"
                     Padding="8,4"
                     MinWidth="70"/>
@@ -74,24 +74,24 @@
                      Padding="8,4"
                      MinWidth="70"
                      ToolTip="Sync files to the container"
-                     Command="{Binding StartSyncCommand}"/>
+                     Command="{Binding FileSync.StartSyncCommand}"/>
                  <Button Content="Force Sync"
                      Margin="0,0,6,0"
                      Padding="8,4"
                      MinWidth="70"
                      ToolTip="Force sync all files to the container"
-                     Command="{Binding StartForceSyncCommand}"/>
+                     Command="{Binding FileSync.StartForceSyncCommand}"/>
                 <Button Content="Stop Sync"
                      Margin="0,0,6,0"
                      Padding="8,4"
                      MinWidth="70"
-                     Command="{Binding StopSyncCommand}"/>
+                     Command="{Binding FileSync.StopSyncCommand}"/>
             </StackPanel>
         </Grid>
 
         <!-- User Controls -->
         <ItemsControl Grid.Row="1"
-                      ItemsSource="{Binding UserControls}"
+                      ItemsSource="{Binding UserControls.UserControls}"
                       Margin="6">
             <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate>
@@ -105,7 +105,7 @@
                     <!--Global button styles in App/resources/styles.xaml-->
                     <Button Style="{StaticResource FlatIconButton}"
                                 ToolTip="{Binding Definition.Tooltip}"
-                                Command="{Binding DataContext.RunUserCommandCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                Command="{Binding DataContext.Commands.RunUserCommandCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                 CommandParameter="{Binding Definition}"
                                 Width="30" Height="30">
                         <Image Source="{Binding Definition.IconPath}" Width="20" Height="20"/>
@@ -119,7 +119,7 @@
                         <ComboBox ItemsSource="{Binding Values}"
                               SelectedItem="{Binding SelectedValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                               Width="80" Height="30"
-                              IsEnabled="{Binding DataContext.CanUseUserControls, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                              IsEnabled="{Binding DataContext.Commands.CanUseUserControls, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                               Padding="6"/>
                     </StackPanel>
                 </DataTemplate>
@@ -135,7 +135,7 @@
                                  Padding="6"
                                  FontFamily="Consolas"
                                  FontSize="12"
-                                 IsEnabled="{Binding DataContext.CanUseUserControls, RelativeSource={RelativeSource AncestorType=ItemsControl}}"/>
+                                 IsEnabled="{Binding DataContext.Commands.CanUseUserControls, RelativeSource={RelativeSource AncestorType=ItemsControl}}"/>
                     </StackPanel>
                 </DataTemplate>
             </ItemsControl.Resources>
@@ -172,9 +172,9 @@
                  FontFamily="Consolas"
                  FontSize="13"
                  Margin="0,0,6,0"
-                 Text="{Binding Input, UpdateSourceTrigger=PropertyChanged}">
+                 Text="{Binding Commands.Input, UpdateSourceTrigger=PropertyChanged}">
                 <TextBox.InputBindings>
-                    <KeyBinding Key="Enter" Command="{Binding SendCommand}" />
+                    <KeyBinding Key="Enter" Command="{Binding Commands.SendCommand}" />
                 </TextBox.InputBindings>
             </TextBox>
 
@@ -182,18 +182,18 @@
                     Content="Send"
                     Padding="12,4"
                     ToolTip="Send the input to the container"
-                    Command="{Binding SendCommand}" />
+                    Command="{Binding Commands.SendCommand}" />
 
             <Button Grid.Column="2"
                     Content="Interrupt"
                     Padding="12,4"
-                    Command="{Binding InterruptExecCommand}" />
+                    Command="{Binding Commands.InterruptExecCommand}" />
 
             <Button Grid.Column="3"
                     Content="Stop"
                     Padding="12,4"
                     ToolTip="Stop the running command in the container"
-                    Command="{Binding StopExecCommand}" />
+                    Command="{Binding Commands.StopExecCommand}" />
 
             <!-- Container status indicator -->
             <Canvas Grid.Column="4"
@@ -202,7 +202,7 @@
                          Height="15" 
                          Canvas.Top="5" 
                          Canvas.Left="5" 
-                         Fill="{Binding SelectedContainer.StateKind, Converter={StaticResource StateToColorConverter}}"/>
+                         Fill="{Binding ContainerList.SelectedContainer.StateKind, Converter={StaticResource StateToColorConverter}}"/>
             </Canvas>
         </Grid>
         <Grid Grid.Row="4" HorizontalAlignment="Left">
@@ -211,7 +211,7 @@
                     Margin="6"
                     Width="40"
                     ToolTip="Open selected container in Windows CMD"
-                    Command="{Binding OpenContainerInCmdCommand}"
+                    Command="{Binding ContainerList.OpenContainerInCmdCommand}"
                 />
 
         </Grid>

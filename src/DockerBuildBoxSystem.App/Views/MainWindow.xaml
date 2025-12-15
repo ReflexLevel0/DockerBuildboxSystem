@@ -25,7 +25,7 @@
                     <MenuItem Header="Sync _Out..." Command="{Binding SelectSyncOutPathCommand}" />
                     <Separator/>
                     <MenuItem Header="_Force Sync"
-                            Command="{Binding ElementName=ContainerConsoleControl, Path=DataContext.StartForceSyncCommand}" />
+                            Command="{Binding ElementName=ContainerConsoleControl, Path=DataContext.FileSync.StartForceSyncCommand}" />
                 </MenuItem>
             </Menu>
 
