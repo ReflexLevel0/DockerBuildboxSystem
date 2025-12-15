@@ -43,11 +43,28 @@ namespace DockerBuildBoxSystem.Domain
         }
 
         //maybe to dangerous?
-        public async Task<(bool Success, string Error)> EmptyDirectoryInContainerAsync(string containerId, string containerPath)
+        public async Task<(bool Success, string Error)> EmptyDirectoryInContainerAsync(string containerId, string containerPath, IEnumerable<string>? excludedPaths = null)
         {
             try
             {
-                string cmd = $"rm -rf \"{containerPath.TrimEnd('/')}\"/*";
+                var excludes = new List<string>();
+                if (excludedPaths != null)
+                {
+                    foreach (var exclude in excludedPaths)
+                    {
+                        //ensue we scape single quotes in filename
+                        string safeExclude = exclude.Replace("'", "'\\''");
+                        excludes.Add($"! -name '{safeExclude}'");
+                    }
+                }
+                
+                string excludeStr = string.Join(" ", excludes);
+                string targetPath = containerPath.TrimEnd('/');
+                if (string.IsNullOrEmpty(targetPath)) targetPath = "/";
+
+                //The -mindepth 1 and -maxdepth 1 arguments ensures we only look at immediate children
+                string cmd = $"find \"{targetPath}\" -mindepth 1 -maxdepth 1 {excludeStr} -exec rm -rf {{}} +";
+                
                 var (exitCode, output, error) = await _containerService.ExecAsync(containerId, new[] { "sh", "-c", cmd });
                 
                 if (exitCode != 0)
