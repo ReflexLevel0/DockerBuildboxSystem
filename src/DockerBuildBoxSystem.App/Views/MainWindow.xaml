@@ -12,11 +12,11 @@
         WindowStartupLocation="CenterScreen">
     <Grid>
         <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
-                <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <Menu Grid.Row="0">
@@ -29,17 +29,15 @@
             </MenuItem>
         </Menu>
 
-            <!-- Header with Title, Select Source Button and Path Display -->
-            <Grid Grid.Row="1" Margin="6">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
+        <!-- Header with Title, Select Source Button and Path Display -->
+        <Grid Grid.Row="1" Margin="6">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
 
-                <TextBlock
+            <TextBlock
                     Grid.Column="0"
                     Text="Buildbox Manager"
                     FontSize="18"
@@ -47,7 +45,7 @@
                     VerticalAlignment="Center"
                     Margin="0,0,25,0" />
 
-                <Button
+            <Button
                     Grid.Column="1"
                     MinWidth="32"
                     Padding="2,2"
@@ -58,15 +56,15 @@
                     Focusable="False"
                     ToolTip="Choose sync-in folder"
                     Margin="0,0,4,0">
-                    <Grid>
-                        <!-- Base folder icon -->
-                        <TextBlock
+                <Grid>
+                    <!-- Base folder icon -->
+                    <TextBlock
                             FontFamily="Segoe MDL2 Assets"
                             FontSize="22"
                             Text="&#xE838;"
                             Foreground="#FFC107" />
-                        <!-- Modern green tick overlay with circular background -->
-                        <Border
+                    <!-- Modern green tick overlay with circular background -->
+                    <Border
                             HorizontalAlignment="Right"
                             VerticalAlignment="Bottom"
                             Margin="0,0,0,0"
@@ -74,40 +72,20 @@
                             Height="14"
                             Background="#FF2ECC71"
                             CornerRadius="7">
-                            <TextBlock
+                        <TextBlock
                                 FontFamily="Segoe MDL2 Assets"
                                 FontSize="12"
                                 Text="&#xE73E;"
                                 Foreground="White"
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center" />
-                        </Border>
-                    </Grid>
-                </Button>
+                    </Border>
+                </Grid>
+            </Button>
 
-                <Border
+            <!-- SyncOut picker and read-only path -->
+            <Button
                     Grid.Column="2"
-                    MinWidth="400"
-                    Margin="2,2,0,2"
-                    VerticalAlignment="Center"
-                    Padding="4,2"
-                    BorderThickness="1"
-                    BorderBrush="Gray"
-                    CornerRadius="2"
-                    Background="#08000000"
-                    AllowDrop="True" 
-                    DragEnter="Path_DragEnter" 
-                    Drop="SourcePath_Drop">
-                    <TextBlock
-                        Text="{Binding SourcePath}"
-                        ToolTip="Source folder path"
-                        VerticalAlignment="Center"
-                        TextTrimming="CharacterEllipsis" />
-                </Border>
-
-                <!-- SyncOut picker and read-only path -->
-                <Button
-                    Grid.Column="3"
                     MinWidth="32"
                     Padding="2,2"
                     Background="Transparent"
@@ -117,15 +95,15 @@
                     Focusable="False"
                     ToolTip="Choose sync-out folder"
                     Margin="8,0,4,0">
-                    <Grid>
-                        <!-- Base folder icon -->
-                        <TextBlock
+                <Grid>
+                    <!-- Base folder icon -->
+                    <TextBlock
                             FontFamily="Segoe MDL2 Assets"
                             FontSize="22"
                             Text="&#xE838;"
                             Foreground="#FFC107" />
-                        <!-- Modern red cross overlay with circular background -->
-                        <Border
+                    <!-- Modern red cross overlay with circular background -->
+                    <Border
                             HorizontalAlignment="Right"
                             VerticalAlignment="Bottom"
                             Margin="0,0,0,0"
@@ -133,87 +111,67 @@
                             Height="14"
                             Background="#FFE74C3C"
                             CornerRadius="7">
-                            <TextBlock
+                        <TextBlock
                                 FontFamily="Segoe MDL2 Assets"
                                 FontSize="12"
                                 Text="&#xE711;"
                                 Foreground="White"
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center" />
-                        </Border>
-                    </Grid>
-                </Button>
-
-                <Border
-                    Grid.Column="4"
-                    MinWidth="300"
-                    Margin="2,2,0,2"
-                    VerticalAlignment="Center"
-                    Padding="4,2"
-                    BorderThickness="1"
-                    BorderBrush="Gray"
-                    CornerRadius="2"
-                    Background="#08000000"
-                    AllowDrop="True" 
-                    DragEnter="Path_DragEnter" 
-                    Drop="SyncOutPath_Drop">
-                    <TextBlock
-                        Text="{Binding SyncOutPath}"
-                        ToolTip="Sync-out folder path"
-                        VerticalAlignment="Center"
-                        TextTrimming="CharacterEllipsis" />
-                </Border>
-            </Grid>
-            <!-- Grid for .env and syncIgnore -->
-            <Grid Grid.Row="2">
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                    <Button Content=".env"
+                    </Border>
+                </Grid>
+            </Button>
+        </Grid>
+        <!-- Grid for .env and syncIgnore -->
+        <Grid Grid.Row="2">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content=".env"
                                 ToolTip="Edit Environmental Variables"
                                 Padding="8,4"
                                 Margin="0,0,6,0"
                                 Command="{Binding EnvironmentVM.OpenEnvFileCommand}"
                                 Width="40">
-                    </Button>
-                    <Button Content="syncIgnore"
+                </Button>
+                <Button Content="syncIgnore"
                             ToolTip="Edit syncIgnore file"
                             Padding="8,4"
                             Margin="0,0,6,0"
                             Command="{Binding OpenSyncIgnoreFileCommand}"
                             Width="80">
-                    </Button>
-                </StackPanel>
-            </Grid>
+                </Button>
+            </StackPanel>
+        </Grid>
 
-            <!--  Main Content Area - the UserControl is responsible for its own ViewModel lifecycle  -->
-            <uc:ContainerConsole x:Name="ContainerConsoleControl" Grid.Row="3" />
+        <!--  Main Content Area - the UserControl is responsible for its own ViewModel lifecycle  -->
+        <uc:ContainerConsole x:Name="ContainerConsoleControl" Grid.Row="3" />
 
-            <!-- Footer with Exit Button -->
-            <Grid Grid.Row="4" Margin="6">
-    <Grid.RowDefinitions>
-        <RowDefinition Height="Auto"/>
-        <RowDefinition Height="Auto"/>
-    </Grid.RowDefinitions>
+        <!-- Footer with Exit Button -->
+        <Grid Grid.Row="4" Margin="6">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
 
-    <!-- Sync In -->
-    <StackPanel Orientation="Horizontal" Grid.Row="0">
-        <TextBlock Text="Sync In: "
+            <!-- Sync In -->
+            <StackPanel Orientation="Horizontal" Grid.Row="0">
+                <TextBlock Text="Sync In: "
                    FontWeight="SemiBold"/>
-        <TextBlock Text="{Binding SourcePath}"
+                <TextBlock Text="{Binding SourcePath}"
                    TextTrimming="CharacterEllipsis"
                    ToolTip="{Binding SourcePath}"
                    Foreground="Gray"/>
-    </StackPanel>
+            </StackPanel>
 
-    <!-- Sync Out -->
-    <StackPanel Orientation="Horizontal" Grid.Row="1" Margin="0,2,0,0">
-        <TextBlock Text="Sync Out: "
+            <!-- Sync Out -->
+            <StackPanel Orientation="Horizontal" Grid.Row="1" Margin="0,2,0,0">
+                <TextBlock Text="Sync Out: "
                    FontWeight="SemiBold"/>
-        <TextBlock Text="{Binding SyncOutPath}"
+                <TextBlock Text="{Binding SyncOutPath}"
                    TextTrimming="CharacterEllipsis"
                    ToolTip="{Binding SyncOutPath}"
                    Foreground="Gray"/>
-    </StackPanel>
-</Grid>
+            </StackPanel>
+        </Grid>
 
     </Grid>
 </Window>
