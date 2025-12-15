@@ -14,6 +14,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
+using System.Collections.Generic;
 
 namespace DockerBuildBoxSystem.ViewModels.ViewModels
 {
@@ -23,6 +24,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
     /// </summary>
     public sealed partial class ContainerConsoleViewModel : ViewModelBase
     {
+        private readonly HashSet<string> _containersStartedByApp = new(StringComparer.OrdinalIgnoreCase);
         private readonly IServiceProvider _serviceProvider;
         private readonly IContainerService _service;
         private readonly IImageService _imageService;
@@ -557,6 +559,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
                 if (status)
                 {
+                    if (!string.IsNullOrWhiteSpace(SelectedContainer?.Id))
+                        {_containersStartedByApp.Add(SelectedContainer.Id);}
+
                     PostLogMessage($"[info] Started container: {name}", false);
                 }
                 else
@@ -1143,7 +1148,49 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             _fileSyncService.StopWatching();
             await StopLogsAsync();
             await StopExecAsync();
+
+            // Stop container(s) on app exit (container-based workflow).
+            // - Always stop the currently selected running container.
+            // - Also stop any containers started by this app instance (optional tracking).
+            try
+            {
+                var idsToStop = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                if (!string.IsNullOrWhiteSpace(SelectedContainer?.Id))
+                    idsToStop.Add(SelectedContainer.Id);
+
+                foreach (var id in _containersStartedByApp)
+                    idsToStop.Add(id);
+
+                foreach (var id in idsToStop)
+                {
+                    try
+                    {
+                        var info = await _service.InspectAsync(id);
+                        if (info.IsRunning)
+                        {
+                            var name = info.Names.FirstOrDefault() ?? info.Id;
+                            PostLogMessage($"[info] App exit: stopping container: {name}", false);
+                            await _service.StopAsync(id, timeout: TimeSpan.FromSeconds(10));
+                        }
+                    }
+                    catch
+                    {
+                        // best-effort shutdown; ignore failures
+                    }
+                }
+
+                _containersStartedByApp.Clear();
+            }
+            catch
+            {
+                // ignore shutdown failures
+            }
+
             await UIHandler.StopAsync();
+
+            _imageSwitchLock?.Dispose();
+            
             await base.DisposeAsync();
         }
 
