@@ -39,6 +39,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
         public readonly UILineBuffer UIHandler;
 
+        // Tracks containers that were started by this app instance, so we can stop them on app exit.
+        private readonly HashSet<string> _containersStartedByApp = new(StringComparer.OrdinalIgnoreCase);
+
         /// <summary>
         /// Lines currently displayed in the console UI.
         /// </summary>
@@ -565,6 +568,8 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 if (status)
                 {
                     PostLogMessage($"[info] Started container: {name}", false);
+                    //Adding the container to track it:
+                    _containersStartedByApp.Add(SelectedContainer.Id);
                 }
                 else
                 {
@@ -610,6 +615,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 PostLogMessage($"[info] Stopping container: {name}", false);
                 await _service.StopAsync(container.Id, timeout: TimeSpan.FromSeconds(10));
                 PostLogMessage($"[info] Stopped container: {name}", false);
+                _containersStartedByApp.Remove(container.Id);
             }
             catch (Exception ex)
             {
@@ -1150,6 +1156,33 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             _fileSyncService.StopWatching();
             await StopLogsAsync();
             await StopExecAsync();
+
+            //Stop any container(s) that were started by this app instance.
+            //(We do NOT stop containers that were already running before the user started them here.)
+            if (_containersStartedByApp.Count > 0)
+            {
+                var ids = _containersStartedByApp.ToArray();
+                foreach (var id in ids)
+                {
+                    try
+                    {
+                        var info = await _service.InspectAsync(id);
+                        if (info.IsRunning)
+                        {
+                            var nameOrId = info.Names.FirstOrDefault() ?? id;
+                            PostLogMessage($"[info] App exit: stopping container: {nameOrId}", false);
+                            await _service.StopAsync(id, timeout: TimeSpan.FromSeconds(10));
+                        }
+                    }
+                    catch
+                    {
+                        // best-effort cleanup; ignore failures during shutdown
+                    }
+                }
+
+            }
+            _containersStartedByApp.Clear();
+
             await UIHandler.StopAsync();
             await base.DisposeAsync();
         }
