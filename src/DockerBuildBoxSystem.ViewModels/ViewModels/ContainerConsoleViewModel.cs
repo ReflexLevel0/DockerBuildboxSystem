@@ -40,6 +40,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
         public readonly UILineBuffer UIHandler;
 
+        // Tracks containers that were started by this app instance, so we can stop them on app exit.
+        private readonly HashSet<string> _containersStartedByApp = new(StringComparer.OrdinalIgnoreCase);
+
         /// <summary>
         /// Lines currently displayed in the console UI.
         /// </summary>
@@ -242,16 +245,18 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                     }
                 }
             };
-            
+
             //listen for settings changes
             _settingsService.SourcePathChanged += OnSourcePathChanged;
 
             PropertyChanged += async (s, e) =>
             {
-                if(string.Compare(e.PropertyName, nameof(SelectedImage)) == 0) {
+                if (string.Compare(e.PropertyName, nameof(SelectedImage)) == 0)
+                {
                     await OnSelectedImageChangedAsync(SelectedImage);
                 }
-                if(string.Compare(e.PropertyName, nameof(SelectedContainer)) == 0) {
+                if (string.Compare(e.PropertyName, nameof(SelectedContainer)) == 0)
+                {
                     await OnSelectedContainerChangedAsync(SelectedContainer);
                 }
             };
@@ -335,7 +340,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 Images.Clear();
                 foreach (var image in images)
                 {
-                    if(string.Compare(image.Id, selectedImageId) == 0)
+                    if (string.Compare(image.Id, selectedImageId) == 0)
                     {
                         SelectedImage = image;
                     }
@@ -420,7 +425,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
                 ct.ThrowIfCancellationRequested();
 
-                if(newImage is null)
+                if (newImage is null)
                 {
                     SelectedImage = null;
                     _previousContainerId = ContainerId;
@@ -558,6 +563,8 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 if (status)
                 {
                     PostLogMessage($"[info] Started container: {name}", false);
+                    //Adding the container to track it:
+                    _containersStartedByApp.Add(SelectedContainer.Id);
                 }
                 else
                 {
@@ -603,6 +610,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 PostLogMessage($"[info] Stopping container: {name}", false);
                 await _service.StopAsync(container.Id, timeout: TimeSpan.FromSeconds(10));
                 PostLogMessage($"[info] Stopped container: {name}", false);
+                _containersStartedByApp.Remove(container.Id);
             }
             catch (Exception ex)
             {
@@ -610,7 +618,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             }
             finally
             {
-                 await RefreshSelectedContainerAsync();
+                await RefreshSelectedContainerAsync();
             }
         }
 
@@ -852,7 +860,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [RelayCommand]
         private async Task CopyAsync()
         {
-            if(_clipboard is null)
+            if (_clipboard is null)
                 return;
 
             await UIHandler.CopyAsync(_clipboard);
@@ -909,17 +917,17 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             try
             {
                 PostLogMessage("[force-sync] Starting force sync operation", false);
-                
+
                 if (string.IsNullOrWhiteSpace(HostSyncPath) || !Directory.Exists(HostSyncPath))
                 {
-                     PostLogMessage("[force-sync] Error: Host sync path is invalid.", true);
-                     return;
+                    PostLogMessage("[force-sync] Error: Host sync path is invalid.", true);
+                    return;
                 }
-                
+
                 _fileSyncService.Configure(HostSyncPath, ContainerId, ContainerSyncPath);
-                
+
                 await _fileSyncService.ForceSyncAsync();
-                
+
                 PostLogMessage("[force-sync] Completed force sync operation", false);
             }
             catch (Exception ex)
@@ -992,7 +1000,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// <returns> a task representing the asynchronous operation</returns>
         private async Task LoadUserControlsAsync()
         {
-            var controls = await _userControlService.LoadUserControlsAsync() 
+            var controls = await _userControlService.LoadUserControlsAsync()
                            ?? new List<UserControlDefinition>();
 
             if (controls.Count > maxControls)
@@ -1024,10 +1032,10 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 var existingVar = _userVariables.FirstOrDefault(v => v.Id == id);
                 if (existingVar != null)
                     existingVar.Value = value;
-                
+
                 else
-                  _userVariables.Add(new UserVariables (id,value));
-                
+                    _userVariables.Add(new UserVariables(id, value));
+
             };
 
             // Create appropriate ViewModel based on control type
@@ -1143,6 +1151,33 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             _fileSyncService.StopWatching();
             await StopLogsAsync();
             await StopExecAsync();
+
+            //Stop any container(s) that were started by this app instance.
+            //(We do NOT stop containers that were already running before the user started them here.)
+            if (_containersStartedByApp.Count > 0)
+            {
+                var ids = _containersStartedByApp.ToArray();
+                foreach (var id in ids)
+                {
+                    try
+                    {
+                        var info = await _service.InspectAsync(id);
+                        if (info.IsRunning)
+                        {
+                            var nameOrId = info.Names.FirstOrDefault() ?? id;
+                            PostLogMessage($"[info] App exit: stopping container: {nameOrId}", false);
+                            await _service.StopAsync(id, timeout: TimeSpan.FromSeconds(10));
+                        }
+                    }
+                    catch
+                    {
+                        // best-effort cleanup; ignore failures during shutdown
+                    }
+                }
+
+            }
+            _containersStartedByApp.Clear();
+
             await UIHandler.StopAsync();
             await base.DisposeAsync();
         }

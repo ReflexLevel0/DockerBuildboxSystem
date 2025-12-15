@@ -12,14 +12,26 @@
         WindowStartupLocation="CenterScreen">
     <Grid>
         <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
-                <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />  <!-- Menu -->
+            <RowDefinition Height="Auto" />  <!-- Header -->
+            <RowDefinition Height="Auto" />  <!-- .env / syncIgnore -->
+            <RowDefinition Height="*" />     <!-- Main -->
+            <RowDefinition Height="Auto" />  <!-- Footer -->
         </Grid.RowDefinitions>
 
+            <Menu Grid.Row="0">
+                <MenuItem Header="_Sync">
+                    <MenuItem Header="Sync _In..." Command="{Binding SelectSourcePathCommand}" />
+                    <MenuItem Header="Sync _Out..." Command="{Binding SelectSyncOutPathCommand}" />
+                    <Separator/>
+                    <MenuItem Header="_Force Sync"
+                            Command="{Binding ElementName=ContainerConsoleControl, Path=DataContext.StartForceSyncCommand}" />
+                </MenuItem>
+            </Menu>
+
+
             <!-- Header with Title, Select Source Button and Path Display -->
-            <Grid Grid.Row="0" Margin="6">
+            <Grid Grid.Row="1" Margin="6">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
@@ -154,7 +166,7 @@
                 </Border>
             </Grid>
             <!-- Grid for .env and syncIgnore -->
-            <Grid Grid.Row="1">
+            <Grid Grid.Row="2">
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                     <Button Content=".env"
                                 ToolTip="Edit Environmental Variables"
@@ -174,22 +186,35 @@
             </Grid>
 
             <!--  Main Content Area - the UserControl is responsible for its own ViewModel lifecycle  -->
-            <uc:ContainerConsole x:Name="ContainerConsoleControl" Grid.Row="2" />
+            <uc:ContainerConsole x:Name="ContainerConsoleControl" Grid.Row="3" />
 
             <!-- Footer with Exit Button -->
-            <Grid Grid.Row="3" Margin="6">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <Button
-                    Grid.Column="1"
-                    Width="70"
-                    Height="28"
-                    Command="{Binding ExitCommand}"
-                    Content="Exit"
-                    ToolTip="Exit the application"
-                    Style="{StaticResource ExitButtonStyle}" />
+            <Grid Grid.Row="4" Margin="6">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- Sync In -->
+                <StackPanel Orientation="Horizontal" Grid.Row="0">
+                    <TextBlock Text="Sync In: "
+                            FontWeight="SemiBold"/>
+                    <TextBlock Text="{Binding SourcePath}"
+                            TextTrimming="CharacterEllipsis"
+                            ToolTip="{Binding SourcePath}"
+                            Foreground="Gray"/>
+                </StackPanel>
+
+                <!-- Sync Out -->
+                <StackPanel Orientation="Horizontal" Grid.Row="1" Margin="0,2,0,0">
+                    <TextBlock Text="Sync Out: "
+                            FontWeight="SemiBold"/>
+                    <TextBlock Text="{Binding SyncOutPath}"
+                            TextTrimming="CharacterEllipsis"
+                            ToolTip="{Binding SyncOutPath}"
+                            Foreground="Gray"/>
+                </StackPanel>
             </Grid>
+
     </Grid>
 </Window>
