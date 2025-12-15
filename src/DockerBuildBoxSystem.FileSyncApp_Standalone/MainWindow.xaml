@@ -12,7 +12,8 @@
         <!-- Path input -->
         <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
             <TextBox x:Name="PathTextBox" Width="600" Margin="0,0,10,0" />
-            <Button Content="Start Watching" Width="150" Click="StartWatching_Click"/>
+            <Button Content="Force sync" Width="150" Click="ForceSync_Click"/>
+            <Button Content="Clean" Width="150" Click="Clean_Click"/>
         </StackPanel>
 
         <!-- Ignore patterns -->

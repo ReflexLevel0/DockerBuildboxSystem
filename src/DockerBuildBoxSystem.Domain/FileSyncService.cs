@@ -1,5 +1,6 @@
 using DockerBuildBoxSystem.Contracts;
 using System;
+using System.Collections.Generic;
 using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.IO;
@@ -87,6 +88,26 @@ namespace DockerBuildBoxSystem.Domain
                 _watcher.Dispose();
                 _watcher = null;
                 Log("Stopped watching.");
+            }
+        }
+
+        public async Task CleanDirectoryAsync(IEnumerable<string>? excludedPaths)
+        {
+            if (string.IsNullOrWhiteSpace(_containerId) || string.IsNullOrWhiteSpace(_containerRootPath))
+            {
+                Log("Error: Container not configured.");
+                return;
+            }
+
+            Log($"Cleaning container directory: {_containerRootPath} with {excludedPaths?.Count() ?? 0} exclusions.");
+            var (cleanSuccess, cleanError) = await _fileTransferService.EmptyDirectoryInContainerAsync(_containerId, _containerRootPath, excludedPaths);
+            if (!cleanSuccess)
+            {
+                Log($"Warning: Failed to clean container directory: {cleanError}.");
+            }
+            else
+            {
+                Log("Container directory cleaned successfully!");
             }
         }
 

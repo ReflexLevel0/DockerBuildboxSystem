@@ -970,6 +970,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
                     _fileSyncService.Configure(HostSyncPath, ContainerId, ContainerSyncPath);
 
+                    await _fileSyncService.CleanDirectoryAsync(["build"]);
                     await _fileSyncService.ForceSyncAsync();
 
                     PostLogMessage("[force-sync] Completed force sync operation", false);
