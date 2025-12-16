@@ -12,6 +12,7 @@ namespace DockerBuildBoxSystem.ViewModels.Tests;
 public class ContainerConsoleViewModelTests
 {
     private static ContainerConsoleViewModel CreateViewModel(
+        IServiceProvider? serviceProvider = null,
         IContainerService? service = null,
         IImageService? imageService = null,
         IFileSyncService? fileSyncService = null,
@@ -25,6 +26,7 @@ public class ContainerConsoleViewModelTests
         IExternalProcessService? externalProcessService = null
         )
     {
+        serviceProvider ??= Substitute.For<IServiceProvider>();
         service ??= Substitute.For<IContainerService>();
         imageService ??= Substitute.For<IImageService>();
         fileSyncService ??= Substitute.For<IFileSyncService>();
@@ -35,10 +37,9 @@ public class ContainerConsoleViewModelTests
         logRunner ??= Substitute.For<ILogRunner>();
         commandRunner ??= Substitute.For<ICommandRunner>();
         clipboard ??= Substitute.For<IClipboardService>();
-        hostConfig ??= new HostConfig();
         externalProcessService ??= Substitute.For<IExternalProcessService>();
 
-        return new ContainerConsoleViewModel(service, imageService, fileSyncService, configuration, settingsService, userControlService, logRunner, commandRunner, hostConfig, externalProcessService, clipboard);
+        return new ContainerConsoleViewModel(serviceProvider, service, imageService, fileSyncService, configuration, settingsService, userControlService, logRunner, commandRunner, externalProcessService, clipboard);
     }
 
     /// <summary>
@@ -114,7 +115,7 @@ public class ContainerConsoleViewModelTests
                 return Task.CompletedTask;
             });
 
-        var vm = CreateViewModel(ContainerService, logRunner: LogsService);
+        var vm = CreateViewModel(service: ContainerService, logRunner: LogsService);
 
         vm.AutoStartLogs = true;
         vm.SelectedContainer = new ContainerInfo { Id = "abc", Names = ["abc"] };
@@ -201,7 +202,7 @@ public class ContainerConsoleViewModelTests
                 return Task.CompletedTask;
             });
 
-        var vm = CreateViewModel(ContainerService, commandRunner: CommandService);
+        var vm = CreateViewModel(service: ContainerService, commandRunner: CommandService);
 
         //start the UI update loop
         await vm.InitializeCommand.ExecuteAsync(null);
@@ -262,7 +263,7 @@ public class ContainerConsoleViewModelTests
         ContainerService.StreamLogsAsync(Arg.Any<string>(), true, Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(reader));
 
-        var vm = CreateViewModel(ContainerService, logRunner: LogsService);
+        var vm = CreateViewModel(service: ContainerService, logRunner: LogsService);
         //start the UI update loop
         await vm.InitializeCommand.ExecuteAsync(null);
         vm.SelectedContainer = new ContainerInfo { Id = "abc", Names = ["abc"] };

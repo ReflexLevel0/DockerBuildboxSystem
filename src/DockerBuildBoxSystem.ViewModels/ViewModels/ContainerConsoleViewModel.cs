@@ -14,6 +14,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
+using System.Collections.Generic;
 
 namespace DockerBuildBoxSystem.ViewModels.ViewModels
 {
@@ -23,6 +24,8 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
     /// </summary>
     public sealed partial class ContainerConsoleViewModel : ViewModelBase
     {
+        private readonly HashSet<string> _containersStartedByApp = new(StringComparer.OrdinalIgnoreCase);
+        private readonly IServiceProvider _serviceProvider;
         private readonly IContainerService _service;
         private readonly IImageService _imageService;
         private readonly IFileSyncService _fileSyncService;
@@ -165,12 +168,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [ObservableProperty]
         private string _containerSyncPath = "/data/";
 
-        /// <summary>
-        /// Config parameters for creating the docker container
-        /// </summary>
-        [ObservableProperty]
-        private HostConfig? _hostConfig;
-
         //track previous selected container and image id to manage stop-on-switch behavior
         private string? _previousContainerId;
         private string? _previousImageId;
@@ -189,6 +186,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// <param name="clipboard">Optional clipboard service for copying the text output.</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="service"/> is null.</exception>
         public ContainerConsoleViewModel(
+            IServiceProvider serviceProvider,
             IContainerService service, 
             IImageService imageService,
             IFileSyncService fileSyncService,
@@ -197,10 +195,10 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             IUserControlService userControlService,
             ILogRunner logRunner,
             ICommandRunner cmdRunner,
-            HostConfig hostConfig,
             IExternalProcessService externalProcessService,
             IClipboardService? clipboard = null) : base()
         {
+            _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
             _service = service ?? throw new ArgumentNullException(nameof(service));
             _imageService = imageService ?? throw new ArgumentNullException(nameof(imageService));
             _fileSyncService = fileSyncService ?? throw new ArgumentNullException(nameof(fileSyncService));
@@ -210,7 +208,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             _externalProcessService = externalProcessService ?? throw new ArgumentNullException(nameof(externalProcessService));
             _logRunner = logRunner ?? throw new ArgumentNullException(nameof(logRunner));
             _cmdRunner = cmdRunner ?? throw new ArgumentNullException(nameof(cmdRunner));
-            _hostConfig = hostConfig ?? throw new ArgumentNullException(nameof(hostConfig));
             _clipboard = clipboard;
 
 
@@ -458,11 +455,11 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                     PostLogMessage("[info] No existing container found for image. Creating a new one...", false);
 
                     var newContainerId = await _service.CreateContainerAsync(
-                        new ContainerCreationOptions 
+                        new ContainerCreationOptions
                         {
-                            ImageName = imageName, 
-                            Config = HostConfig
-                        }, 
+                            ImageName = imageName,
+                            Config = (HostConfig)_serviceProvider.GetService(typeof(HostConfig))!
+                        },
                         ct: ct);
                     container = await _service.InspectAsync(newContainerId, ct);
 
@@ -562,6 +559,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
                 if (status)
                 {
+                    if (!string.IsNullOrWhiteSpace(SelectedContainer?.Id))
+                        {_containersStartedByApp.Add(SelectedContainer.Id);}
+
                     PostLogMessage($"[info] Started container: {name}", false);
                 }
                 else
@@ -1149,7 +1149,49 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             _fileSyncService.StopWatching();
             await StopLogsAsync();
             await StopExecAsync();
+
+            // Stop container(s) on app exit (container-based workflow).
+            // - Always stop the currently selected running container.
+            // - Also stop any containers started by this app instance (optional tracking).
+            try
+            {
+                var idsToStop = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                if (!string.IsNullOrWhiteSpace(SelectedContainer?.Id))
+                    idsToStop.Add(SelectedContainer.Id);
+
+                foreach (var id in _containersStartedByApp)
+                    idsToStop.Add(id);
+
+                foreach (var id in idsToStop)
+                {
+                    try
+                    {
+                        var info = await _service.InspectAsync(id);
+                        if (info.IsRunning)
+                        {
+                            var name = info.Names.FirstOrDefault() ?? info.Id;
+                            PostLogMessage($"[info] App exit: stopping container: {name}", false);
+                            await _service.StopAsync(id, timeout: TimeSpan.FromSeconds(10));
+                        }
+                    }
+                    catch
+                    {
+                        // best-effort shutdown; ignore failures
+                    }
+                }
+
+                _containersStartedByApp.Clear();
+            }
+            catch
+            {
+                // ignore shutdown failures
+            }
+
             await UIHandler.StopAsync();
+
+            _imageSwitchLock?.Dispose();
+            
             await base.DisposeAsync();
         }
 
