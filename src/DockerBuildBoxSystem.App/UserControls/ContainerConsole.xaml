@@ -23,7 +23,6 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
         
         <!-- Container Selector -->
@@ -204,16 +203,6 @@
                          Canvas.Left="5" 
                          Fill="{Binding ContainerList.SelectedContainer.StateKind, Converter={StaticResource StateToColorConverter}}"/>
             </Canvas>
-        </Grid>
-        <Grid Grid.Row="4" HorizontalAlignment="Left">
-            <Button Content="cmd"
-                    Padding="8,4"
-                    Margin="6"
-                    Width="40"
-                    ToolTip="Open selected container in Windows CMD"
-                    Command="{Binding ContainerList.OpenContainerInCmdCommand}"
-                />
-
         </Grid>
     </Grid>
 </UserControl>
