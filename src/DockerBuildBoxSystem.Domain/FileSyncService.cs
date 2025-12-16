@@ -141,16 +141,6 @@ namespace DockerBuildBoxSystem.Domain
                 //copy only non-ignored files into temp folder
                 CopyToTempRecursive(_rootPath, tempRoot);
 
-                /*
-                //clean destination first to ensure mirror sync
-                Log($"Cleaning container directory: {_containerRootPath}");
-                var (cleanSuccess, cleanError) = await _fileTransferService.EmptyDirectoryInContainerAsync(_containerId, _containerRootPath);
-                if (!cleanSuccess)
-                {
-                    Log($"Warning: Failed to clean container directory: {cleanError}.");
-                }
-                */
-
                 //copy temp folder to Docker
                 var (success, error) = await _fileTransferService.CopyDirectoryToContainerAsync(_containerId, tempRoot, _containerRootPath);
                 
