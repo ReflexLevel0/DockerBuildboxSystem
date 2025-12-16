@@ -157,10 +157,8 @@ namespace DockerBuildBoxSystem.Domain
             {
                 // Create the token format ${variableName}
                 string token = $"${{{variable.Id}}}";
-                if (command.Contains(token))
-                {
-                    command = command.Replace($"${{{variable.Id}}}", variable.Value);
-                }
+                command = command.Replace(token, variable.Value, StringComparison.OrdinalIgnoreCase);
+                
             }
             return command;
         }
