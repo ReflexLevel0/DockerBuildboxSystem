@@ -74,7 +74,10 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private int _switchingCount;
         private HostConfig _hostConfig;
 
-        // Delegates for orchestration
+        private readonly HashSet<string> _containersStartedByApp = new(StringComparer.OrdinalIgnoreCase);
+
+        private int _disposeOnce;
+
         public bool AutoStartLogs { get; set; } = true;
 
         public ContainerListViewModel(
@@ -329,6 +332,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
                 if (status)
                 {
+                    if (!string.IsNullOrWhiteSpace(SelectedContainer?.Id))
+                        _containersStartedByApp.Add(SelectedContainer.Id);
+
                     _logger.LogWithNewline($"[info] Started container: {name}", false, false);
                     
                     // Re-inspect to get the updated running state
@@ -431,6 +437,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
         public override async ValueTask DisposeAsync()
         {
+            if (Interlocked.Exchange(ref _disposeOnce, 1) != 0)
+                return;
+
             try
             {
                 _switchCts?.Cancel();
@@ -439,8 +448,67 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             finally
             {
                 _switchCts?.Dispose();
+                _imageSwitchLock?.Dispose();
             }
-            _imageSwitchLock?.Dispose();
+
+            //Hard cap for logic related to shutdown
+            using var shutdownCts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            var ct = shutdownCts.Token;
+
+            try
+            {
+                var idsToStop = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                if (!string.IsNullOrWhiteSpace(SelectedContainer?.Id))
+                    idsToStop.Add(SelectedContainer.Id);
+
+                foreach (var id in _containersStartedByApp)
+                    idsToStop.Add(id);
+
+                foreach (var id in idsToStop)
+                {
+                    ct.ThrowIfCancellationRequested();
+
+                    try
+                    {
+                        //the docker HTTP call (InspectAsync) needs to be capped also so it doesn't block
+                        using var callCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                        callCts.CancelAfter(TimeSpan.FromSeconds(5));
+
+                        var info = await _containerService.InspectAsync(id, callCts.Token).ConfigureAwait(false);
+                        if (!info.IsRunning)
+                            continue;
+
+                        var name = info.Names.FirstOrDefault() ?? info.Id;
+                        _logger.LogWithNewline($"[info] App exit: stopping container: {name}", false);
+
+                        using var stopCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                        stopCts.CancelAfter(TimeSpan.FromSeconds(10));
+
+                        await _containerService.StopAsync(id, timeout: TimeSpan.FromSeconds(10), stopCts.Token)
+                            .ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        _logger.LogWithNewline($"[warn] App exit: stop timed out/canceled for container {id}", false);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWithNewline($"[warn] App exit: failed stopping {id}: {ex.Message}", false);
+                    }
+                }
+
+                _containersStartedByApp.Clear();
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogWithNewline("[warn] App exit: shutdown time cap exceeded... skipping remaining stops", false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWithNewline($"[warn] App exit: shutdown error: {ex.Message}", false);
+            }
+
             await base.DisposeAsync();
         }
     }
