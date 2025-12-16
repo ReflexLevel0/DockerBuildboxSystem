@@ -75,11 +75,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private HostConfig _hostConfig;
 
         // Delegates for orchestration
-        public Func<Task>? StopLogsAction { get; set; }
-        public Func<Task>? StopExecAction { get; set; }
-        public Func<Task>? StopSyncAction { get; set; }
-        public Action? DiscardUIAction { get; set; }
-        public Func<Task>? StartLogsAction { get; set; }
         public bool AutoStartLogs { get; set; } = true;
 
         public ContainerListViewModel(
@@ -174,7 +169,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             _switchCts = new CancellationTokenSource();
             var ct = _switchCts.Token;
 
-            bool wasSyncing = false;
             var takeLock = false;
             try
             {
@@ -189,10 +183,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 //fallback to current if previous not tracked yet
                 var oldContainerId = string.IsNullOrWhiteSpace(_previousContainerId) ? ContainerId : _previousContainerId;
 
-                //stop any running operations from previous container.
-                if (StopLogsAction != null) await StopLogsAction();
-                if (StopExecAction != null) await StopExecAction();
-                DiscardUIAction?.Invoke();
+                _logger.DiscardPendingLogs();
 
                 if (!string.IsNullOrWhiteSpace(oldContainerId))
                 {
@@ -266,10 +257,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 {
                     await StartContainerInternalAsync(ct);
                 }
-
-                //auto start logs if enabled
-                if (AutoStartLogs && !string.IsNullOrWhiteSpace(ContainerId) && StartLogsAction != null)
-                    _ = StartLogsAction();
 
                 _previousContainerId = ContainerId;
             }

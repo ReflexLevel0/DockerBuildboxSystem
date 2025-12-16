@@ -35,11 +35,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private bool _isSyncRunning;
 
         [ObservableProperty]
-        [NotifyCanExecuteChangedFor(nameof(SendCommand))]
-        [NotifyCanExecuteChangedFor(nameof(RunUserCommandCommand))]
-        private bool _isSwitching;
-
-        [ObservableProperty]
         private string? _input;
 
         private bool IsContainerRunning => SelectedContainer?.IsRunning == true;
@@ -71,7 +66,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             };
         }
 
-        private bool CanSend() => !string.IsNullOrWhiteSpace(ContainerId) && IsContainerRunning && !IsSwitching;
+        private bool CanSend() => !string.IsNullOrWhiteSpace(ContainerId) && IsContainerRunning;
         
         /// <summary>
         /// Sends the current input text as a command to the container.
@@ -135,6 +130,19 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
             var args = ShellSplitter.SplitShellLike(resolvedCommand);
             await ExecuteAndLog(args);
+        }
+
+        partial void OnSelectedContainerChanged(ContainerInfo? oldValue, ContainerInfo? newValue)
+        {
+            var switchedContainer = oldValue?.Id != newValue?.Id;
+
+            //if selection change didn't actually switch container, keep current exec session.
+            if (!switchedContainer)
+                return;
+
+            //stop exec session from the previous container.
+            if (_cmdRunner.IsRunning && StopExecCommand.CanExecute(null))
+                StopExecCommand.Execute(null);
         }
 
         /// <summary>

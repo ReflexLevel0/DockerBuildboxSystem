@@ -61,7 +61,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 {
                     await foreach (var (isErr, line) in _logRunner.RunAsync(_service, ContainerId).ConfigureAwait(false))
                     {
-                        _logger.Log(line, isErr, false);
+                        _logger.LogWithNewline(line, isErr, false);
                     }
                 }
                 catch (OperationCanceledException)
@@ -74,6 +74,26 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 }
 
             });
+        }
+
+        partial void OnSelectedContainerChanged(ContainerInfo? oldValue, ContainerInfo? newValue)
+        {
+            var sameContainer = oldValue?.Id == newValue?.Id;
+
+            //if we didn't actually switch containers and logs are already running, do nothing.
+            if (sameContainer && _logRunner.IsRunning)
+                return;
+
+            //stop logs for the previous container
+            if (_logRunner.IsRunning && StopLogsCommand.CanExecute(null))
+                StopLogsCommand.Execute(null);
+
+            //auto-start logs for the new container
+            if (newValue is null || !AutoStartLogs)
+                return;
+
+            if (newValue.IsRunning && StartLogsCommand.CanExecute(null))
+                StartLogsCommand.Execute(null);
         }
 
         /// <summary>

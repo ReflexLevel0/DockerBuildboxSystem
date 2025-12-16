@@ -89,27 +89,19 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             UserControls = new UserControlsViewModel(userControlService, logger);
             Commands = new CommandExecutionViewModel(cmdRunner, containerService, userControlService, logger, UserControls);
 
-            //orchestration
-            ContainerList.StopLogsAction = Logs.StopLogsAsync;
-            ContainerList.StopExecAction = Commands.StopExecAsync;
-            ContainerList.DiscardUIAction = UIHandler.DiscardPending;
-            ContainerList.StartLogsAction = Logs.StartLogsAsync;
-
             //ppropagate selection changes
             ContainerList.PropertyChanged += (s, e) =>
             {
                 if (e.PropertyName == nameof(ContainerList.SelectedContainer))
                 {
                     var container = ContainerList.SelectedContainer;
+                    if(container == null)
+                        return;
                     var isRunning = container?.IsRunning == true;
 
                     Logs.SelectedContainer = container;
                     FileSync.SelectedContainer = container;
                     Commands.SelectedContainer = container;
-                }
-                else if (e.PropertyName == nameof(ContainerList.IsSwitching))
-                {
-                    Commands.IsSwitching = ContainerList.IsSwitching;
                 }
             };
 
@@ -157,8 +149,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                     {
                         await ContainerList.RefreshImagesCommand.ExecuteAsync(null);
                         await ContainerList.RefreshSelectedContainerAsync();
-                    }
-                    , null);
+                    }, null);
                 }
             };
             refreshImagesContainersTimer.Enabled = true;
@@ -183,11 +174,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
             // Load user-defined controls
             await UserControls.LoadUserControlsAsync();
-
-            if(Logs.AutoStartLogs)
-            {
-                await Logs.StartLogsCommand.ExecuteAsync(null);
-            }
         }
 
 
@@ -196,9 +182,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// Clears all lines from the console.
         /// </summary>
         [RelayCommand]
-        private async Task ClearAsync()
+        private void Clear()
         {
-            UIHandler.ClearAsync();
+            UIHandler.Clear();
         }
 
         /// <summary>

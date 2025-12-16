@@ -25,5 +25,10 @@ namespace DockerBuildBoxSystem.ViewModels.Common
         {
             _uiHandler.EnqueueLine(message, isError, isImportant);
         }
+
+        public void DiscardPendingLogs()
+        {
+            _uiHandler.DiscardPending();
+        }
     }
 }

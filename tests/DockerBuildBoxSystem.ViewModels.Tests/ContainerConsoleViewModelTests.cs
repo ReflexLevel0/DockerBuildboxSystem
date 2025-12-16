@@ -118,7 +118,7 @@ public class ContainerConsoleViewModelTests
         var vm = CreateViewModel(service: ContainerService, logRunner: LogsService);
 
         vm.Logs.AutoStartLogs = true;
-        vm.ContainerList.SelectedContainer = new ContainerInfo { Id = "abc", Names = ["abc"] };
+        vm.ContainerList.SelectedContainer = new ContainerInfo { Id = "abc", Names = ["abc"], Status = "running" };
 
         await vm.InitializeCommand.ExecuteAsync(null);
 
