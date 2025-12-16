@@ -92,6 +92,8 @@ namespace FileWatcherApp
             _changes.Add($"Ignoring: {string.Join(", ", GetIgnoreSummary())}");
         }
 
+        
+
         private void SetupWatcher(string path)
         {
             _watcher?.Dispose();
@@ -246,6 +248,16 @@ namespace FileWatcherApp
             CopyEntireFolderToDocker();
         }
 
+        private void Clean_Click(object sender, RoutedEventArgs e)
+        {
+            
+
+            DeleteAllExceptBuild();
+
+            _changes.Clear();
+            _changes.Add($"Deleting all files/folders in /data except 'Build' folder.");
+        }
+
 
         // ============================================================
         // FULL FOLDER COPY (TEMP FOLDER, IGNORE SUPPORT)
@@ -319,6 +331,41 @@ namespace FileWatcherApp
                 CopyToTempRecursive(subDir, tempRoot);
             }
         }
+        private void DeleteAllExceptBuild()
+            {
+                try
+                {
+                    // 1) List everything inside /data
+                    string listResult = RunDockerCommand("exec TestContainer sh -c \"ls -A /data\"");
+                    if (listResult.StartsWith("ERROR") || listResult.StartsWith("EXCEPTION"))
+                    {
+                        Log("Failed to list /data: " + listResult);
+                        return;
+                    }
+
+                    var entries = listResult.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+
+                    foreach (var entry in entries)
+                    {
+                        if (entry.Equals("Build", StringComparison.OrdinalIgnoreCase))
+                            continue; // skip Build folder
+
+                        string path = "/data/" + entry;
+
+                        // Delete files or folders recursively
+                        string result = RunDockerCommand($"exec TestContainer sh -c \"rm -rf '{path}'\"");
+                        Log($"Deleted {path} | {result}");
+                    }
+
+                    Log("Cleanup complete. Only /data/Build remains.");
+
+                }
+                catch (Exception ex)
+                {
+                    Log("EXCEPTION in DeleteAllExceptBuild: " + ex.Message);
+                }
+            }
+
 
         // ============================================================
         // LOGGING
