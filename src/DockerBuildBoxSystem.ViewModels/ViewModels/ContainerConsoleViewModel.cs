@@ -36,6 +36,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private readonly ICommandRunner _cmdRunner;
         private readonly IUserControlService _userControlService;
         private readonly IExternalProcessService _externalProcessService;
+        private readonly ICommandValidatorService _commandValidatorService;
         private readonly int maxControls = 15;
         private List<UserVariables> _userVariables = new();
 
@@ -196,6 +197,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             ILogRunner logRunner,
             ICommandRunner cmdRunner,
             IExternalProcessService externalProcessService,
+            ICommandValidatorService commandValidatorService,
             IClipboardService? clipboard = null) : base()
         {
             _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
@@ -206,6 +208,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             _settingsService = settingsService ?? throw new ArgumentNullException(nameof(settingsService));
             _userControlService = userControlService ?? throw new ArgumentNullException(nameof(userControlService));
             _externalProcessService = externalProcessService ?? throw new ArgumentNullException(nameof(externalProcessService));
+            _commandValidatorService = commandValidatorService ?? throw new ArgumentNullException(nameof(commandValidatorService));
             _logRunner = logRunner ?? throw new ArgumentNullException(nameof(logRunner));
             _cmdRunner = cmdRunner ?? throw new ArgumentNullException(nameof(cmdRunner));
             _clipboard = clipboard;
@@ -976,6 +979,13 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
             // resolve user variables from input
             var resolvedCommand = await _userControlService.RetrieveVariableAsync(raw, _userVariables);
+
+            //Validate - sanitize the command
+            if (!_commandValidatorService.IsSafeValue(resolvedCommand, out var errorMessage))
+            {
+                PostLogMessage($"[security] Command rejected: {errorMessage}", true);
+                return;
+            }
 
             if (await _cmdRunner.TryWriteToInteractiveAsync(resolvedCommand))
                 return;

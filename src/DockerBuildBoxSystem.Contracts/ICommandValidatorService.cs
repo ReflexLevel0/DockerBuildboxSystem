@@ -6,7 +6,8 @@ using System.Threading.Tasks;
 
 namespace DockerBuildBoxSystem.Contracts
 {
-    public interface ICommandValidator
+    public interface ICommandValidatorService
     {
+        bool IsSafeValue(string value, out string ? errorMessage);
     }
 }
