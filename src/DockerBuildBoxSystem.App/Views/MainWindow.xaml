@@ -29,7 +29,7 @@
             </MenuItem>
             <MenuItem Header="_Container"
                       ToolTip="Container options">
-                <MenuItem Header="_Open Container in CMD" Command="{Binding ElementName=ContainerConsoleControl, Path=DataContext.OpenContainerInCmdCommand}" />
+                <MenuItem Header="_Open Container in CMD" Command="{Binding ElementName=ContainerConsoleControl, Path=DataContext.ContainerList.OpenContainerInCmdCommand}" />
             </MenuItem>
         </Menu>
 
