@@ -120,9 +120,9 @@ public partial class App : Application
     private static void ConfigureServices(IServiceCollection services)
     {
         //register container services
-        services.AddSingleton<IContainerService, DockerService>();
-        services.AddScoped<IVolumeService>(provider => (IVolumeService)provider.GetRequiredService<IContainerService>());
-        services.AddSingleton<IImageService>(provider => (IImageService)provider.GetRequiredService<IContainerService>());
+        services.AddSingleton<IContainerService, DockerContainerService>();
+        services.AddSingleton<IVolumeService, DockerVolumeService>();
+        services.AddSingleton<IImageService, DockerImageService>();
         services.AddSingleton<IContainerFileTransferService, ContainerFileTransferService>();
         services.AddTransient<IIgnorePatternMatcher, IgnorePatternMatcher>();
         services.AddTransient<IFileSyncService, FileSyncService>();
