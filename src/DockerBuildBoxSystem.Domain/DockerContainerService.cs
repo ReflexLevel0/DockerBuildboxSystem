@@ -5,53 +5,51 @@ using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Formats.Tar;
-using System.IO;
 using System.Linq;
-using System.Numerics;
-using System.Runtime.InteropServices;
 using System.Text;
-using System.Text.Json;
 using System.Threading.Channels;
 using System.Threading.Tasks;
-using System.Xml.Linq;
 
 namespace DockerBuildBoxSystem.Domain
 {
     /// <summary>
-    /// Class for interactions with the Docker Engine API using Docker.DotNet.
+    /// Service for container operations using Docker.
     /// </summary>
-    public sealed class DockerService : IContainerService, IImageService, IVolumeService, IAsyncDisposable, IDisposable
+    public sealed class DockerContainerService : DockerServiceBase, IContainerService
     {
-        #region Variables and Constructor
-        private readonly DockerClient _client;
-        private bool _disposed;
-        private static readonly string _sharedVolumeName = "BuildBoxShared";
+        private readonly IVolumeService _volumeService;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="DockerService"/> class.
+        /// Initializes a new instance of the <see cref="DockerContainerService"/> class.
         /// </summary>
-        /// <param name="endpoint">The docker endpoint URI. If null, a platform default is used retrieved from <see cref="GetDefaultDockerUri"/>.</param>
+        /// <param name="volumeService">The volume service for shared volume operations.</param>
+        /// <param name="endpoint">The docker endpoint URI. If null, a platform default is used.</param>
         /// <param name="timeout">Optional timeout for Docker requests. Defaults to 100 seconds.</param>
-        public DockerService(string? endpoint = null, TimeSpan? timeout = null)
+        public DockerContainerService(IVolumeService volumeService, string? endpoint = null, TimeSpan? timeout = null)
+            : base(endpoint, timeout)
         {
-            _client = new DockerClientConfiguration(
-                endpoint is not null ? new Uri(endpoint) : GetDefaultDockerUri(),
-                new AnonymousCredentials(),
-                default,
-                timeout ?? TimeSpan.FromSeconds(100))
-                .CreateClient();
+            _volumeService = volumeService ?? throw new ArgumentNullException(nameof(volumeService));
         }
 
-        #endregion
+        /// <summary>
+        /// Initializes a new instance of the <see cref="DockerContainerService"/> class with an existing client.
+        /// </summary>
+        /// <param name="volumeService">The volume service for shared volume operations.</param>
+        /// <param name="client">An existing Docker client instance.</param>
+        public DockerContainerService(IVolumeService volumeService, DockerClient client)
+            : base(client)
+        {
+            _volumeService = volumeService ?? throw new ArgumentNullException(nameof(volumeService));
+        }
 
-        #region Container Operations
+        #region Container Lifecycle Logic
         public async Task<bool> StartAsync(string containerId, CancellationToken ct = default) =>
-            await _client.Containers.StartContainerAsync(containerId, new ContainerStartParameters(), ct);
+            await Client.Containers.StartContainerAsync(containerId, new ContainerStartParameters(), ct);
 
         public async Task<string> CreateContainerAsync(ContainerCreationOptions options, CancellationToken ct = default)
         {
             // Getting (or creating a new) shared volume and setting it as container mount
-            var sharedVolume = await GetSharedVolumeAsync(ct, true);
+            var sharedVolume = await _volumeService.GetSharedVolumeAsync(ct, true);
             if (options.Config.Mounts == null) options.Config.Mounts = new List<Mount>();
             options.Config?.Mounts.Add(new Mount()
             {
@@ -61,7 +59,7 @@ namespace DockerBuildBoxSystem.Domain
             });
 
             // Creating the container
-            var response = await _client.Containers.CreateContainerAsync(new CreateContainerParameters
+            var response = await Client.Containers.CreateContainerAsync(new CreateContainerParameters
             {
                 Image = options.ImageName,
                 Name = options.ContainerName,
@@ -75,28 +73,24 @@ namespace DockerBuildBoxSystem.Domain
 
             return response.ID;
         }
-
         public async Task StopAsync(string containerId, TimeSpan timeout, CancellationToken ct = default) =>
-            await _client.Containers.StopContainerAsync(containerId,
+            await Client.Containers.StopContainerAsync(containerId,
                 new ContainerStopParameters { WaitBeforeKillSeconds = (uint)timeout.TotalSeconds }, ct);
-
-
         public async Task RemoveAsync(string containerId, bool force = false, CancellationToken ct = default) =>
-            await _client.Containers.RemoveContainerAsync(containerId,
+            await Client.Containers.RemoveContainerAsync(containerId,
                 new ContainerRemoveParameters { Force = force }, ct);
-
-
         public async Task RestartAsync(string containerId, TimeSpan timeout, CancellationToken ct = default) =>
-            await _client.Containers.RestartContainerAsync(containerId,
+            await Client.Containers.RestartContainerAsync(containerId,
                 new ContainerRestartParameters { WaitBeforeKillSeconds = (uint)timeout.TotalSeconds }, ct);
-
-
         public async Task KillContainer(string containerId, CancellationToken ct = default) =>
-            await _client.Containers.KillContainerAsync(containerId, new ContainerKillParameters(), ct);
+            await Client.Containers.KillContainerAsync(containerId, new ContainerKillParameters(), ct);
 
+        #endregion
+
+        #region Container Inspection
         public async Task<ContainerInfo> InspectAsync(string containerId, CancellationToken ct = default)
         {
-            var inspect = await _client.Containers.InspectContainerAsync(containerId, ct);
+            var inspect = await Client.Containers.InspectContainerAsync(containerId, ct);
 
             return new ContainerInfo
             {
@@ -124,7 +118,7 @@ namespace DockerBuildBoxSystem.Domain
                 Filters = filters
             };
 
-            var containers = await _client.Containers.ListContainersAsync(parameters, ct);
+            var containers = await Client.Containers.ListContainersAsync(parameters, ct);
 
             //mapping the Docker.DotNet model to our own DTO
             return containers.Select(c => new ContainerInfo
@@ -136,9 +130,9 @@ namespace DockerBuildBoxSystem.Domain
                 Image = c.Image
             }).ToList();
         }
+        #endregion
 
-
-
+        #region Container Logs and Exec
         public async Task<ChannelReader<(bool IsStdErr, string Line)>> StreamLogsAsync(
             string containerId,
             bool follow = true,
@@ -159,7 +153,7 @@ namespace DockerBuildBoxSystem.Domain
 
                 try
                 {
-                    stream = await _client.Containers.GetContainerLogsAsync(
+                    stream = await Client.Containers.GetContainerLogsAsync(
                         containerId,
                         new ContainerLogsParameters
                         {
@@ -246,7 +240,6 @@ namespace DockerBuildBoxSystem.Domain
             return ch.Reader;
         }
 
-
         public async Task<(ChannelReader<(bool IsStdErr, string Line)> Output, ChannelWriter<string> Input, Task<long> ExitCodeTask)> StreamExecAsync(
             string containerId,
             IReadOnlyList<string> cmd,
@@ -259,7 +252,7 @@ namespace DockerBuildBoxSystem.Domain
                 new UnboundedChannelOptions { SingleReader = true, SingleWriter = true });
 
             //Create the exec instance
-            var create = await _client.Exec.CreateContainerExecAsync(containerId,
+            var create = await Client.Exec.CreateContainerExecAsync(containerId,
                 new ContainerExecCreateParameters
                 {
                     Cmd = cmd.ToList(),
@@ -275,7 +268,7 @@ namespace DockerBuildBoxSystem.Domain
             CancellationTokenRegistration? registration = default;
 
             //Start and attach to the exec instance
-            stream = await _client.Exec.StartContainerExecAsync(execId, new ContainerExecStartParameters { Detach = false, Tty = tty }, ct);
+            stream = await Client.Exec.StartContainerExecAsync(execId, new ContainerExecStartParameters { Detach = false, Tty = tty }, ct);
 
             using var baseCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             using var stdinCts = CancellationTokenSource.CreateLinkedTokenSource(baseCts.Token);
@@ -363,7 +356,7 @@ namespace DockerBuildBoxSystem.Domain
 
 
                     //wait for the exec to finish and get exit code
-                    var resp = await _client.Exec.InspectContainerExecAsync(execId, stdoutToken).ConfigureAwait(false);
+                    var resp = await Client.Exec.InspectContainerExecAsync(execId, stdoutToken).ConfigureAwait(false);
                     return resp.ExitCode;
                 }
                 catch (OperationCanceledException)
@@ -408,7 +401,7 @@ namespace DockerBuildBoxSystem.Domain
             IReadOnlyList<string> cmd,
             CancellationToken ct = default)
         {
-            var create = await _client.Exec.CreateContainerExecAsync(containerId,
+            var create = await Client.Exec.CreateContainerExecAsync(containerId,
                 new ContainerExecCreateParameters
                 {
                     Cmd = cmd.ToList(),
@@ -419,20 +412,23 @@ namespace DockerBuildBoxSystem.Domain
 
             var execId = create.ID;
 
-            using var stream = await _client.Exec.StartContainerExecAsync(execId, new ContainerExecStartParameters { Detach = false, Tty = false }, ct);
+            using var stream = await Client.Exec.StartContainerExecAsync(execId, new ContainerExecStartParameters { Detach = false, Tty = false }, ct);
 
             var output = await stream.ReadOutputToEndAsync(ct);
 
-            var inspect = await _client.Exec.InspectContainerExecAsync(execId, ct);
+            var inspect = await Client.Exec.InspectContainerExecAsync(execId, ct);
 
             return (inspect.ExitCode, output.stdout, output.stderr);
         }
+        #endregion
+
+        #region File Operations
 
         public async Task CopyFileToContainerAsync(
-            string containerId,
-            string hostPath,
-            string containerPath,
-            CancellationToken ct = default)
+    string containerId,
+    string hostPath,
+    string containerPath,
+    CancellationToken ct = default)
         {
             if (!File.Exists(hostPath))
                 throw new FileNotFoundException("File not found", hostPath);
@@ -458,12 +454,11 @@ namespace DockerBuildBoxSystem.Domain
 
             memoryStream.Position = 0;
 
-            await _client.Containers.ExtractArchiveToContainerAsync(containerId,
+            await Client.Containers.ExtractArchiveToContainerAsync(containerId,
                 new ContainerPathStatParameters { Path = dirName },
                 memoryStream,
                 ct);
         }
-
         public async Task CopyDirectoryToContainerAsync(
             string containerId,
             string hostPath,
@@ -485,7 +480,7 @@ namespace DockerBuildBoxSystem.Domain
 
                 using var fileStream = File.OpenRead(tempTarPath);
 
-                await _client.Containers.ExtractArchiveToContainerAsync(containerId,
+                await Client.Containers.ExtractArchiveToContainerAsync(containerId,
                     new ContainerPathStatParameters { Path = containerPath },
                     fileStream,
                     ct);
@@ -500,112 +495,7 @@ namespace DockerBuildBoxSystem.Domain
         }
         #endregion
 
-        #region Image Operations
-
-        public async Task<IList<ImageInfo>> ListImagesAsync(bool all = false, CancellationToken ct = default)
-        {
-            var images = await _client.Images.ListImagesAsync(new ImagesListParameters { All = all }, ct);
-            return images.Select(img => new ImageInfo
-            {
-                Id = img.ID,
-                RepoTags = img.RepoTags is null ? Array.Empty<string>() : img.RepoTags.ToArray(),
-                Created = img.Created,
-                Size = img.Size,
-                VirtualSize = img.VirtualSize,
-                Labels = img.Labels is null ? new Dictionary<string, string>() : new Dictionary<string, string>(img.Labels)
-            }).ToList();
-        }
-
-        public async Task<ImageInfo> InspectImageAsync(string imageId, CancellationToken ct = default)
-        {
-            var inspect = await _client.Images.InspectImageAsync(imageId, ct);
-            return new ImageInfo
-            {
-                Id = inspect.ID,
-                RepoTags = inspect.RepoTags is null ? Array.Empty<string>() : inspect.RepoTags.ToArray(),
-                Created = inspect.Created,
-                Size = inspect.Size,
-                VirtualSize = inspect.VirtualSize,
-                Labels = inspect.Config?.Labels is null ? new Dictionary<string, string>() : new Dictionary<string, string>(inspect.Config.Labels)
-            };
-        }
-
-        public async Task RemoveImageAsync(string imageId, bool force = false, bool prune = false, CancellationToken ct = default)
-        {
-            await _client.Images.DeleteImageAsync(imageId, new ImageDeleteParameters { Force = force, NoPrune = prune }, ct);
-        }
-
-        public async Task PullImageAsync(string imageName, string tag = "latest", CancellationToken ct = default)
-        {
-            await _client.Images.CreateImageAsync(
-                new ImagesCreateParameters
-                {
-                    FromImage = imageName,
-                    Tag = tag
-                },
-                null,
-                new Progress<JSONMessage>(),
-                ct);
-        }
-
-        #endregion
-
-        #region Volume operations
-        public async Task<VolumeResponse?> GetSharedVolumeAsync(CancellationToken ct, bool createIfNotExists = false)
-        {
-            // Finding a volume named "BuildBoxShared"
-            var volumes = (await _client.Volumes.ListAsync(ct)).Volumes;
-            var sharedVolume = volumes
-                .Where(v => string.CompareOrdinal(v.Name, _sharedVolumeName) == 0)
-                .FirstOrDefault();
-
-            // Returning the volume
-            // (or creating and returning a new volume if shared volume doesn't exist)
-            return sharedVolume == null ? await CreateSharedVolumeAsync(ct) : sharedVolume;
-        }
-
-        public async Task<VolumeResponse?> CreateSharedVolumeAsync(CancellationToken ct)
-        {
-            // Creates a volume named "BuildBoxShared"
-            var volumeParams = new VolumesCreateParameters() { Name = _sharedVolumeName };
-            return await _client.Volumes.CreateAsync(volumeParams, ct);
-        }
-        #endregion
-
         #region Helpers
-
-        /// <summary>
-        /// Disposes the underlying Docker client
-        /// </summary>
-        /// <returns>A task that represents the dispose operation.</returns>
-        public async ValueTask DisposeAsync()
-        {
-            if (_disposed)
-                return;
-
-            _disposed = true;
-
-            //dispose synchronously
-            _client?.Dispose();
-
-            await Task.CompletedTask;
-
-            GC.SuppressFinalize(this);
-        }
-
-        /// <summary>
-        /// Synchronously disposes resources by delegating to <see cref="DisposeAsync"/> and blocking until completion.
-        /// </summary>
-        public void Dispose()
-        {
-            if (_disposed)
-                return;
-
-            _disposed = true;
-
-            DisposeAsync().AsTask().GetAwaiter().GetResult();
-            GC.SuppressFinalize(this);
-        }
         private static byte[] EncodeTerminalInput(string? value)
         {
             var normalized = value?.Replace("\r\n", "\n", StringComparison.Ordinal)
@@ -620,21 +510,6 @@ namespace DockerBuildBoxSystem.Domain
             var carriageReturnNormalized = normalized.Replace('\n', '\r');
             return Encoding.UTF8.GetBytes(carriageReturnNormalized);
         }
-        /// <summary>
-        /// Gets the default URI for connecting to the Docker engine based on the current operating system.
-        /// </summary>
-        /// <remarks>The returned URI is determined by the operating system at runtime.  Use this method
-        /// to obtain the appropriate default Docker engine URI for the current environment.</remarks>
-        /// <returns>A <see cref="Uri"/> representing the default Docker engine connection endpoint.  On Windows, this is
-        /// <c>npipe://./pipe/docker_engine</c>.  On non-Windows platforms, this is <c>unix:///var/run/docker.sock</c>.</returns>
-        private static Uri GetDefaultDockerUri()
-        {
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-                return new Uri("npipe://./pipe/docker_engine");
-            return new Uri("unix:///var/run/docker.sock");
-        }
-
-
 
         #endregion
     }
