@@ -14,7 +14,7 @@ namespace DockerBuildBoxSystem.Domain
     /// </summary>
     public sealed class DockerVolumeService : DockerServiceBase, IVolumeService
     {
-        private static readonly string _sharedVolumeName = "BuildBoxShared";
+        public static readonly string SharedVolumeName = "BuildBoxShared";
 
         /// <summary>
         /// Initializes a new instance of the <see cref="DockerVolumeService"/> class.
@@ -30,28 +30,30 @@ namespace DockerBuildBoxSystem.Domain
         /// Initializes a new instance of the <see cref="DockerVolumeService"/> class with an existing client.
         /// </summary>
         /// <param name="client">An existing Docker client instance.</param>
-        public DockerVolumeService(DockerClient client)
+        public DockerVolumeService(IDockerClient client)
             : base(client)
         {
         }
 
-        public async Task<VolumeResponse?> GetSharedVolumeAsync(CancellationToken ct, bool createIfNotExists = false)
+        public async Task<VolumeResponse?> GetSharedVolumeAsync(bool createIfNotExists = false, CancellationToken ct = default)
         {
             // Finding a volume named "BuildBoxShared"
             var volumes = (await Client.Volumes.ListAsync(ct)).Volumes;
             var sharedVolume = volumes
-                .Where(v => string.CompareOrdinal(v.Name, _sharedVolumeName) == 0)
+                .Where(v => string.CompareOrdinal(v.Name, SharedVolumeName) == 0)
                 .FirstOrDefault();
 
-            // Returning the volume
-            // (or creating and returning a new volume if shared volume doesn't exist)
-            return sharedVolume == null && createIfNotExists ? await CreateSharedVolumeAsync(ct) : sharedVolume;
+            // Returning the volume if it already exists
+            if (sharedVolume != null) return sharedVolume;
+
+            // Creating and returning a new volume if shared volume doesn't exist
+            var volumeParams = new VolumesCreateParameters() { Name = SharedVolumeName };
+            return createIfNotExists ? await CreateVolumeAsync(volumeParams, ct) : null;
         }
-        public async Task<VolumeResponse?> CreateSharedVolumeAsync(CancellationToken ct)
+
+        public async Task<VolumeResponse?> CreateVolumeAsync(VolumesCreateParameters parameters, CancellationToken ct = default)
         {
-            // Creates a volume named "BuildBoxShared"
-            var volumeParams = new VolumesCreateParameters() { Name = _sharedVolumeName };
-            return await Client.Volumes.CreateAsync(volumeParams, ct);
+            return await Client.Volumes.CreateAsync(parameters, ct);
         }
     }
 }

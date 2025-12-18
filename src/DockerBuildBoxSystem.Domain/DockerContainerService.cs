@@ -49,7 +49,7 @@ namespace DockerBuildBoxSystem.Domain
         public async Task<string> CreateContainerAsync(ContainerCreationOptions options, CancellationToken ct = default)
         {
             // Getting (or creating a new) shared volume and setting it as container mount
-            var sharedVolume = await _volumeService.GetSharedVolumeAsync(ct, true);
+            var sharedVolume = await _volumeService.GetSharedVolumeAsync(true, ct);
             if (options.Config.Mounts == null) options.Config.Mounts = new List<Mount>();
             options.Config?.Mounts.Add(new Mount()
             {

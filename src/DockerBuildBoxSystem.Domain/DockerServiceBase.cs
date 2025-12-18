@@ -10,7 +10,7 @@ namespace DockerBuildBoxSystem.Domain
 {
     public abstract class DockerServiceBase : IAsyncDisposable, IDisposable
     {
-        protected readonly DockerClient Client;
+        protected readonly IDockerClient Client;
 
         private bool _disposed;
 
@@ -34,7 +34,7 @@ namespace DockerBuildBoxSystem.Domain
         /// Initializes a new instance of the <see cref="DockerServiceBase"/> class with an existing client.
         /// </summary>
         /// <param name="client">An existing Docker client instance.</param>
-        protected DockerServiceBase(DockerClient client)
+        protected DockerServiceBase(IDockerClient client)
         {
             Client = client ?? throw new ArgumentNullException(nameof(client));
         }

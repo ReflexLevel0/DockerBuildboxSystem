@@ -1,17 +1,16 @@
-﻿using System.Windows;
+﻿using Docker.DotNet.Models;
+using DockerBuildBoxSystem.App.Services;
+using DockerBuildBoxSystem.App.UserControls;
+using DockerBuildBoxSystem.Contracts;
+using DockerBuildBoxSystem.Domain;
+using DockerBuildBoxSystem.ViewModels.Main;
+using DockerBuildBoxSystem.ViewModels.ViewModels;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using DockerBuildBoxSystem.ViewModels.Main;
-using DockerBuildBoxSystem.Contracts;
-using DockerBuildBoxSystem.Domain;
-using DockerBuildBoxSystem.ViewModels.ViewModels;
-using DockerBuildBoxSystem.App.UserControls;
-using DockerBuildBoxSystem.App.Services;
-using Docker.DotNet.Models;
 using Newtonsoft.Json;
 using System.IO;
-using DockerBuildBoxSystem.ViewModels.Common;
+using System.Windows;
 
 namespace DockerBuildBoxSystem.App;
 
@@ -109,7 +108,7 @@ public partial class App : Application
     {
         //register Windows as Transient (creates a new instance each time)
         services.AddTransient<MainWindow>();
-        
+
         //register UserControls as Transient
         services.AddTransient<ContainerConsole>();
     }
@@ -126,14 +125,14 @@ public partial class App : Application
         services.AddSingleton<IContainerFileTransferService, ContainerFileTransferService>();
         services.AddTransient<IIgnorePatternMatcher, IgnorePatternMatcher>();
         services.AddTransient<IFileSyncService, FileSyncService>();
-        
+
         //register user control service
         services.AddSingleton<IUserControlService, UserControlService>();
-        
+
         //register runners used by ContainerConsoleViewModel
         services.AddTransient<ILogRunner, LogRunner>();
         services.AddTransient<ICommandRunner, CommandRunner>();
-        
+
         //register settings service
         services.AddSingleton<ISettingsService, SettingsService>();
 
