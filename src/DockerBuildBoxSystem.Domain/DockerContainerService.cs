@@ -18,33 +18,44 @@ namespace DockerBuildBoxSystem.Domain
     public sealed class DockerContainerService : DockerServiceBase, IContainerService
     {
         private readonly IVolumeService _volumeService;
+        private readonly IEnvironmentService _environmentService;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="DockerContainerService"/> class.
         /// </summary>
         /// <param name="volumeService">The volume service for shared volume operations.</param>
+        /// <param name="environmentService">The environment service for managing container environments.</param>
         /// <param name="endpoint">The docker endpoint URI. If null, a platform default is used.</param>
         /// <param name="timeout">Optional timeout for Docker requests. Defaults to 100 seconds.</param>
-        public DockerContainerService(IVolumeService volumeService, string? endpoint = null, TimeSpan? timeout = null)
+        public DockerContainerService(IVolumeService volumeService, IEnvironmentService environmentService, string? endpoint = null, TimeSpan? timeout = null)
             : base(endpoint, timeout)
         {
             _volumeService = volumeService ?? throw new ArgumentNullException(nameof(volumeService));
+            _environmentService = environmentService ?? throw new ArgumentNullException(nameof(environmentService));
         }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="DockerContainerService"/> class with an existing client.
         /// </summary>
         /// <param name="volumeService">The volume service for shared volume operations.</param>
+        /// <param name="environmentService">The environment service for managing container environments.</param>
         /// <param name="client">An existing Docker client instance.</param>
-        public DockerContainerService(IVolumeService volumeService, DockerClient client)
+        public DockerContainerService(IVolumeService volumeService, IEnvironmentService environmentService, DockerClient client)
             : base(client)
         {
             _volumeService = volumeService ?? throw new ArgumentNullException(nameof(volumeService));
+            _environmentService = environmentService ?? throw new ArgumentNullException(nameof(environmentService));
         }
 
         #region Container Lifecycle Logic
-        public async Task<bool> StartAsync(string containerId, CancellationToken ct = default) =>
-            await Client.Containers.StartContainerAsync(containerId, new ContainerStartParameters(), ct);
+        public async Task<bool> StartAsync(string containerId, CancellationToken ct = default)
+        {
+            var started = await Client.Containers.StartContainerAsync(containerId, new ContainerStartParameters(), ct);
+            if (!started) return false;
+            
+            await ExportEnvToContainerAsync(containerId, ct);
+            return true;
+        }
 
         public async Task<string> CreateContainerAsync(ContainerCreationOptions options, CancellationToken ct = default)
         {
@@ -493,6 +504,21 @@ namespace DockerBuildBoxSystem.Domain
                 }
             }
         }
+        #endregion
+
+        #region Export Environment Variables
+        public async Task ExportEnvToContainerAsync(string containerId, CancellationToken ct = default)
+        {
+            var enVars = await _environmentService.LoadEnvAsync();
+            if (enVars.Count == 0)
+                return;
+            foreach (var envVar in enVars)
+            {
+                await ExecAsync(containerId, ["/bin/bash", "-c", $"export {envVar.Key}='{envVar.Value}'"], ct);
+            }
+
+        }
+
         #endregion
 
         #region Helpers

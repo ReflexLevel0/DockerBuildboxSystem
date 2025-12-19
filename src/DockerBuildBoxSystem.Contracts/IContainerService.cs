@@ -238,5 +238,15 @@ namespace DockerBuildBoxSystem.Contracts
             string hostPath,
             string containerPath,
             CancellationToken ct = default);
+
+        /// <summary>
+        /// Exports an environmental variable into a running container.
+        /// </summary>
+        /// <param name="containerId">the id or name of the container</param>
+        /// <param name="ct">Cancellation token</param>
+        /// <returns>the task representing the asynchronous operation</returns>
+        Task ExportEnvToContainerAsync(
+            string containerId,
+            CancellationToken ct = default);
     }
 }
