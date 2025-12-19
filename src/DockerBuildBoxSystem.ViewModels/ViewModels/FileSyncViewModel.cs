@@ -43,6 +43,10 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [NotifyCanExecuteChangedFor(nameof(StopSyncCommand))]
         private bool _isSyncRunning;
 
+        [ObservableProperty]
+        [NotifyCanExecuteChangedFor(nameof(StartSyncCommand))]
+        [NotifyCanExecuteChangedFor(nameof(StopSyncCommand))]
+        private bool _isAutoSyncEnabled;
 
         [ObservableProperty]
         private string _hostSyncPath = string.Empty;
@@ -184,6 +188,14 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             _settingsService.SourcePathChanged -= OnSourcePathChanged;
             _fileSyncService.StopWatching();
             await base.DisposeAsync();
+        }
+
+        partial void OnIsAutoSyncEnabledChanged(bool value)
+        {
+            if (value)
+                StartSyncCommand.Execute(null);
+            else
+                StopSyncCommand.Execute(null);
         }
     }
 }
