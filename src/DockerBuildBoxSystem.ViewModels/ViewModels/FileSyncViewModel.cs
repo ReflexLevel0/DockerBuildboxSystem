@@ -44,8 +44,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private bool _isSyncRunning;
 
         [ObservableProperty]
-        [NotifyCanExecuteChangedFor(nameof(StartSyncCommand))]
-        [NotifyCanExecuteChangedFor(nameof(StopSyncCommand))]
         private bool _isAutoSyncEnabled;
 
         [ObservableProperty]
