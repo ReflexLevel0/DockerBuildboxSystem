@@ -12,7 +12,8 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 {
     public partial class CommandExecutionViewModel : ViewModelBase,
         IRecipient<SelectedContainerChangedMessage>,
-        IRecipient<IsSyncRunningChangedMessage>
+        IRecipient<IsSyncRunningChangedMessage>,
+        IRecipient<ContainerStartedMessage>
     {
         private readonly ICommandRunner _cmdRunner;
         private readonly IContainerService _service;
@@ -90,6 +91,15 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         public void Receive(IsSyncRunningChangedMessage message)
         {
             IsSyncRunning = message.Value;
+        }
+
+        /// <summary>
+        /// Handles the ContainerStartedMessage.
+        /// </summary>
+        public void Receive(ContainerStartedMessage message)
+        {
+            if(StartShellCommand.CanExecute(null))
+                StartShellCommand.Execute(null);
         }
 
         private bool CanSend() => !string.IsNullOrWhiteSpace(ContainerId) && IsContainerRunning;
@@ -237,5 +247,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             await StopExecAsync();
             await base.DisposeAsync();
         }
+
     }
 }
