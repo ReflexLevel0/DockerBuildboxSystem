@@ -1,4 +1,4 @@
-using CommunityToolkit.Mvvm.ComponentModel;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Docker.DotNet.Models;
 using DockerBuildBoxSystem.Contracts;
@@ -89,19 +89,29 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             UserControls = new UserControlsViewModel(userControlService, logger);
             Commands = new CommandExecutionViewModel(cmdRunner, containerService, userControlService, logger, UserControls);
 
-            //ppropagate selection changes
+            //propagate selection changes
+            bool lastSelectedWasRunning = false;
             ContainerList.PropertyChanged += (s, e) =>
             {
                 if (e.PropertyName == nameof(ContainerList.SelectedContainer))
                 {
                     var container = ContainerList.SelectedContainer;
-                    if(container == null)
+                    if (container == null)
                         return;
-                    var isRunning = container?.IsRunning == true;
+                    var isRunning = container.IsRunning;
 
                     Logs.SelectedContainer = container;
                     FileSync.SelectedContainer = container;
                     Commands.SelectedContainer = container;
+
+                    // If the selected container just transitioned to running (e.g., after start), launch bash shell
+                    if (isRunning && !lastSelectedWasRunning)
+                    {
+                        if (Commands.StartShellCommand.CanExecute(null))
+                            Commands.StartShellCommand.Execute(null);
+                    }
+
+                    lastSelectedWasRunning = isRunning;
                 }
             };
 
