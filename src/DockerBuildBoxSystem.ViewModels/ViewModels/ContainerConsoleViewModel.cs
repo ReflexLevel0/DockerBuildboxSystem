@@ -90,7 +90,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             Commands = new CommandExecutionViewModel(cmdRunner, containerService, userControlService, logger, UserControls);
 
             //propagate selection changes
-            bool lastSelectedWasRunning = false;
+            bool prevWasRunning = false;
             ContainerList.PropertyChanged += (s, e) =>
             {
                 if (e.PropertyName == nameof(ContainerList.SelectedContainer))
@@ -105,13 +105,13 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                     Commands.SelectedContainer = container;
 
                     // If the selected container just transitioned to running (e.g., after start), launch bash shell
-                    if (isRunning && !lastSelectedWasRunning)
+                    if (isRunning && !prevWasRunning)
                     {
                         if (Commands.StartShellCommand.CanExecute(null))
                             Commands.StartShellCommand.Execute(null);
                     }
 
-                    lastSelectedWasRunning = isRunning;
+                    prevWasRunning = isRunning;
                 }
             };
 
