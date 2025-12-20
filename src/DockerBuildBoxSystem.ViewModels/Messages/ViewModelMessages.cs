@@ -34,7 +34,11 @@ namespace DockerBuildBoxSystem.ViewModels.Messages
     /// <summary>
     /// Message sent when thee container has been stadted.
     /// </summary>
-    /// <param name="container"></param>
     public sealed class ContainerStartedMessage(ContainerInfo container) : ValueChangedMessage<ContainerInfo>(container);
+
+    /// <summary>
+    /// Message sent when thee container is running.
+    /// </summary>
+    public sealed class ContainerRunningMessage(ContainerInfo container) : ValueChangedMessage<ContainerInfo>(container);
 }
 

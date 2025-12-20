@@ -13,7 +13,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
     public partial class CommandExecutionViewModel : ViewModelBase,
         IRecipient<SelectedContainerChangedMessage>,
         IRecipient<IsSyncRunningChangedMessage>,
-        IRecipient<ContainerStartedMessage>
+        IRecipient<ContainerRunningMessage>
     {
         private readonly ICommandRunner _cmdRunner;
         private readonly IContainerService _service;
@@ -94,9 +94,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         }
 
         /// <summary>
-        /// Handles the ContainerStartedMessage.
+        /// Handles the ContainerRunningMessage.
         /// </summary>
-        public void Receive(ContainerStartedMessage message)
+        public void Receive(ContainerRunningMessage message)
         {
             if(StartShellCommand.CanExecute(null))
                 StartShellCommand.Execute(null);

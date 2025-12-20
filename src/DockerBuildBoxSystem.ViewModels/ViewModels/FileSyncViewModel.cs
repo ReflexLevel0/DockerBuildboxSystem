@@ -104,15 +104,16 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
         public void Receive(ContainerStartedMessage message)
         {
-            if(SelectedContainer != null && SelectedContainer.Id == message.Value.Id)
+            if (SelectedContainer == null || SelectedContainer.Id != message.Value.Id)
+                return;
+
+            if (string.IsNullOrEmpty(HostSyncPath))
             {
-                if(string.IsNullOrEmpty(HostSyncPath))
-                {
-                    _logger.LogWithNewline("[sync] Warning: Host sync path is not set! Can't run force sync on container start.", true, false);
-                    return;
-                }
-                StartForceSyncAsync().ConfigureAwait(false);
+                _logger.LogWithNewline("[sync] Warning: Host sync path is not set! Can't run force sync on container start.", true, false);
+                return;
             }
+
+            StartForceSyncAsync().ConfigureAwait(false);
         }
 
         private async Task InitializeSettingsAsync()
@@ -133,7 +134,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// <summary>
         /// Determines whether sync can be started.
         /// </summary>
-        private bool CanSync() => !string.IsNullOrWhiteSpace(ContainerId) && IsContainerRunning && !IsSyncRunning && !IsCommandRunning && !IsSwitching;
+        private bool CanSync() => !string.IsNullOrWhiteSpace(ContainerId) && IsContainerRunning && !IsSyncRunning && !IsSwitching;
 
         /// <summary>
         /// Starts the sync operation.
@@ -166,7 +167,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             }
         }
 
-        private bool CanForceSync() => !string.IsNullOrWhiteSpace(ContainerId) && (SelectedContainer?.IsRunning == true) && !IsCommandRunning;
+        private bool CanForceSync() => !string.IsNullOrWhiteSpace(ContainerId) && IsContainerRunning;
 
 
         /// <summary>

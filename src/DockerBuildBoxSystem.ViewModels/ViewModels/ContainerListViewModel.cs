@@ -284,6 +284,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 }
 
                 _previousContainerId = ContainerId;
+
+                //At this stage, the container should be running...
+                WeakReferenceMessenger.Default.Send(new ContainerRunningMessage(container));
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
