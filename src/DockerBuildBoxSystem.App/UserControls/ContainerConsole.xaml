@@ -71,7 +71,7 @@
                 <CheckBox Content="Auto-Sync"
                           IsChecked="{Binding FileSync.IsAutoSyncEnabled}"
                           ToolTip="Enable or disable automatic syncing when files change"
-                          IsEnabled="{Binding }"/>
+                          IsEnabled="{Binding FileSync.CanToggleAutoSync}"/>
                 
             </StackPanel>
         </Grid>
