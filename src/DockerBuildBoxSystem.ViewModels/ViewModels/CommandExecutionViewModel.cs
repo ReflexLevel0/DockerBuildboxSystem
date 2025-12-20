@@ -203,6 +203,18 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             });
         }
 
+        private bool CanStartShell() => !string.IsNullOrWhiteSpace(ContainerId) && IsContainerRunning && !_cmdRunner.IsRunning;
+
+        /// <summary>
+        /// Starts an interactive bash shell session inside the selected container.
+        /// </summary>
+        [RelayCommand(CanExecute = nameof(CanStartShell))]
+        public async Task StartShellAsync()
+        {
+            // Prefer interactive login shell
+            await ExecuteAndLog(new[] { "/bin/bash", "-i" });
+        }
+
         private bool CanStopExec() => _cmdRunner.IsRunning;
 
         [RelayCommand(CanExecute = nameof(CanStopExec))]
