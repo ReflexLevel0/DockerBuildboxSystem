@@ -48,14 +48,10 @@ namespace DockerBuildBoxSystem.Domain
         }
 
         #region Container Lifecycle Logic
-        public async Task<bool> StartAsync(string containerId, CancellationToken ct = default)
-        {
-            var started = await Client.Containers.StartContainerAsync(containerId, new ContainerStartParameters(), ct);
-            if (!started) return false;
-            
-            await ExportEnvToContainerAsync(containerId, ct);
-            return true;
-        }
+        public async Task<bool> StartAsync(string containerId, CancellationToken ct = default) =>
+            await Client.Containers.StartContainerAsync(containerId, new ContainerStartParameters(), ct);
+
+        
 
         public async Task<string> CreateContainerAsync(ContainerCreationOptions options, CancellationToken ct = default)
         {
@@ -68,12 +64,16 @@ namespace DockerBuildBoxSystem.Domain
                 Source = sharedVolume?.Name,
                 Target = options.ContainerRootPath
             });
+            // load env
+            var envList = await LoadContainerEnvAsync(ct);
 
             // Creating the container
             var response = await Client.Containers.CreateContainerAsync(new CreateContainerParameters
             {
                 Image = options.ImageName,
                 Name = options.ContainerName,
+
+                Env = envList,
                 Tty = true,
                 OpenStdin = true,
                 AttachStdin = true,
@@ -507,16 +507,13 @@ namespace DockerBuildBoxSystem.Domain
         #endregion
 
         #region Export Environment Variables
-        public async Task ExportEnvToContainerAsync(string containerId, CancellationToken ct = default)
+        private async Task<IList<string>> LoadContainerEnvAsync(
+            CancellationToken ct = default)
         {
-            var enVars = await _environmentService.LoadEnvAsync();
-            if (enVars.Count == 0)
-                return;
-            foreach (var envVar in enVars)
-            {
-                await ExecAsync(containerId, ["/bin/bash", "-c", $"export {envVar.Key}='{envVar.Value}'"], ct);
-            }
-
+            var envVars = await _environmentService.LoadEnvAsync();
+            return envVars
+                .Select(kv => $"{kv.Key}={kv.Value}")
+                .ToList();
         }
 
         #endregion
