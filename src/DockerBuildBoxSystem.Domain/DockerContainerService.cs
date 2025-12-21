@@ -64,7 +64,7 @@ namespace DockerBuildBoxSystem.Domain
                 Source = sharedVolume?.Name,
                 Target = options.ContainerRootPath
             });
-            // load env
+            // load envs to a variable
             var envList = await LoadContainerEnvAsync(ct);
 
             // Creating the container
@@ -507,6 +507,12 @@ namespace DockerBuildBoxSystem.Domain
         #endregion
 
         #region Export Environment Variables
+        /// <summary>
+        /// Asynchronously loads the environment variables for the container and returns them as a list of key-value
+        /// assignment strings.
+        /// </summary>
+        /// <param name="ct">A cancellation token that can be used to cancel the asynchronous operation.</param>
+        /// <returns>A list of strings, each in the format "KEY=VALUE", representing the environment variables for the container.</returns>
         private async Task<IList<string>> LoadContainerEnvAsync(
             CancellationToken ct = default)
         {
