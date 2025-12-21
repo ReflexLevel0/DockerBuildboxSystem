@@ -92,7 +92,25 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             _externalProcessService = externalProcessService ?? throw new ArgumentNullException(nameof(externalProcessService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _hostConfig = hostConfig;
+
+            // Bubble up domain start notifications scoped to current selection
+            _containerService.ContainerStarted += (s, id) =>
+            {
+                try
+                {
+                    if (!string.IsNullOrWhiteSpace(SelectedContainer?.Id) && string.Equals(SelectedContainer.Id, id as string, StringComparison.OrdinalIgnoreCase))
+                    {
+                        SelectedContainerStarted?.Invoke(this, SelectedContainer);
+                    }
+                }
+                catch { /* ignore listener errors */ }
+            };
         }
+
+        /// <summary>
+        /// Raised when the currently selected container is reported as started by the domain service.
+        /// </summary>
+        public event EventHandler<ContainerInfo>? SelectedContainerStarted;
 
         /// <summary>
         /// Invoked when the value of the "Show All Images" setting changes.

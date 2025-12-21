@@ -90,30 +90,84 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             Commands = new CommandExecutionViewModel(cmdRunner, containerService, userControlService, logger, UserControls);
 
             //propagate selection changes
-            bool prevWasRunning = false;
-            ContainerList.PropertyChanged += (s, e) =>
-            {
-                if (e.PropertyName == nameof(ContainerList.SelectedContainer))
+                ContainerList.PropertyChanged += async (s, e) =>
                 {
-                    var container = ContainerList.SelectedContainer;
-                    if (container == null)
-                        return;
-                    var isRunning = container.IsRunning;
+                    if (e.PropertyName == nameof(ContainerList.SelectedContainer))
+                    {
+                        var container = ContainerList.SelectedContainer;
+                        if (container == null)
+                            return;
 
-                    Logs.SelectedContainer = container;
-                    FileSync.SelectedContainer = container;
-                    Commands.SelectedContainer = container;
+                        Logs.SelectedContainer = container;
+                        FileSync.SelectedContainer = container;
+                        Commands.SelectedContainer = container;
 
-                    // If the selected container just transitioned to running (e.g., after start), launch bash shell
-                    if (isRunning && !prevWasRunning)
+                        // If switching to an already running container, auto-start bash after start logs
+                        if (container.IsRunning)
+                        {
+                            await AutoStartShellAfterStartLogsAsync();
+                        }
+                    }
+                };
+
+                // Start bash shell when domain reports selected container has started
+                ContainerList.SelectedContainerStarted += async (s, info) =>
+                {
+                    await AutoStartShellAfterStartLogsAsync();
+                };
+
+            async Task AutoStartShellWithPollingAsync()
+            {
+                var attempts = 0;
+                const int maxAttempts = 25; // ~5 seconds total
+                const int delayMs = 200;
+
+                while (attempts < maxAttempts)
+                {
+                    try
                     {
                         if (Commands.StartShellCommand.CanExecute(null))
+                        {
                             Commands.StartShellCommand.Execute(null);
+                            break;
+                        }
                     }
+                    catch { }
 
-                    prevWasRunning = isRunning;
+                    attempts++;
+                    await Task.Delay(delayMs);
                 }
-            };
+            }
+
+            async Task AutoStartShellAfterStartLogsAsync()
+            {
+                // Ensure logs are started if auto-start is enabled
+                if (Logs.AutoStartLogs && !Logs.IsLogsRunning)
+                {
+                    try
+                    {
+                        if (Logs.StartLogsCommand.CanExecute(null))
+                            Logs.StartLogsCommand.Execute(null);
+                    }
+                    catch { }
+                }
+
+                // Wait until logs are running (up to ~3s)
+                var attempts = 0;
+                const int maxAttempts = 15;
+                const int delayMs = 200;
+                while (!Logs.IsLogsRunning && attempts < maxAttempts)
+                {
+                    await Task.Delay(delayMs);
+                    attempts++;
+                }
+
+                // Brief grace period to let startup logs flush
+                await Task.Delay(1000);
+
+                // Now start shell when ready
+                await AutoStartShellWithPollingAsync();
+            }
 
             Commands.PropertyChanged += (s, e) =>
             {
