@@ -1,4 +1,4 @@
-using CommunityToolkit.Mvvm.ComponentModel;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Docker.DotNet.Models;
 using DockerBuildBoxSystem.Contracts;
@@ -80,28 +80,36 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             
             logger = new ViewModelLogger(UIHandler);
 
-            HostConfig cfg = (HostConfig)_serviceProvider.GetService(typeof(HostConfig))!;
-
             //initialize sub-viewModels
-            ContainerList = new ContainerListViewModel(imageService, containerService, externalProcessService, logger, cfg);
+            ContainerList = new ContainerListViewModel(serviceProvider, imageService, containerService, externalProcessService, logger);
             Logs = new LogStreamViewModel(logRunner, containerService, logger);
             FileSync = new FileSyncViewModel(fileSyncService, settingsService, logger);
             UserControls = new UserControlsViewModel(userControlService, logger);
             Commands = new CommandExecutionViewModel(cmdRunner, containerService, userControlService, logger, UserControls);
 
-            //ppropagate selection changes
+            //propagate selection changes
+            bool prevWasRunning = false;
             ContainerList.PropertyChanged += (s, e) =>
             {
                 if (e.PropertyName == nameof(ContainerList.SelectedContainer))
                 {
                     var container = ContainerList.SelectedContainer;
-                    if(container == null)
+                    if (container == null)
                         return;
-                    var isRunning = container?.IsRunning == true;
+                    var isRunning = container.IsRunning;
 
                     Logs.SelectedContainer = container;
                     FileSync.SelectedContainer = container;
                     Commands.SelectedContainer = container;
+
+                    // If the selected container just transitioned to running (e.g., after start), launch bash shell
+                    if (isRunning && !prevWasRunning)
+                    {
+                        if (Commands.StartShellCommand.CanExecute(null))
+                            Commands.StartShellCommand.Execute(null);
+                    }
+
+                    prevWasRunning = isRunning;
                 }
             };
 
