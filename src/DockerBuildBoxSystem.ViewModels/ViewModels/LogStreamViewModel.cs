@@ -81,11 +81,10 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                                 var idleFor = DateTime.UtcNow - _lastLogTimeUtc;
                                 if (!_readySent && idleFor >= _inactivityWindow && SelectedContainer is not null && SelectedContainer.IsRunning)
                                 {
-                                    try
-                                    {
-                                        WeakReferenceMessenger.Default.Send(new ContainerReadyMessage(SelectedContainer));
-                                        _logger.LogWithNewline($"[msg] Sent ContainerReadyMessage: {SelectedContainer.Id}", false, false);
-                                    }
+                                        try
+                                        {
+                                            WeakReferenceMessenger.Default.Send(new ContainerReadyMessage(SelectedContainer));
+                                        }
                                     catch { }
                                     finally
                                     {
@@ -105,7 +104,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 }
                 catch (OperationCanceledException)
                 {
-                    _logger.LogWithNewline("[logs] canceled", false, false);
+                    // Suppress cancellation message to avoid console noise
                 }
                 catch (Exception ex)
                 {

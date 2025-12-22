@@ -161,10 +161,8 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             try
             {
                 var currentId = SelectedContainer?.Id;
-                _logger.LogWithNewline($"[console] Received ContainerRunningMessage for {message.Value.Id}; current={currentId ?? "(none)"}", false, false);
                 if (string.IsNullOrWhiteSpace(currentId) || string.Equals(currentId, message.Value.Id, StringComparison.OrdinalIgnoreCase))
                 {
-                    _logger.LogWithNewline($"[console] Container started: {message.Value.Id}. Launching bash.", false, false);
                     // Ensure SelectedContainer reflects running state
                     SelectedContainer = message.Value;
 
@@ -215,7 +213,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 }
                 else
                 {
-                    _logger.LogWithNewline($"[console] Ignored start message for {message.Value.Id}; current selection is {currentId}", false, false);
+                    // silent ignore when IDs don't match selection
                 }
             }
             catch { }
@@ -227,7 +225,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             try
             {
                 var currentId = SelectedContainer?.Id;
-                _logger.LogWithNewline($"[console] Received ContainerReadyMessage for {message.Value.Id}; current={currentId ?? "(none)"}", false, false);
                 if (string.IsNullOrWhiteSpace(currentId) || string.Equals(currentId, message.Value.Id, StringComparison.OrdinalIgnoreCase))
                 {
                     // Ensure SelectedContainer reflects running state
@@ -270,7 +267,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 }
                 else
                 {
-                    _logger.LogWithNewline($"[console] Ignored ready message for {message.Value.Id}; current selection is {currentId}", false, false);
+                    // silent ignore when IDs don't match selection
                 }
             }
             catch { }

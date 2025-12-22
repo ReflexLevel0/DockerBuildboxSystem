@@ -93,7 +93,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             _containerService = containerService ?? throw new ArgumentNullException(nameof(containerService));
             _externalProcessService = externalProcessService ?? throw new ArgumentNullException(nameof(externalProcessService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            _hostConfig = hostConfig;
 
             // Publish MVVM message when any container starts (recipients filter by selection)
             _containerService.ContainerStarted += async (s, id) =>
@@ -101,10 +100,8 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 try
                 {
                     var startedId = id?.ToString() ?? string.Empty;
-                    _logger.LogWithNewline($"[msg] ContainerStarted event: {startedId}", false, false);
                     var info = await _containerService.InspectAsync(startedId);
                     WeakReferenceMessenger.Default.Send(new ContainerRunningMessage(info));
-                    _logger.LogWithNewline($"[msg] Sent ContainerRunningMessage: {info.Id}", false, false);
                 }
                 catch { /* ignore listener errors */ }
             };
@@ -362,7 +359,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                     try
                     {
                         WeakReferenceMessenger.Default.Send(new ContainerRunningMessage(SelectedContainer));
-                        _logger.LogWithNewline($"[msg] Sent ContainerRunningMessage post-start: {SelectedContainer?.Id}", false, false);
                     }
                     catch { /* ignore message errors */ }
                 }
