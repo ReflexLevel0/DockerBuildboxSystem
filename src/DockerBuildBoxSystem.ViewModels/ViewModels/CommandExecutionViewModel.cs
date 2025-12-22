@@ -153,7 +153,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             if (_cmdRunner.IsRunning && StopExecCommand.CanExecute(null))
                 StopExecCommand.Execute(null);
 
-            // No token-based registration needed with IRecipient pattern
         }
 
         // Handle ContainerRunningMessage via IRecipient implementation

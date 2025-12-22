@@ -107,10 +107,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                     }
                 };
 
-                // Remove SelectedContainerStarted dependency; using MVVM messaging instead
-
-            // Delay-based auto-start helpers removed per new MVVM message approach
-
             Commands.PropertyChanged += (s, e) =>
             {
                 if (e.PropertyName == nameof(Commands.IsCommandRunning))

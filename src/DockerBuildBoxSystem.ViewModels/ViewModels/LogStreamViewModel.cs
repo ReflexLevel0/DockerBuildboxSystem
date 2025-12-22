@@ -105,7 +105,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 }
                 catch (OperationCanceledException)
                 {
-                    // Suppress cancellation message to avoid console noise
+                    _logger.LogWithNewline("[logs] canceled", false, false);
                 }
                 catch (Exception ex)
                 {
