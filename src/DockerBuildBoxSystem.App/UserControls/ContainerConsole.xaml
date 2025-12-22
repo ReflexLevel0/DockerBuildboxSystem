@@ -171,7 +171,7 @@
                     Command="{Binding Commands.SendCommand}" />
 
             <Button Grid.Column="2"
-                    Content="Stop"
+                    Content="Ctrl+C"
                     Padding="12,4"
                     ToolTip="Stop the running command in the container"
                     Command="{Binding Commands.InterruptExecCommand}" />
