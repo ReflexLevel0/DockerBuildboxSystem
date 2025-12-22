@@ -2,6 +2,7 @@
 using CommunityToolkit.Mvvm.Input;
 using Docker.DotNet.Models;
 using DockerBuildBoxSystem.Contracts;
+using CommunityToolkit.Mvvm.Messaging;
 using DockerBuildBoxSystem.ViewModels.Common;
 using System;
 using System.Collections.Generic;
@@ -93,24 +94,22 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _hostConfig = hostConfig;
 
-            // Bubble up domain start notifications scoped to current selection
-            _containerService.ContainerStarted += (s, id) =>
+            // Publish MVVM message when any container starts (recipients filter by selection)
+            _containerService.ContainerStarted += async (s, id) =>
             {
                 try
                 {
-                    if (!string.IsNullOrWhiteSpace(SelectedContainer?.Id) && string.Equals(SelectedContainer.Id, id as string, StringComparison.OrdinalIgnoreCase))
-                    {
-                        SelectedContainerStarted?.Invoke(this, SelectedContainer);
-                    }
+                    var startedId = id?.ToString() ?? string.Empty;
+                    _logger.LogWithNewline($"[msg] ContainerStarted event: {startedId}", false, false);
+                    var info = await _containerService.InspectAsync(startedId);
+                    WeakReferenceMessenger.Default.Send(new ContainerRunningMessage(info));
+                    _logger.LogWithNewline($"[msg] Sent ContainerRunningMessage: {info.Id}", false, false);
                 }
                 catch { /* ignore listener errors */ }
             };
         }
 
-        /// <summary>
-        /// Raised when the currently selected container is reported as started by the domain service.
-        /// </summary>
-        public event EventHandler<ContainerInfo>? SelectedContainerStarted;
+        // MVVM messaging replaces the SelectedContainerStarted event.
 
         /// <summary>
         /// Invoked when the value of the "Show All Images" setting changes.
@@ -357,6 +356,14 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                     
                     // Re-inspect to get the updated running state
                     SelectedContainer = await _containerService.InspectAsync(ContainerId, ct);
+
+                    // Broadcast running state to ensure recipients trigger bash reliably
+                    try
+                    {
+                        WeakReferenceMessenger.Default.Send(new ContainerRunningMessage(SelectedContainer));
+                        _logger.LogWithNewline($"[msg] Sent ContainerRunningMessage post-start: {SelectedContainer?.Id}", false, false);
+                    }
+                    catch { /* ignore message errors */ }
                 }
                 else
                 {

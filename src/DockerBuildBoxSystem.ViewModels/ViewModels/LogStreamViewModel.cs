@@ -2,6 +2,7 @@
 using CommunityToolkit.Mvvm.Input;
 using DockerBuildBoxSystem.Contracts;
 using DockerBuildBoxSystem.ViewModels.Common;
+using CommunityToolkit.Mvvm.Messaging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -15,6 +16,10 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private readonly ILogRunner _logRunner;
         private readonly IContainerService _service;
         private readonly IViewModelLogger _logger;
+        private DateTime _lastLogTimeUtc;
+        private bool _readySent;
+        private CancellationTokenSource? _readyCts;
+        private readonly TimeSpan _inactivityWindow = TimeSpan.FromSeconds(2);
         public string ContainerId
         {
             get => SelectedContainer?.Id ?? string.Empty;
@@ -59,14 +64,48 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             {
                 try
                 {
+                    _readySent = false;
+                    _lastLogTimeUtc = DateTime.UtcNow;
+                    _readyCts?.Cancel();
+                    _readyCts = new CancellationTokenSource();
+                    var readyToken = _readyCts.Token;
+
+                    // Background monitor: when logs are inactive for a window, broadcast ready
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            while (!readyToken.IsCancellationRequested)
+                            {
+                                await Task.Delay(500, readyToken);
+                                var idleFor = DateTime.UtcNow - _lastLogTimeUtc;
+                                if (!_readySent && idleFor >= _inactivityWindow && SelectedContainer is not null && SelectedContainer.IsRunning)
+                                {
+                                    try
+                                    {
+                                        WeakReferenceMessenger.Default.Send(new ContainerReadyMessage(SelectedContainer));
+                                        _logger.LogWithNewline($"[msg] Sent ContainerReadyMessage: {SelectedContainer.Id}", false, false);
+                                    }
+                                    catch { }
+                                    finally
+                                    {
+                                        _readySent = true;
+                                    }
+                                }
+                            }
+                        }
+                        catch (OperationCanceledException) { }
+                    });
+
                     await foreach (var (isErr, line) in _logRunner.RunAsync(_service, ContainerId).ConfigureAwait(false))
                     {
+                        _lastLogTimeUtc = DateTime.UtcNow;
                         _logger.LogWithNewline(line, isErr, false);
                     }
                 }
                 catch (OperationCanceledException)
                 {
-                    _logger.LogWithNewline("[logs] canceled", false, false);
+                    // Suppress cancellation message to avoid console noise
                 }
                 catch (Exception ex)
                 {
@@ -107,6 +146,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [RelayCommand(CanExecute = nameof(CanStopLogs))]
         public async Task StopLogsAsync()
         {
+            try { _readyCts?.Cancel(); } catch { }
             await _logRunner.StopAsync();
         }
         public override async ValueTask DisposeAsync()

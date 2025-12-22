@@ -1,6 +1,8 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DockerBuildBoxSystem.Contracts;
+using CommunityToolkit.Mvvm.Messaging;
+using CommunityToolkit.Mvvm.Messaging.Messages;
 using DockerBuildBoxSystem.ViewModels.Common;
 using System;
 using System.Collections.Generic;
@@ -8,7 +10,7 @@ using System.Threading.Tasks;
 
 namespace DockerBuildBoxSystem.ViewModels.ViewModels
 {
-    public partial class CommandExecutionViewModel : ViewModelBase
+    public partial class CommandExecutionViewModel : ViewModelBase, IRecipient<ContainerRunningMessage>, IRecipient<ContainerReadyMessage>
     {
         private readonly ICommandRunner _cmdRunner;
         private readonly IContainerService _service;
@@ -37,6 +39,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [ObservableProperty]
         private string? _input;
 
+        [ObservableProperty]
+        private bool _preferReadyMessages = true;
+
         private bool IsContainerRunning => SelectedContainer?.IsRunning == true;
         public bool IsCommandRunning => _cmdRunner.IsRunning;
 
@@ -64,6 +69,10 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                     InterruptExecCommand.NotifyCanExecuteChanged();
                 });
             };
+
+            // Register recipients for MVVM messages
+            WeakReferenceMessenger.Default.Register<ContainerRunningMessage>(this);
+            WeakReferenceMessenger.Default.Register<ContainerReadyMessage>(this);
         }
 
         private bool CanSend() => !string.IsNullOrWhiteSpace(ContainerId) && IsContainerRunning;
@@ -143,6 +152,129 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             //stop exec session from the previous container.
             if (_cmdRunner.IsRunning && StopExecCommand.CanExecute(null))
                 StopExecCommand.Execute(null);
+
+            // No token-based registration needed with IRecipient pattern
+        }
+
+        // Handle ContainerRunningMessage via IRecipient implementation
+        public void Receive(ContainerRunningMessage message)
+        {
+            try
+            {
+                var currentId = SelectedContainer?.Id;
+                _logger.LogWithNewline($"[console] Received ContainerRunningMessage for {message.Value.Id}; current={currentId ?? "(none)"}", false, false);
+                if (string.IsNullOrWhiteSpace(currentId) || string.Equals(currentId, message.Value.Id, StringComparison.OrdinalIgnoreCase))
+                {
+                    _logger.LogWithNewline($"[console] Container started: {message.Value.Id}. Launching bash.", false, false);
+                    // Ensure SelectedContainer reflects running state
+                    SelectedContainer = message.Value;
+
+                    // Prefer 'ready' signals when enabled: do not auto-start on 'running'
+                    if (PreferReadyMessages)
+                        return;
+
+                    // If we can start immediately, do it
+                    if (StartShellCommand.CanExecute(null))
+                    {
+                        StartShellCommand.Execute(null);
+                        return;
+                    }
+
+                    // If a previous exec session is still running, stop it and start when idle
+                    if (_cmdRunner.IsRunning)
+                    {
+                        // request stop of current session, if possible
+                        if (StopExecCommand.CanExecute(null))
+                        {
+                            StopExecCommand.Execute(null);
+                        }
+
+                        void OnRunnerChanged(object? _, bool _running)
+                        {
+                            if (!_running)
+                            {
+                                try
+                                {
+                                    if (StartShellCommand.CanExecute(null))
+                                        StartShellCommand.Execute(null);
+                                }
+                                catch { }
+                                finally
+                                {
+                                    _cmdRunner.RunningChanged -= OnRunnerChanged;
+                                }
+                            }
+                        }
+
+                        _cmdRunner.RunningChanged += OnRunnerChanged;
+                        return;
+                    }
+
+                    // Fallback re-check: if gating was UI state, try again
+                    if (StartShellCommand.CanExecute(null))
+                        StartShellCommand.Execute(null);
+                }
+                else
+                {
+                    _logger.LogWithNewline($"[console] Ignored start message for {message.Value.Id}; current selection is {currentId}", false, false);
+                }
+            }
+            catch { }
+        }
+
+        // Handle ContainerReadyMessage to start shell after startup logs
+        public void Receive(ContainerReadyMessage message)
+        {
+            try
+            {
+                var currentId = SelectedContainer?.Id;
+                _logger.LogWithNewline($"[console] Received ContainerReadyMessage for {message.Value.Id}; current={currentId ?? "(none)"}", false, false);
+                if (string.IsNullOrWhiteSpace(currentId) || string.Equals(currentId, message.Value.Id, StringComparison.OrdinalIgnoreCase))
+                {
+                    // Ensure SelectedContainer reflects running state
+                    SelectedContainer = message.Value;
+
+                    if (StartShellCommand.CanExecute(null))
+                    {
+                        StartShellCommand.Execute(null);
+                        return;
+                    }
+
+                    if (_cmdRunner.IsRunning)
+                    {
+                        if (StopExecCommand.CanExecute(null))
+                            StopExecCommand.Execute(null);
+
+                        void OnRunnerChanged(object? _, bool _running)
+                        {
+                            if (!_running)
+                            {
+                                try
+                                {
+                                    if (StartShellCommand.CanExecute(null))
+                                        StartShellCommand.Execute(null);
+                                }
+                                catch { }
+                                finally
+                                {
+                                    _cmdRunner.RunningChanged -= OnRunnerChanged;
+                                }
+                            }
+                        }
+
+                        _cmdRunner.RunningChanged += OnRunnerChanged;
+                        return;
+                    }
+
+                    if (StartShellCommand.CanExecute(null))
+                        StartShellCommand.Execute(null);
+                }
+                else
+                {
+                    _logger.LogWithNewline($"[console] Ignored ready message for {message.Value.Id}; current selection is {currentId}", false, false);
+                }
+            }
+            catch { }
         }
 
         /// <summary>
@@ -208,6 +340,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         public override async ValueTask DisposeAsync()
         {
             await StopExecAsync();
+            // Unregister message subscriptions (tokened and general)
+            WeakReferenceMessenger.Default.Unregister<ContainerRunningMessage>(this);
+            WeakReferenceMessenger.Default.Unregister<ContainerReadyMessage>(this);
             await base.DisposeAsync();
         }
     }

@@ -88,6 +88,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             FileSync = new FileSyncViewModel(fileSyncService, settingsService, logger);
             UserControls = new UserControlsViewModel(userControlService, logger);
             Commands = new CommandExecutionViewModel(cmdRunner, containerService, userControlService, logger, UserControls);
+            Commands.PreferReadyMessages = true;
 
             //propagate selection changes
                 ContainerList.PropertyChanged += async (s, e) =>
@@ -102,78 +103,42 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                         FileSync.SelectedContainer = container;
                         Commands.SelectedContainer = container;
 
-                        // If switching to an already running container, auto-start bash after start logs
-                        if (container.IsRunning)
-                        {
-                            await AutoStartShellAfterStartLogsAsync();
-                        }
+                        // No delay-based auto-start here; messaging will trigger shell on start
                     }
                 };
 
-                // Start bash shell when domain reports selected container has started
-                ContainerList.SelectedContainerStarted += async (s, info) =>
-                {
-                    await AutoStartShellAfterStartLogsAsync();
-                };
+                // Remove SelectedContainerStarted dependency; using MVVM messaging instead
 
-            async Task AutoStartShellWithPollingAsync()
-            {
-                var attempts = 0;
-                const int maxAttempts = 25; // ~5 seconds total
-                const int delayMs = 200;
-
-                while (attempts < maxAttempts)
-                {
-                    try
-                    {
-                        if (Commands.StartShellCommand.CanExecute(null))
-                        {
-                            Commands.StartShellCommand.Execute(null);
-                            break;
-                        }
-                    }
-                    catch { }
-
-                    attempts++;
-                    await Task.Delay(delayMs);
-                }
-            }
-
-            async Task AutoStartShellAfterStartLogsAsync()
-            {
-                // Ensure logs are started if auto-start is enabled
-                if (Logs.AutoStartLogs && !Logs.IsLogsRunning)
-                {
-                    try
-                    {
-                        if (Logs.StartLogsCommand.CanExecute(null))
-                            Logs.StartLogsCommand.Execute(null);
-                    }
-                    catch { }
-                }
-
-                // Wait until logs are running (up to ~3s)
-                var attempts = 0;
-                const int maxAttempts = 15;
-                const int delayMs = 200;
-                while (!Logs.IsLogsRunning && attempts < maxAttempts)
-                {
-                    await Task.Delay(delayMs);
-                    attempts++;
-                }
-
-                // Brief grace period to let startup logs flush
-                await Task.Delay(1000);
-
-                // Now start shell when ready
-                await AutoStartShellWithPollingAsync();
-            }
+            // Delay-based auto-start helpers removed per new MVVM message approach
 
             Commands.PropertyChanged += (s, e) =>
             {
                 if (e.PropertyName == nameof(Commands.IsCommandRunning))
                 {
                     FileSync.IsCommandRunning = Commands.IsCommandRunning;
+
+                    // Pause logs while interactive exec is running; resume afterwards
+                    if (Commands.IsCommandRunning)
+                    {
+                        // disable auto-start to prevent log takeover of console
+                        Logs.AutoStartLogs = false;
+
+                        // stop any currently running log stream
+                        if (Logs.IsLogsRunning && Logs.StopLogsCommand.CanExecute(null))
+                        {
+                            Logs.StopLogsCommand.Execute(null);
+                        }
+                    }
+                    else
+                    {
+                        // re-enable auto-start and start logs if container is running
+                        Logs.AutoStartLogs = true;
+                        var sc = ContainerList.SelectedContainer;
+                        if (sc is not null && sc.IsRunning && !Logs.IsLogsRunning && Logs.StartLogsCommand.CanExecute(null))
+                        {
+                            Logs.StartLogsCommand.Execute(null);
+                        }
+                    }
                 }
             };
 
