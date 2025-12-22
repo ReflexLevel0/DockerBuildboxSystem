@@ -82,10 +82,8 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             
             logger = new ViewModelLogger(UIHandler);
 
-            HostConfig cfg = (HostConfig)_serviceProvider.GetService(typeof(HostConfig))!;
-
             //initialize sub-viewModels
-            ContainerList = new ContainerListViewModel(imageService, containerService, externalProcessService, logger, cfg);
+            ContainerList = new ContainerListViewModel(serviceProvider, imageService, containerService, externalProcessService, logger);
             Logs = new LogStreamViewModel(logRunner, containerService, logger);
             FileSync = new FileSyncViewModel(fileSyncService, settingsService, logger);
             UserControls = new UserControlsViewModel(userControlService, logger);
