@@ -18,6 +18,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 {
     public partial class ContainerListViewModel : ViewModelBase
     {
+        private readonly IServiceProvider _serviceProvider;
         private readonly IImageService _imageService;
         private readonly IContainerService _containerService;
         private readonly IExternalProcessService _externalProcessService;
@@ -73,7 +74,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private CancellationTokenSource? _switchCts;
 
         private int _switchingCount;
-        private HostConfig _hostConfig;
 
         private readonly HashSet<string> _containersStartedByApp = new(StringComparer.OrdinalIgnoreCase);
 
@@ -82,12 +82,13 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         public bool AutoStartLogs { get; set; } = true;
 
         public ContainerListViewModel(
+            IServiceProvider serviceProvider,
             IImageService imageService,
             IContainerService containerService,
             IExternalProcessService externalProcessService,
-            IViewModelLogger logger,
-            HostConfig hostConfig)
+            IViewModelLogger logger)
         {
+            _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
             _imageService = imageService ?? throw new ArgumentNullException(nameof(imageService));
             _containerService = containerService ?? throw new ArgumentNullException(nameof(containerService));
             _externalProcessService = externalProcessService ?? throw new ArgumentNullException(nameof(externalProcessService));
@@ -259,7 +260,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                         new ContainerCreationOptions
                         {
                             ImageName = imageName,
-                            Config = _hostConfig
+                            Config = (HostConfig)_serviceProvider.GetService(typeof(HostConfig))!
                         },
                         ct: ct);
                     container = await _containerService.InspectAsync(newContainerId, ct);
