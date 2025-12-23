@@ -86,7 +86,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             FileSync = new FileSyncViewModel(fileSyncService, settingsService, logger);
             UserControls = new UserControlsViewModel(userControlService, logger);
             Commands = new CommandExecutionViewModel(cmdRunner, containerService, userControlService, logger, UserControls);
-            Commands.PreferReadyMessages = true;
+            Commands.PreferReadyMessages = false;
 
             //propagate selection changes
                 ContainerList.PropertyChanged += async (s, e) =>
