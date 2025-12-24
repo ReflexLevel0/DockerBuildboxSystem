@@ -183,27 +183,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
                 var newImage = value;
 
-                //fallback to current if previous not tracked yet
-                var oldContainerId = string.IsNullOrWhiteSpace(_previousContainerId) ? ContainerId : _previousContainerId;
-
-                _logger.DiscardPendingLogs();
-
-                if (!string.IsNullOrWhiteSpace(oldContainerId))
-                {
-                    try
-                    {
-                        var oldContainer = await _containerService.InspectAsync(oldContainerId, ct);
-                        if (oldContainer.IsRunning)
-                        {
-                            await StopContainerByIdAsync(oldContainer);
-                        }
-                    }
-                    catch
-                    {
-                        /* ignoring... */
-                    }
-                }
-
                 ct.ThrowIfCancellationRequested();
 
                 if (newImage is null)
@@ -255,41 +234,8 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
                 ct.ThrowIfCancellationRequested();
 
-                // Stop all other running containers except the selected/target one
-                try
-          
-                {
-                    var allContainers = await _containerService.ListContainersAsync(all: true, ct: ct);
-                    foreach (var c in allContainers)
-                    {
-                        // Skip the target container
-                        if (string.Equals(c.Id, container.Id, StringComparison.OrdinalIgnoreCase))
-                            continue;
-
-                        try
-                        {
-                            var info = await _containerService.InspectAsync(c.Id, ct);
-                            if (info.IsRunning)
-                            {
-                                await _containerService.StopAsync(c.Id, timeout: TimeSpan.FromSeconds(10), ct: ct);
-                            }
-                        }
-                        catch
-                        {
-                            // best-effort: ignore failures stopping non-target containers
-                        }
-                    }
-                }
-                catch
-                {
-                    // ignore list failures; proceed to start target container
-                }
-
                 //start the container
-                if (!container.IsRunning)
-                {
-                    await StartContainerInternalAsync(ct);
-                }
+                await StartContainerInternalAsync(ct);
 
                 _previousContainerId = ContainerId;
             }

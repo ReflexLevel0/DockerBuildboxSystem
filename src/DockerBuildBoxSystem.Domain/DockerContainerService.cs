@@ -4,6 +4,7 @@ using DockerBuildBoxSystem.Contracts;
 using System;
 using System.Buffers;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Formats.Tar;
 using System.Linq;
 using System.Text;
@@ -43,8 +44,38 @@ namespace DockerBuildBoxSystem.Domain
         }
 
         #region Container Lifecycle Logic
-        public async Task<bool> StartAsync(string containerId, CancellationToken ct = default) =>
-            await Client.Containers.StartContainerAsync(containerId, new ContainerStartParameters(), ct);
+        public async Task<bool> StartAsync(string containerId, CancellationToken ct = default)
+        {
+            // Stop all other running containers except the selected/target one
+            try
+            {
+                var allContainers = await ListContainersAsync(all: true, ct: ct);
+                foreach (var c in allContainers)
+                {
+                    // Skip the target container
+                    if (string.Equals(c.Id, containerId, StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    try
+                    {
+                        var info = await InspectAsync(c.Id, ct);
+                        if (info.IsRunning)
+                        {
+                            await StopAsync(c.Id, timeout: TimeSpan.FromSeconds(10), ct: ct);
+                        }
+                    }
+                    catch
+                    {
+                        // best-effort: ignore failures stopping non-target containers
+                    }
+                }
+            }
+            catch
+            {
+                // ignore list failures; proceed to start target container
+            }
+            return await Client.Containers.StartContainerAsync(containerId, new ContainerStartParameters(), ct);
+        }
 
         public async Task<string> CreateContainerAsync(ContainerCreationOptions options, CancellationToken ct = default)
         {
