@@ -25,6 +25,8 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
     public sealed partial class ContainerConsoleViewModel : ViewModelBase
     {
         private readonly IServiceProvider _serviceProvider;
+        private readonly IContainerService _containerService;
+        private readonly IDialogService _dialogService;
         private readonly IClipboardService? _clipboard;
         private readonly IViewModelLogger logger;
         private SynchronizationContext? _synchronizationContext;
@@ -64,6 +66,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             IServiceProvider serviceProvider,
             IImageService imageService,
             IContainerService containerService,
+            IDialogService dialogService,
             IFileSyncService fileSyncService,
             IConfiguration configuration,
             ISettingsService settingsService,
@@ -74,6 +77,8 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             IClipboardService? clipboard = null) : base()
         {
             _serviceProvider = serviceProvider;
+            _containerService = containerService;
+            _dialogService = dialogService;
             _clipboard = clipboard;
 
             UIHandler = new UILineBuffer(Lines);
@@ -176,6 +181,17 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         {
             // Start the global UI update task
             UIHandler.Start();
+
+            // Check Docker engine availability
+            var engineAvailable = await _containerService.IsEngineAvailableAsync();
+            if (!engineAvailable)
+            {
+                logger.LogWithNewline("[warning] Docker engine is not available or not running.", true, false);
+                // Show a modal warning to the user
+                _dialogService.ShowWarning("Docker engine is not available or not running. Please start Docker Desktop and try again.", "Docker Not Available");
+                // Skip image refresh and user control load until engine is available
+                return;
+            }
 
             // Load available images on initialization
             await ContainerList.RefreshImagesCommand.ExecuteAsync(null);
