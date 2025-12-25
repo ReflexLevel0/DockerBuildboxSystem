@@ -112,6 +112,8 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
         public void Receive(ContainerStartedMessage message)
         {
+            /*
+             *Uncommenting just temporarily, to show it works
             if (SelectedContainer == null || SelectedContainer.Id != message.Value.Id)
                 return;
 
@@ -122,6 +124,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             }
 
             StartForceSyncAsync().ConfigureAwait(false);
+            */
         }
 
         private async Task InitializeSettingsAsync()
