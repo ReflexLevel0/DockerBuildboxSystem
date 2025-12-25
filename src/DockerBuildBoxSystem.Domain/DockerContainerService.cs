@@ -46,23 +46,32 @@ namespace DockerBuildBoxSystem.Domain
         #region Container Lifecycle Logic
         public async Task<bool> StartAsync(string containerId, CancellationToken ct = default)
         {
-            // Stop all other running containers except the selected/target one
+            // Stop all other managed running containers except the selected/target one
             try
             {
-                var allContainers = await ListContainersAsync(all: true, ct: ct);
-                foreach (var c in allContainers)
+                var filters = new Dictionary<string, IDictionary<string, bool>>
+                {
+                    ["label"] = new Dictionary<string, bool> { [DockerConstants.ManagedContainerLabel] = true }
+                };
+
+                var parameters = new ContainersListParameters
+                {
+                    All = false,
+                    Filters = filters
+                };
+
+                var containers = await Client.Containers.ListContainersAsync(parameters, ct);
+
+                foreach (var c in containers)
                 {
                     // Skip the target container
-                    if (string.Equals(c.Id, containerId, StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(c.ID, containerId, StringComparison.OrdinalIgnoreCase))
                         continue;
 
                     try
                     {
-                        var info = await InspectAsync(c.Id, ct);
-                        if (info.IsRunning)
-                        {
-                            await StopAsync(c.Id, timeout: TimeSpan.FromSeconds(10), ct: ct);
-                        }
+                        //Setting All to false ensures only running containers are selected
+                        await StopAsync(c.ID, timeout: TimeSpan.FromSeconds(10), ct: ct);
                     }
                     catch
                     {
@@ -99,7 +108,11 @@ namespace DockerBuildBoxSystem.Domain
                 AttachStdin = true,
                 AttachStdout = true,
                 AttachStderr = true,
-                HostConfig = options.Config
+                HostConfig = options.Config,
+                Labels = new Dictionary<string, string>
+                {
+                    [DockerConstants.ManagedContainerLabel] = "true"
+                }
             }, ct);
 
             return response.ID;
@@ -129,19 +142,29 @@ namespace DockerBuildBoxSystem.Domain
                 Names = string.IsNullOrEmpty(inspect.Name) ? Array.Empty<string>() : [inspect.Name],
                 Status = inspect.State?.Status,
                 Tty = inspect.Config?.Tty ?? false,
-                LogDriver = inspect.HostConfig?.LogConfig?.Type
+                LogDriver = inspect.HostConfig?.LogConfig?.Type,
+                Labels = inspect.Config?.Labels?.AsReadOnly()
             };
         }
 
         public async Task<IList<ContainerInfo>> ListContainersAsync(
             bool all = false,
             string? nameFilter = null,
+            string? labelFilter = null,
             CancellationToken ct = default)
         {
-            var filters = nameFilter is null ? null : new Dictionary<string, IDictionary<string, bool>>
+            Dictionary<string, IDictionary<string, bool>>? filters = null;
+
+            if (nameFilter is not null || labelFilter is not null)
             {
-                ["name"] = new Dictionary<string, bool> { [nameFilter] = true }
-            };
+                filters = new Dictionary<string, IDictionary<string, bool>>();
+
+                if (nameFilter is not null)
+                    filters["name"] = new Dictionary<string, bool> { [nameFilter] = true };
+
+                if (labelFilter is not null)
+                    filters["label"] = new Dictionary<string, bool> { [labelFilter] = true };
+            }
 
             var parameters = new ContainersListParameters
             {
@@ -158,7 +181,8 @@ namespace DockerBuildBoxSystem.Domain
                 Names = c.Names.AsReadOnly(),
                 State = c.State,
                 Status = c.Status,
-                Image = c.Image
+                Image = c.Image,
+                Labels = c.Labels?.AsReadOnly()
             }).ToList();
         }
         #endregion

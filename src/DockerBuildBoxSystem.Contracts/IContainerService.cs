@@ -9,6 +9,18 @@ using System.Threading.Tasks;
 namespace DockerBuildBoxSystem.Contracts
 {
     /// <summary>
+    /// Constants used for the Docker container management.
+    /// Don't know if there is a better way then having it defined here as a compile-time constant...
+    /// </summary>
+    public static class DockerConstants
+    {
+        /// <summary>
+        /// The label applied to containers managed by this application.
+        /// </summary>
+        public const string ManagedContainerLabel = "com.dockerbuildboxsystem.managed";
+    }
+
+    /// <summary>
     /// Strong typed representation of docker container states.
     /// https://www.baeldung.com/ops/docker-container-states#bd-possible-states-of-a-docker-container
     /// </summary>
@@ -59,6 +71,11 @@ namespace DockerBuildBoxSystem.Contracts
 
         //HostConfig.LogConfig.Type (e.g., "json-file", "none", "local")
         public string? LogDriver { get; init; }
+
+        /// <summary>
+        /// The container labels.
+        /// </summary>
+        public IReadOnlyDictionary<string, string>? Labels { get; init; }
 
         /// <summary>
         /// Strong typed state derived from <see cref="State"/>.
@@ -157,15 +174,17 @@ namespace DockerBuildBoxSystem.Contracts
         Task<ContainerInfo> InspectAsync(string containerId, CancellationToken ct = default);
 
         /// <summary>
-        /// Lists docker containers existing on the host, optionally filtered by name.
+        /// Lists docker containers existing on the host, optionally filtered by name and/or labels.
         /// </summary>
         /// <param name="all">If true, includes stopped containers</param>
         /// <param name="nameFilter">Optional container name to filter by</param>
+        /// <param name="labelFilter">Optional label key to filter by (e.g., "com.dockerbuildboxsystem.managed")</param>
         /// <param name="ct">Cancellation token</param>
         /// <returns>Returns a list of <see cref="ContainerInfo"/> objects.</returns>
         Task<IList<ContainerInfo>> ListContainersAsync(
             bool all = false,
             string? nameFilter = null,
+            string? labelFilter = null,
             CancellationToken ct = default);
 
         /// <summary>
