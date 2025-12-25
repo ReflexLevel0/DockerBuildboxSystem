@@ -1,7 +1,9 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
 using DockerBuildBoxSystem.Contracts;
 using DockerBuildBoxSystem.ViewModels.Common;
+using DockerBuildBoxSystem.ViewModels.Messages;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.Design;
@@ -11,7 +13,10 @@ using System.Threading.Tasks;
 
 namespace DockerBuildBoxSystem.ViewModels.ViewModels
 {
-    public partial class FileSyncViewModel : ViewModelBase
+    public partial class FileSyncViewModel : ViewModelBase,
+        IRecipient<SelectedContainerChangedMessage>,
+        IRecipient<IsCommandRunningChangedMessage>,
+        IRecipient<ContainerStartedMessage>
     {
         private readonly IFileSyncService _fileSyncService;
         private readonly ISettingsService _settingsService;
@@ -46,6 +51,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [ObservableProperty]
         private bool _isAutoSyncEnabled;
 
+
         [ObservableProperty]
         private string _hostSyncPath = string.Empty;
 
@@ -77,6 +83,45 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
             _settingsService.SourcePathChanged += OnSourcePathChanged;
             InitializeSettingsAsync();
+
+            //register to receive messages
+            WeakReferenceMessenger.Default.RegisterAll(this);
+        }
+
+        partial void OnIsSyncRunningChanged(bool value)
+        {
+            //notify other view models about sync running state change
+            WeakReferenceMessenger.Default.Send(new IsSyncRunningChangedMessage(value));
+        }
+
+        /// <summary>
+        /// Handles the SelectedContainerChangedMessage.
+        /// </summary>
+        public void Receive(SelectedContainerChangedMessage message)
+        {
+            SelectedContainer = message.Value;
+        }
+
+        /// <summary>
+        /// Handles the IsCommandRunningChangedMessage.
+        /// </summary>
+        public void Receive(IsCommandRunningChangedMessage message)
+        {
+            IsCommandRunning = message.Value;
+        }
+
+        public void Receive(ContainerStartedMessage message)
+        {
+            if (SelectedContainer == null || SelectedContainer.Id != message.Value.Id)
+                return;
+
+            if (string.IsNullOrEmpty(HostSyncPath))
+            {
+                _logger.LogWithNewline("[sync] Warning: Host sync path is not set! Can't run force sync on container start.", true, false);
+                return;
+            }
+
+            StartForceSyncAsync().ConfigureAwait(false);
         }
 
         private async Task InitializeSettingsAsync()
@@ -97,7 +142,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// <summary>
         /// Determines whether sync can be started.
         /// </summary>
-        private bool CanSync() => !string.IsNullOrWhiteSpace(ContainerId) && IsContainerRunning && !IsSyncRunning && !IsCommandRunning && !IsSwitching;
+        private bool CanSync() => !string.IsNullOrWhiteSpace(ContainerId) && IsContainerRunning && !IsSyncRunning && !IsSwitching;
 
         /// <summary>
         /// Starts the sync operation.
@@ -130,7 +175,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             }
         }
 
-        private bool CanForceSync() => !string.IsNullOrWhiteSpace(ContainerId) && (SelectedContainer?.IsRunning == true) && !IsCommandRunning;
+        private bool CanForceSync() => !string.IsNullOrWhiteSpace(ContainerId) && IsContainerRunning;
 
 
         /// <summary>
@@ -189,10 +234,12 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
         public override async ValueTask DisposeAsync()
         {
+            WeakReferenceMessenger.Default.UnregisterAll(this);
             _settingsService.SourcePathChanged -= OnSourcePathChanged;
             _fileSyncService.StopWatching();
             await base.DisposeAsync();
         }
+
         /// <summary>
         /// Used to start/stop auto sync when IsAutoSyncEnabled changes.
         /// </summary>
@@ -204,6 +251,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             else
                 StopSyncCommand.Execute(null);
         }
+
         /// <summary>
         /// Used to update CanToggleAutoSync when SelectedContainer changes.
         /// </summary>
