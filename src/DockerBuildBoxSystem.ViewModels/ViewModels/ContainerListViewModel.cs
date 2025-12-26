@@ -283,6 +283,10 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             }
         }
 
+        /// <summary>
+        /// Refreshes the currently selected Docker container and keeps the UI state in sync
+        /// with external Docker changes.
+        /// </summary> 
         public async Task RefreshSelectedContainerAsync()
         {
             var id = ContainerId;
