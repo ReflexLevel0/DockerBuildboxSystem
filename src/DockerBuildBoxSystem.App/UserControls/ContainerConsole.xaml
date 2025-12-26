@@ -32,7 +32,6 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <TextBlock Grid.Column="0" 
                        Text="Image:" 
@@ -67,13 +66,6 @@
                     ToolTip="Refresh the list of images"
                     Padding="8,4"
                     MinWidth="70"/>
-            <StackPanel Grid.Column="4" Orientation="Horizontal" Margin="6,0,0,0" VerticalAlignment="Center">
-                <CheckBox Content="Auto-Sync"
-                          IsChecked="{Binding FileSync.IsAutoSyncEnabled}"
-                          ToolTip="Enable or disable automatic syncing when files change"
-                          IsEnabled="{Binding FileSync.CanToggleAutoSync}"/>
-                
-            </StackPanel>
         </Grid>
 
         <!-- User Controls -->
