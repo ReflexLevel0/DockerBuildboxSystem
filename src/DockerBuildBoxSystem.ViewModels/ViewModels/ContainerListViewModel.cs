@@ -283,6 +283,11 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             }
         }
 
+        /// <summary>
+        /// This will:
+        ///    set SelectedContainer = null if it was stopped externally
+        ///    set SelectedContainer = null if it was deleted externally
+        /// </summary>
         public async Task RefreshSelectedContainerAsync()
         {
             var id = ContainerId;
