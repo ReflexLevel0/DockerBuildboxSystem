@@ -283,6 +283,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             }
         }
 
+                /// <summary>
+        /// Starts the selected container.
+        /// </summary>
         public async Task RefreshSelectedContainerAsync()
         {
             var id = ContainerId;
