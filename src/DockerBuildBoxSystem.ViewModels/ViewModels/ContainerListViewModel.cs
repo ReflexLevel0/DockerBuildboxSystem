@@ -23,7 +23,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private readonly IContainerService _containerService;
         private readonly IExternalProcessService _externalProcessService;
         private readonly IViewModelLogger _logger;
-        // If the app itself requested a stop, we don't treat it as "stopped externally".
         private readonly HashSet<string> _stopRequestedByApp = new(StringComparer.OrdinalIgnoreCase);
 
         private string ContainerId
