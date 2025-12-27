@@ -265,37 +265,58 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// </summary> 
         public async Task RefreshSelectedContainerAsync()
         {
-            var id = ContainerId;
-            if (string.IsNullOrWhiteSpace(id))
+            try
+            {
+                if (!await _imageSwitchLock.WaitAsync(0))
+                    return;
+            }
+            catch (ObjectDisposedException)
+            {
                 return;
+            }
 
             try
             {
-                var refreshed = await _containerService.InspectAsync(id);
-
-                if (!string.Equals(id, ContainerId, StringComparison.OrdinalIgnoreCase))
+                var id = ContainerId;
+                if (string.IsNullOrWhiteSpace(id))
                     return;
 
-                // Still running or stop was requested by app
-                if (refreshed?.IsRunning == true || _stopRequestedByApp.Remove(id))
+                try
                 {
-                    SelectedContainer = refreshed;
-                    return;
-                }
+                    var refreshed = await _containerService.InspectAsync(id);
 
-                var name = refreshed?.Names?.FirstOrDefault() ?? id;
-                _logger.LogWithNewline($"[info] Container stopped externally: {name}", false, false);
-                SelectedContainer = null;
+                    if (!string.Equals(id, ContainerId, StringComparison.OrdinalIgnoreCase))
+                        return;
+
+                    // Still running or stop was requested by app
+                    if (refreshed?.IsRunning == true || _stopRequestedByApp.Remove(id))
+                    {
+                        SelectedContainer = refreshed;
+                        return;
+                    }
+
+                    var name = refreshed?.Names?.FirstOrDefault() ?? id;
+                    _logger.LogWithNewline($"[info] Container stopped externally: {name}", false, false);
+                    SelectedContainer = null;
+                }
+                catch (DockerApiException dae) when (dae.StatusCode == HttpStatusCode.NotFound)
+                {
+                    _stopRequestedByApp.Remove(id);
+                    _logger.LogWithNewline($"[info] Selected container was removed externally: {id}", false, false);
+                    SelectedContainer = null;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWithNewline($"[refresh-error] {ex.Message}", true, false);
+                }
             }
-            catch (DockerApiException dae) when (dae.StatusCode == HttpStatusCode.NotFound)
+            finally
             {
-                _stopRequestedByApp.Remove(id);
-                _logger.LogWithNewline($"[info] Selected container was removed externally: {id}", false, false);
-                SelectedContainer = null;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWithNewline($"[refresh-error] {ex.Message}", true, false);
+                try
+                {
+                    _imageSwitchLock.Release();
+                }
+                catch (ObjectDisposedException) { }
             }
         }
 
@@ -321,15 +342,16 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private async Task StartContainerInternalAsync(CancellationToken ct)
         {
             if (SelectedContainer is null) return;
+            var containerId = SelectedContainer.Id;
 
             if (ct.IsCancellationRequested) return;
 
-            var name = SelectedContainer.Names.FirstOrDefault() ?? SelectedContainer.Id;
+            var name = SelectedContainer.Names.FirstOrDefault() ?? containerId;
             try
             {
                 _logger.LogWithNewline($"[info] Starting container: {name}", false, false);
 
-                var status = await _containerService.StartAsync(ContainerId, ct);
+                var status = await _containerService.StartAsync(containerId, ct);
 
                 if (ct.IsCancellationRequested)
                 {
@@ -339,13 +361,13 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
                 if (status)
                 {
-                    if (!string.IsNullOrWhiteSpace(SelectedContainer?.Id))
-                        _containersStartedByApp.Add(SelectedContainer.Id);
+                    if (!string.IsNullOrWhiteSpace(containerId))
+                        _containersStartedByApp.Add(containerId);
 
                     _logger.LogWithNewline($"[info] Started container: {name}", false, false);
                     
                     // Re-inspect to get the updated running state
-                    SelectedContainer = await _containerService.InspectAsync(ContainerId, ct);
+                    SelectedContainer = await _containerService.InspectAsync(containerId, ct);
                 }
                 else
                 {
