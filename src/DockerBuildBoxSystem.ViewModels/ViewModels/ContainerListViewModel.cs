@@ -14,6 +14,8 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Xml.Linq;
+using Docker.DotNet;
+using System.Net;
 
 namespace DockerBuildBoxSystem.ViewModels.ViewModels
 {
@@ -25,6 +27,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private readonly IContainerService _containerService;
         private readonly IExternalProcessService _externalProcessService;
         private readonly IViewModelLogger _logger;
+        private readonly HashSet<string> _stopRequestedByApp = new(StringComparer.OrdinalIgnoreCase);
 
         private string ContainerId
         {
@@ -305,18 +308,46 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             }
         }
 
+        /// <summary>
+        /// Refreshes the currently selected Docker container and keeps the UI state in sync
+        /// with external Docker changes.
+        /// </summary> 
         public async Task RefreshSelectedContainerAsync()
         {
-            if (string.IsNullOrWhiteSpace(ContainerId)) return;
+            var id = ContainerId;
+            if (string.IsNullOrWhiteSpace(id))
+                return;
+
             try
             {
-                SelectedContainer = await _containerService.InspectAsync(ContainerId);
+                var refreshed = await _containerService.InspectAsync(id);
+
+                if (!string.Equals(id, ContainerId, StringComparison.OrdinalIgnoreCase))
+                    return;
+
+                // Still running or stop was requested by app
+                if (refreshed?.IsRunning == true || _stopRequestedByApp.Remove(id))
+                {
+                    SelectedContainer = refreshed;
+                    return;
+                }
+
+                var name = refreshed?.Names?.FirstOrDefault() ?? id;
+                _logger.LogWithNewline($"[info] Container stopped externally: {name}", false, false);
+                SelectedContainer = null;
+            }
+            catch (DockerApiException dae) when (dae.StatusCode == HttpStatusCode.NotFound)
+            {
+                _stopRequestedByApp.Remove(id);
+                _logger.LogWithNewline($"[info] Selected container was removed externally: {id}", false, false);
+                SelectedContainer = null;
             }
             catch (Exception ex)
             {
                 _logger.LogWithNewline($"[refresh-error] {ex.Message}", true, false);
             }
         }
+
         private bool CanStartContainer() => !string.IsNullOrWhiteSpace(ContainerId) && !IsContainerRunning;
         
         /// <summary>
@@ -402,6 +433,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             {
                 var name = container.Names.FirstOrDefault() ?? container.Id;
                 _logger.LogWithNewline($"[info] Stopping container: {name}", false, false);
+                _stopRequestedByApp.Add(container.Id);
                 await _containerService.StopAsync(container.Id, timeout: TimeSpan.FromSeconds(10));
                 _logger.LogWithNewline($"[info] Stopped container: {name}", false, false);
                 
