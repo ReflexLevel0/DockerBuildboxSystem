@@ -34,12 +34,17 @@
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
                     <Grid>
+                        <Border x:Name="BackgroundBorder"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="4"/>
+
                         <Border x:Name="HoverSquare"
                             Width="{Binding ActualHeight, RelativeSource={RelativeSource TemplatedParent}}"
                             Height="{Binding ActualHeight, RelativeSource={RelativeSource TemplatedParent}}"
                             Background="Transparent"
                             HorizontalAlignment="Center"
-                            VerticalAlignment="Center"/>
+                            VerticalAlignment="Center"
+                            CornerRadius="4"/>
 
                         <!--The content of the button -->
                         <ContentPresenter HorizontalAlignment="Center"
@@ -80,5 +85,40 @@
         <Setter Property="VerticalScrollBarVisibility" Value="Auto" />
         <Setter Property="HorizontalScrollBarVisibility" Value="Auto" />
         <Setter Property="TextWrapping" Value="NoWrap" />
+    </Style>
+
+    <Style x:Key="SendButtonStyle" TargetType="Button" BasedOn="{StaticResource FlatIconButton}">
+        <Setter Property="Content">
+            <Setter.Value>
+                <Image Source="pack://application:,,,/Assets/icons/send.png"
+                       Width="20"
+                       Height="20"/>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style x:Key="ClearButtonStyle" TargetType="Button" BasedOn="{StaticResource FlatIconButton}">
+        <Setter Property="Background" Value="White"/>
+        <Setter Property="Content">
+            <Setter.Value>
+                <Image Source="pack://application:,,,/Assets/icons/clean.png" Width="20" Height="20"/>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style x:Key="CopyButtonStyle" TargetType="Button" BasedOn="{StaticResource FlatIconButton}">
+        <Setter Property="Background" Value="White"/>
+        <Setter Property="Content">
+            <Setter.Value>
+                <Image Source="pack://application:,,,/Assets/icons/copy.png"
+                       Width="20"
+                       Height="20"/>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style x:Key="RefreshButtonStyle" TargetType="Button" BasedOn="{StaticResource FlatIconButton}">
+        <Setter Property="Content">
+            <Setter.Value>
+                <Image Source="pack://application:,,,/Assets/icons/refresh.png" Width="20" Height="20"/>
+            </Setter.Value>
+        </Setter>
     </Style>
 </ResourceDictionary>

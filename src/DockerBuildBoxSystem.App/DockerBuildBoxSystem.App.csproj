@@ -48,6 +48,10 @@
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
 	</ItemGroup>
+	<!-- Also include them as resources for static buttons-->
+	<ItemGroup>
+		<Resource Include="Assets\icons\*.*" />
+	</ItemGroup>
 
 	<PropertyGroup>
 		<OutputType>WinExe</OutputType>

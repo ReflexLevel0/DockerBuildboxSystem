@@ -55,12 +55,12 @@
             </ComboBox>
 
             <Button Grid.Column="2" 
-                    Content="Refresh" 
+                    Style="{StaticResource RefreshButtonStyle}" 
                     Command="{Binding ContainerList.RefreshImagesCommand}"
                     ToolTip="Refresh the list of images"
                     Margin="6,0,0,0"
                     Padding="8,4"
-                    MinWidth="70"/>
+                    Width="30" Height="30"/>
             <StackPanel Grid.Column="3" Orientation="Horizontal" Margin="6,0,0,0" VerticalAlignment="Center">
                 <CheckBox Content="Auto-Sync"
                           IsChecked="{Binding FileSync.IsAutoSyncEnabled}"
@@ -133,14 +133,18 @@
                      VerticalScrollBarVisibility="Auto"
                      Background="{StaticResource ContainerBackgroundBrush}"/>
             <StackPanel Orientation="Horizontal" Margin="8" VerticalAlignment="Top" HorizontalAlignment="Right">
-                <Button Command="{Binding CopyCommand}"
+                <Button Style="{StaticResource CopyButtonStyle}"
+                        Command="{Binding CopyCommand}"
                         Padding="4,2"
+                        Width="30" Height="30"
                         Margin="0,0,6,0"
                         ToolTip="Copy terminal output to clipboard">
-                    <Image Source="pack://application:,,,/DockerBuildBoxSystem.App;component/Assets/icons/copy.png"
-                           Height="16" Width="16"/>
                 </Button>
-                <Button Content="Clear" Command="{Binding ClearCommand}" Padding="4,2" ToolTip="Clear the terminal output"/>
+                <Button Style="{StaticResource ClearButtonStyle}"
+                        Command="{Binding ClearCommand}"
+                        Padding="4,2"
+                        Width="30" Height="30"
+                        ToolTip="Clear the terminal output"/>
             </StackPanel>
         </Grid>
         
@@ -150,13 +154,14 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="25" />
+                <ColumnDefinition Width="30" />
             </Grid.ColumnDefinitions>
 
             <TextBox x:Name="Input"
                  Grid.Column="0"
                  FontFamily="Consolas"
                  FontSize="13"
+                 Height="30"
                  Margin="0,0,6,0"
                  Text="{Binding Commands.Input, UpdateSourceTrigger=PropertyChanged}">
                 <TextBox.InputBindings>
@@ -165,27 +170,31 @@
             </TextBox>
 
             <Button Grid.Column="1"
-                    Content="Send"
+                    Style="{StaticResource SendButtonStyle}"
                     Padding="12,4"
+                    Width="30" Height="30"
                     ToolTip="Send the input to the container"
                     Command="{Binding Commands.SendCommand}" />
 
             <Button Grid.Column="2"
                     Content="Ctrl+C"
+                    Height="30"
                     Padding="12,4"
                     Margin="6,0,0,0"
                     ToolTip="Stop the running command in the container"
+                    Cursor="Hand"
                     Command="{Binding Commands.InterruptExecCommand}" />
 
             <!-- Container status indicator -->
-            <Canvas Grid.Column="3"
+            <Grid Grid.Column="3"
                     ToolTip="Indicates the state of the selected container (Running, Exited, etc.)">
                 <Ellipse Width="15" 
                          Height="15" 
-                         Canvas.Top="5" 
-                         Canvas.Left="5" 
-                         Fill="{Binding ContainerList.SelectedContainer.StateKind, Converter={StaticResource StateToColorConverter}}"/>
-            </Canvas>
+                         HorizontalAlignment="Center"
+                         VerticalAlignment="Center"
+                         Fill="{Binding ContainerList.SelectedContainer.StateKind,
+                                Converter={StaticResource StateToColorConverter}}"/>
+            </Grid>
         </Grid>
     </Grid>
 </UserControl>
