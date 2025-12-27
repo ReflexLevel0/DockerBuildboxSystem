@@ -297,24 +297,19 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             {
                 var refreshed = await _containerService.InspectAsync(id);
 
-                // If container is no longer running:
-                if (refreshed is null || !refreshed.IsRunning)
-                {
-                    // If *we* requested stop via the app, keep it selected (not "external")
-                    if (_stopRequestedByApp.Remove(id))
-                    {
-                        SelectedContainer = refreshed;
-                        return;
-                    }
+                if (!string.Equals(id, ContainerId, StringComparison.OrdinalIgnoreCase))
+                    return;
 
-                    var name = refreshed?.Names?.FirstOrDefault() ?? id;
-                    _logger.LogWithNewline($"[info] Container stopped externally: {name}", false, false);
-                    SelectedContainer = null;
+                // Still running or stop was requested by app
+                if (refreshed?.IsRunning == true || _stopRequestedByApp.Remove(id))
+                {
+                    SelectedContainer = refreshed;
                     return;
                 }
 
-                // Still running
-                SelectedContainer = refreshed;
+                var name = refreshed?.Names?.FirstOrDefault() ?? id;
+                _logger.LogWithNewline($"[info] Container stopped externally: {name}", false, false);
+                SelectedContainer = null;
             }
             catch (DockerApiException dae) when (dae.StatusCode == HttpStatusCode.NotFound)
             {
