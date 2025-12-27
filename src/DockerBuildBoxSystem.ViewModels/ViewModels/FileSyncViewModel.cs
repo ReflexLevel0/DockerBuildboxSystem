@@ -43,12 +43,20 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [NotifyCanExecuteChangedFor(nameof(StopSyncCommand))]
         private bool _isSyncRunning;
 
+        [ObservableProperty]
+        private bool _isAutoSyncEnabled;
 
         [ObservableProperty]
         private string _hostSyncPath = string.Empty;
 
         [ObservableProperty]
         private string _containerSyncPath = "/data/";
+
+        /// <summary>
+        /// Gets a value indicating whether the automatic synchronization setting can be toggled for the currently
+        /// selected container.
+        /// </summary>
+        public bool CanToggleAutoSync => SelectedContainer != null; 
 
         public FileSyncViewModel(IFileSyncService fileSyncService, ISettingsService settingsService, IViewModelLogger logger)
         {
@@ -184,6 +192,26 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             _settingsService.SourcePathChanged -= OnSourcePathChanged;
             _fileSyncService.StopWatching();
             await base.DisposeAsync();
+        }
+        /// <summary>
+        /// Used to start/stop auto sync when IsAutoSyncEnabled changes.
+        /// </summary>
+        /// <param name="value">the new value of IsAutoSyncEnabled</param>
+        partial void OnIsAutoSyncEnabledChanged(bool value)
+        {
+            if (value)
+                StartSyncCommand.Execute(null);
+            else
+                StopSyncCommand.Execute(null);
+        }
+        /// <summary>
+        /// Used to update CanToggleAutoSync when SelectedContainer changes.
+        /// </summary>
+        /// <param name="oldValue">the old selected container</param>
+        /// <param name="newValue">the new selected container</param>
+        partial void OnSelectedContainerChanged(ContainerInfo? oldValue, ContainerInfo? newValue)
+        {
+            OnPropertyChanged(nameof(CanToggleAutoSync));
         }
     }
 }

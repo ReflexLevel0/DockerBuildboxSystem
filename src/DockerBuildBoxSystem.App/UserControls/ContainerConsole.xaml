@@ -68,23 +68,11 @@
                     Padding="8,4"
                     MinWidth="70"/>
             <StackPanel Grid.Column="4" Orientation="Horizontal" Margin="6,0,0,0" VerticalAlignment="Center">
-                <Button Content="Sync"
-                     Margin="0,0,6,0"
-                     Padding="8,4"
-                     MinWidth="70"
-                     ToolTip="Sync files to the container"
-                     Command="{Binding FileSync.StartSyncCommand}"/>
-                 <Button Content="Force Sync"
-                     Margin="0,0,6,0"
-                     Padding="8,4"
-                     MinWidth="70"
-                     ToolTip="Force sync all files to the container"
-                     Command="{Binding FileSync.StartForceSyncCommand}"/>
-                <Button Content="Stop Sync"
-                     Margin="0,0,6,0"
-                     Padding="8,4"
-                     MinWidth="70"
-                     Command="{Binding FileSync.StopSyncCommand}"/>
+                <CheckBox Content="Auto-Sync"
+                          IsChecked="{Binding FileSync.IsAutoSyncEnabled}"
+                          ToolTip="Enable or disable automatic syncing when files change"
+                          IsEnabled="{Binding FileSync.CanToggleAutoSync}"/>
+                
             </StackPanel>
         </Grid>
 
@@ -162,7 +150,6 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="25" />
             </Grid.ColumnDefinitions>
 
@@ -184,18 +171,13 @@
                     Command="{Binding Commands.SendCommand}" />
 
             <Button Grid.Column="2"
-                    Content="Interrupt"
-                    Padding="12,4"
-                    Command="{Binding Commands.InterruptExecCommand}" />
-
-            <Button Grid.Column="3"
-                    Content="Stop"
+                    Content="Ctrl+C"
                     Padding="12,4"
                     ToolTip="Stop the running command in the container"
-                    Command="{Binding Commands.StopExecCommand}" />
+                    Command="{Binding Commands.InterruptExecCommand}" />
 
             <!-- Container status indicator -->
-            <Canvas Grid.Column="4"
+            <Canvas Grid.Column="3"
                     ToolTip="Indicates the state of the selected container (Running, Exited, etc.)">
                 <Ellipse Width="15" 
                          Height="15" 
