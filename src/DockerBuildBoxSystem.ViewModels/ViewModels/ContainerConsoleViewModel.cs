@@ -99,9 +99,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 if (e.PropertyName == nameof(ContainerList.SelectedContainer))
                 {
                     var container = ContainerList.SelectedContainer;
-                    if (container == null)
-                        return;
-                    var isRunning = container.IsRunning;
+                    var isRunning = container?.IsRunning == true;
 
                     Logs.SelectedContainer = container;
                     FileSync.SelectedContainer = container;
