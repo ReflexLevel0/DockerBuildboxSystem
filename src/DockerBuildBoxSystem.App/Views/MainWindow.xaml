@@ -13,8 +13,6 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
@@ -31,43 +29,21 @@
                       ToolTip="Container options">
                 <MenuItem Header="_Open Container in CMD" Command="{Binding ElementName=ContainerConsoleControl, Path=DataContext.ContainerList.OpenContainerInCmdCommand}" />
             </MenuItem>
+            <MenuItem Header="_Settings" ToolTip="Settings options">
+                <MenuItem Header="._env"
+                          Command="{Binding EnvironmentVM.OpenEnvFileCommand}"
+                          ToolTip="Edit .env file"/>
+                <MenuItem Header="syncIgnore"
+                          Command="{Binding OpenSyncIgnoreFileCommand}"
+                          ToolTip="Edit syncIgnore file"/>
+            </MenuItem>
         </Menu>
 
-        <!-- Header with Title, Select Source Button and Path Display -->
-        <TextBlock
-            Grid.Row="1"
-            Grid.Column="0"
-            Text="Buildbox Manager"
-            FontSize="18"
-            FontWeight="Bold"
-            VerticalAlignment="Center"
-            Margin="0,0,25,0" />
-
-        <!-- Grid for .env and syncIgnore -->
-        <Grid Grid.Row="2">
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                <Button Content=".env"
-                                ToolTip="Edit Environmental Variables"
-                                Padding="8,4"
-                                Margin="0,0,6,0"
-                                Command="{Binding EnvironmentVM.OpenEnvFileCommand}"
-                                Width="40">
-                </Button>
-                <Button Content="syncIgnore"
-                            ToolTip="Edit syncIgnore file"
-                            Padding="8,4"
-                            Margin="0,0,6,0"
-                            Command="{Binding OpenSyncIgnoreFileCommand}"
-                            Width="80">
-                </Button>
-            </StackPanel>
-        </Grid>
-
         <!--  Main Content Area - the UserControl is responsible for its own ViewModel lifecycle  -->
-        <uc:ContainerConsole x:Name="ContainerConsoleControl" Grid.Row="3" />
+        <uc:ContainerConsole x:Name="ContainerConsoleControl" Grid.Row="1" />
 
         <!-- Footer with Exit Button -->
-        <Grid Grid.Row="4" Margin="6">
+        <Grid Grid.Row="2" Margin="6">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
