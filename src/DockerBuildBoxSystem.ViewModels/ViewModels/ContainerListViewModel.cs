@@ -4,6 +4,7 @@ using Docker.DotNet.Models;
 using DockerBuildBoxSystem.Contracts;
 using CommunityToolkit.Mvvm.Messaging;
 using DockerBuildBoxSystem.ViewModels.Common;
+using DockerBuildBoxSystem.ViewModels.Messages;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -16,7 +17,7 @@ using System.Xml.Linq;
 
 namespace DockerBuildBoxSystem.ViewModels.ViewModels
 {
-    public partial class ContainerListViewModel : ViewModelBase
+    public partial class ContainerListViewModel : ViewModelBase, IRecipient<AutoStartLogsChangedMessage>
     {
         private readonly IServiceProvider _serviceProvider;
         private readonly IImageService _imageService;
@@ -94,20 +95,17 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             _externalProcessService = externalProcessService ?? throw new ArgumentNullException(nameof(externalProcessService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
-            // Publish MVVM message when any container starts (recipients filter by selection)
-            _containerService.ContainerStarted += async (s, id) =>
-            {
-                try
-                {
-                    var startedId = id?.ToString() ?? string.Empty;
-                    var info = await _containerService.InspectAsync(startedId);
-                    WeakReferenceMessenger.Default.Send(new ContainerRunningMessage(info));
-                }
-                catch { /* ignore listener errors */ }
-            };
+            //register to receive messages
+            WeakReferenceMessenger.Default.RegisterAll(this);
         }
 
-        // MVVM messaging replaces the SelectedContainerStarted event.
+        /// <summary>
+        /// Handles the AutoStartLogsChangedMessage.
+        /// </summary>
+        public void Receive(AutoStartLogsChangedMessage message)
+        {
+            AutoStartLogs = message.Value;
+        }
 
         /// <summary>
         /// Invoked when the value of the "Show All Images" setting changes.
@@ -121,7 +119,17 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// Triggers the async image selection handler.
         /// </summary>
         /// <param name="value">The newly selected image info or null.</param>
-        partial void OnSelectedImageChanged(ImageInfo? value) => _ = OnSelectedImageChangedAsync(value);
+        partial void OnSelectedImageChanged(ImageInfo? value)
+        {
+            OnSelectedImageChangedAsync(value).ConfigureAwait(false);
+            WeakReferenceMessenger.Default.Send(new SelectedImageChangedMessage(value));
+        }
+
+        partial void OnSelectedContainerChanged(ContainerInfo? value)
+        {
+            //notify other view models about container selection change
+            WeakReferenceMessenger.Default.Send(new SelectedContainerChangedMessage(value));
+        }
 
         /// <summary>
         /// Refreshes the list of images from the image service.
@@ -277,6 +285,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 }
 
                 _previousContainerId = ContainerId;
+
+                // At this stage, the container should be running
+                WeakReferenceMessenger.Default.Send(new ContainerRunningMessage(container));
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -355,12 +366,8 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                     // Re-inspect to get the updated running state
                     SelectedContainer = await _containerService.InspectAsync(ContainerId, ct);
 
-                    // Broadcast running state to ensure recipients trigger bash reliably
-                    try
-                    {
-                        WeakReferenceMessenger.Default.Send(new ContainerRunningMessage(SelectedContainer));
-                    }
-                    catch { /* ignore message errors */ }
+                     //notify other view models about the container start
+                    WeakReferenceMessenger.Default.Send(new ContainerStartedMessage(SelectedContainer));
                 }
                 else
                 {
@@ -461,6 +468,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         {
             if (Interlocked.Exchange(ref _disposeOnce, 1) != 0)
                 return;
+            
+            // Unregister message subscriptions
+            WeakReferenceMessenger.Default.UnregisterAll(this);
 
             try
             {

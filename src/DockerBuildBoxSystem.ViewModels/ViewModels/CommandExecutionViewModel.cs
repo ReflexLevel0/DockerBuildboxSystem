@@ -4,13 +4,16 @@ using DockerBuildBoxSystem.Contracts;
 using CommunityToolkit.Mvvm.Messaging;
 using CommunityToolkit.Mvvm.Messaging.Messages;
 using DockerBuildBoxSystem.ViewModels.Common;
+using DockerBuildBoxSystem.ViewModels.Messages;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace DockerBuildBoxSystem.ViewModels.ViewModels
 {
-    public partial class CommandExecutionViewModel : ViewModelBase, IRecipient<ContainerRunningMessage>, IRecipient<ContainerReadyMessage>
+    public partial class CommandExecutionViewModel : ViewModelBase, IRecipient<SelectedContainerChangedMessage>,
+        IRecipient<IsSyncRunningChangedMessage>,
+        IRecipient<ContainerRunningMessage>
     {
         private readonly ICommandRunner _cmdRunner;
         private readonly IContainerService _service;
@@ -39,9 +42,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [ObservableProperty]
         private string? _input;
 
-        [ObservableProperty]
-        private bool _preferReadyMessages = true;
-
         private bool IsContainerRunning => SelectedContainer?.IsRunning == true;
         public bool IsCommandRunning => _cmdRunner.IsRunning;
 
@@ -67,12 +67,13 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                     RunUserCommandCommand.NotifyCanExecuteChanged();
                     StopExecCommand.NotifyCanExecuteChanged();
                     InterruptExecCommand.NotifyCanExecuteChanged();
+                    //motify other view models about command running state change
+                    WeakReferenceMessenger.Default.Send(new IsCommandRunningChangedMessage(IsCommandRunning));
                 });
             };
 
-            // Register recipients for MVVM messages
-            WeakReferenceMessenger.Default.Register<ContainerRunningMessage>(this);
-            WeakReferenceMessenger.Default.Register<ContainerReadyMessage>(this);
+            //register to receive messages
+            WeakReferenceMessenger.Default.RegisterAll(this);
         }
 
         private bool CanSend() => !string.IsNullOrWhiteSpace(ContainerId) && IsContainerRunning;
@@ -155,123 +156,31 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
         }
 
-        // Handle ContainerRunningMessage via IRecipient implementation
+        /// <summary>
+        /// Handles the SelectedContainerChangedMessage.
+        /// </summary>
+        public void Receive(SelectedContainerChangedMessage message)
+        {
+            SelectedContainer = message.Value;
+        }
+
+        /// <summary>
+        /// Handles the IsSyncRunningChangedMessage.
+        /// </summary>
+        public void Receive(IsSyncRunningChangedMessage message)
+        {
+            IsSyncRunning = message.Value;
+        }
+
+        /// <summary>
+        /// Handles the ContainerRunningMessage.
+        /// </summary>
         public void Receive(ContainerRunningMessage message)
         {
-            try
-            {
-                var currentId = SelectedContainer?.Id;
-                if (string.IsNullOrWhiteSpace(currentId) || string.Equals(currentId, message.Value.Id, StringComparison.OrdinalIgnoreCase))
-                {
-                    // Ensure SelectedContainer reflects running state
-                    SelectedContainer = message.Value;
-
-                    // Prefer 'ready' signals when enabled: do not auto-start on 'running'
-                    if (PreferReadyMessages)
-                        return;
-
-                    // If we can start immediately, do it
-                    if (StartShellCommand.CanExecute(null))
-                    {
-                        StartShellCommand.Execute(null);
-                        return;
-                    }
-
-                    // If a previous exec session is still running, stop it and start when idle
-                    if (_cmdRunner.IsRunning)
-                    {
-                        // request stop of current session, if possible
-                        if (StopExecCommand.CanExecute(null))
-                        {
-                            StopExecCommand.Execute(null);
-                        }
-
-                        void OnRunnerChanged(object? _, bool _running)
-                        {
-                            if (!_running)
-                            {
-                                try
-                                {
-                                    if (StartShellCommand.CanExecute(null))
-                                        StartShellCommand.Execute(null);
-                                }
-                                catch { }
-                                finally
-                                {
-                                    _cmdRunner.RunningChanged -= OnRunnerChanged;
-                                }
-                            }
-                        }
-
-                        _cmdRunner.RunningChanged += OnRunnerChanged;
-                        return;
-                    }
-
-                    // Fallback re-check: if gating was UI state, try again
-                    if (StartShellCommand.CanExecute(null))
-                        StartShellCommand.Execute(null);
-                }
-                else
-                {
-                    // silent ignore when IDs don't match selection
-                }
-            }
-            catch { }
+            if(StartShellCommand.CanExecute(null))
+                StartShellCommand.Execute(null);
         }
 
-        // Handle ContainerReadyMessage to start shell after startup logs
-        public void Receive(ContainerReadyMessage message)
-        {
-            try
-            {
-                var currentId = SelectedContainer?.Id;
-                if (string.IsNullOrWhiteSpace(currentId) || string.Equals(currentId, message.Value.Id, StringComparison.OrdinalIgnoreCase))
-                {
-                    // Ensure SelectedContainer reflects running state
-                    SelectedContainer = message.Value;
-
-                    if (StartShellCommand.CanExecute(null))
-                    {
-                        StartShellCommand.Execute(null);
-                        return;
-                    }
-
-                    if (_cmdRunner.IsRunning)
-                    {
-                        if (StopExecCommand.CanExecute(null))
-                            StopExecCommand.Execute(null);
-
-                        void OnRunnerChanged(object? _, bool _running)
-                        {
-                            if (!_running)
-                            {
-                                try
-                                {
-                                    if (StartShellCommand.CanExecute(null))
-                                        StartShellCommand.Execute(null);
-                                }
-                                catch { }
-                                finally
-                                {
-                                    _cmdRunner.RunningChanged -= OnRunnerChanged;
-                                }
-                            }
-                        }
-
-                        _cmdRunner.RunningChanged += OnRunnerChanged;
-                        return;
-                    }
-
-                    if (StartShellCommand.CanExecute(null))
-                        StartShellCommand.Execute(null);
-                }
-                else
-                {
-                    // silent ignore when IDs don't match selection
-                }
-            }
-            catch { }
-        }
 
         /// <summary>
         /// Executes a command inside the selected container and streams output to the console UI.
@@ -336,9 +245,8 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         public override async ValueTask DisposeAsync()
         {
             await StopExecAsync();
-            // Unregister message subscriptions (tokened and general)
-            WeakReferenceMessenger.Default.Unregister<ContainerRunningMessage>(this);
-            WeakReferenceMessenger.Default.Unregister<ContainerReadyMessage>(this);
+            // Unregister message subscriptions
+            WeakReferenceMessenger.Default.UnregisterAll(this);
             await base.DisposeAsync();
         }
     }

@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using DockerBuildBoxSystem.Contracts;
 using DockerBuildBoxSystem.ViewModels.Common;
 using CommunityToolkit.Mvvm.Messaging;
+using DockerBuildBoxSystem.ViewModels.Messages;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -11,15 +12,11 @@ using System.Threading.Tasks;
 
 namespace DockerBuildBoxSystem.ViewModels.ViewModels
 {
-    public partial class LogStreamViewModel : ViewModelBase
+    public partial class LogStreamViewModel : ViewModelBase, IRecipient<SelectedContainerChangedMessage>
     {
         private readonly ILogRunner _logRunner;
         private readonly IContainerService _service;
         private readonly IViewModelLogger _logger;
-        private DateTime _lastLogTimeUtc;
-        private bool _readySent;
-        private CancellationTokenSource? _readyCts;
-        private readonly TimeSpan _inactivityWindow = TimeSpan.FromSeconds(2);
         public string ContainerId
         {
             get => SelectedContainer?.Id ?? string.Empty;
@@ -31,6 +28,12 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
         [ObservableProperty]
         private bool _autoStartLogs = true;
+
+        partial void OnAutoStartLogsChanged(bool value)
+        {
+            //notify other view models about auto-start logs setting change
+            WeakReferenceMessenger.Default.Send(new AutoStartLogsChangedMessage(value));
+        }
 
         public bool IsLogsRunning => _logRunner.IsRunning;
         public LogStreamViewModel(ILogRunner logRunner, IContainerService service, IViewModelLogger logger)
@@ -48,7 +51,19 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                     StopLogsCommand.NotifyCanExecuteChanged();
                 });
             };
+
+            // Register to receive messages
+            WeakReferenceMessenger.Default.RegisterAll(this);
         }
+
+        /// <summary>
+        /// Handles the SelectedContainerChangedMessage.
+        /// </summary>
+        public void Receive(SelectedContainerChangedMessage message)
+        {
+            SelectedContainer = message.Value;
+        }
+
         /// <summary>
         /// Determines whether log streaming can be started.
         /// </summary>
@@ -112,11 +127,12 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [RelayCommand(CanExecute = nameof(CanStopLogs))]
         public async Task StopLogsAsync()
         {
-            try { _readyCts?.Cancel(); } catch { }
             await _logRunner.StopAsync();
         }
         public override async ValueTask DisposeAsync()
         {
+            // Unregister message subscriptions
+            WeakReferenceMessenger.Default.UnregisterAll(this);
             await StopLogsAsync();
             await base.DisposeAsync();
         }
