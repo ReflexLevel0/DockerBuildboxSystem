@@ -22,10 +22,7 @@
                 <!-- Application-wide styles and resources -->
                 <ResourceDictionary Source="Resources/Colors.xaml"/>
                 <ResourceDictionary Source="Resources/Styles.xaml"/>
-
             </ResourceDictionary.MergedDictionaries>
-
-
             <!-- Converters -->
             <converters:InverseBooleanConverter x:Key="InverseBooleanConverter"/>
         </ResourceDictionary>
