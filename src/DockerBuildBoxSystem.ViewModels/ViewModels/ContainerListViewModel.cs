@@ -237,18 +237,8 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
                 ct.ThrowIfCancellationRequested();
 
-                // If the selected container is already running, stop all other containers
-                if (SelectedContainer?.IsRunning == true)
-                {
-                    await StopAllOtherRunningContainersAsync(SelectedContainer.Id, ct);
-                    var runningName = SelectedContainer.Names.FirstOrDefault() ?? SelectedContainer.Id;
-                    _logger.LogWithNewline($"[info] Container already running: {runningName}", false, false);
-                }
-                else
-                {
-                    // start the container (StartAsync will also stop other containers)
-                    await StartContainerInternalAsync(ct);
-                }
+                // Delegate exclusive-run behavior to service-level StartAsync
+                await StartContainerInternalAsync(ct);
 
                 _previousContainerId = ContainerId;
             }
@@ -359,16 +349,10 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             var name = SelectedContainer.Names.FirstOrDefault() ?? containerId;
             try
             {
-                // If already running, just ensure others are stopped and avoid starting again
-                if (SelectedContainer.IsRunning)
-                {
-                    await StopAllOtherRunningContainersAsync(containerId, ct);
-                    _logger.LogWithNewline($"[info] Container already running: {name}", false, false);
-                    SelectedContainer = await _containerService.InspectAsync(containerId, ct);
-                    return;
-                }
-
-                _logger.LogWithNewline($"[info] Starting container: {name}", false, false);
+                var alreadyRunning = SelectedContainer.IsRunning;
+                _logger.LogWithNewline(alreadyRunning
+                    ? $"[info] Already running container: {name}"
+                    : $"[info] Starting container: {name}", false, false);
 
                 var status = await _containerService.StartAsync(containerId, ct);
 
@@ -383,8 +367,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                     if (!string.IsNullOrWhiteSpace(containerId))
                         _containersStartedByApp.Add(containerId);
 
-                    _logger.LogWithNewline($"[info] Started container: {name}", false, false);
-                    
+                    if (!alreadyRunning)
+                        _logger.LogWithNewline($"[info] Started container: {name}", false, false);
+
                     // Re-inspect to get the updated running state
                     SelectedContainer = await _containerService.InspectAsync(containerId, ct);
                 }
@@ -395,7 +380,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                     if (refreshed.IsRunning)
                     {
                         SelectedContainer = refreshed;
-                        _logger.LogWithNewline($"[info] Container already running: {name}", false, false);
                     }
                     else
                     {
@@ -413,41 +397,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             }
         }
 
-        /// <summary>
-        /// Stops all running containers except the specified selected container.
-        /// Best-effort: ignores failures on individual containers.
-        /// </summary>
-        private async Task StopAllOtherRunningContainersAsync(string selectedId, CancellationToken ct)
-        {
-            try
-            {
-                var all = await _containerService.ListContainersAsync(all: true, ct: ct);
-                foreach (var c in all)
-                {
-                    if (string.Equals(c.Id, selectedId, StringComparison.OrdinalIgnoreCase))
-                        continue;
-
-                    try
-                    {
-                        var info = await _containerService.InspectAsync(c.Id, ct);
-                        if (info.IsRunning)
-                        {
-                            var nm = info.Names.FirstOrDefault() ?? info.Id;
-                            _logger.LogWithNewline($"[info] Stopping other container: {nm}", false, false);
-                            await _containerService.StopAsync(info.Id, timeout: TimeSpan.FromSeconds(10), ct: ct);
-                        }
-                    }
-                    catch
-                    {
-                        // ignore failures for non-selected containers
-                    }
-                }
-            }
-            catch
-            {
-                // ignore list failures
-            }
-        }
 
         private bool CanStopContainer() => !string.IsNullOrWhiteSpace(ContainerId) && IsContainerRunning;
 

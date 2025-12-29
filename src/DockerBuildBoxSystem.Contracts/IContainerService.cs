@@ -120,6 +120,15 @@ namespace DockerBuildBoxSystem.Contracts
         Task StopAsync(string containerId, TimeSpan timeout, CancellationToken ct = default);
 
         /// <summary>
+        /// Stops multiple running containers.
+        /// </summary>
+        /// <param name="containerIds">Sequence of container IDs to stop.</param>
+        /// <param name="timeout">Time to wait before forcibly kill each container.</param>
+        /// <param name="ct">Cancellation token</param>
+        /// <returns>Task that completes when all stop requests finish.</returns>
+        Task StopAsync(IEnumerable<string> containerIds, TimeSpan timeout, CancellationToken ct = default);
+
+        /// <summary>
         /// Removes a container for the Docker host
         /// </summary>
         /// <param name="containerId">The id or name of the container to remove.</param>
