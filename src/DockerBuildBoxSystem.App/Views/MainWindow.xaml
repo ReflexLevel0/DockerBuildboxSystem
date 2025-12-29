@@ -6,6 +6,7 @@
         xmlns:local="clr-namespace:DockerBuildBoxSystem.App"
         xmlns:vm="clr-namespace:DockerBuildBoxSystem.ViewModels.Main;assembly=DockerBuildBoxSystem.ViewModels"
         xmlns:uc="clr-namespace:DockerBuildBoxSystem.App.UserControls"
+        xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:MainViewModel}"
         Title="{Binding Title}"
@@ -19,23 +20,70 @@
 
         <Menu Grid.Row="0">
             <MenuItem Header="_Sync">
-                <MenuItem Header="Sync _In..." Command="{Binding SelectSourcePathCommand}" />
-                <MenuItem Header="Sync _Out..." Command="{Binding SelectSyncOutPathCommand}" />
+                <MenuItem.Icon>
+                    <materialDesign:PackIcon Kind="Flash"
+                                             Foreground="{DynamicResource PrimaryHueMidBrush}"/>
+                </MenuItem.Icon>
+
+                <MenuItem Header="Sync _In..."
+                  Command="{Binding SelectSourcePathCommand}">
+                    <MenuItem.Icon>
+                        <materialDesign:PackIcon Kind="ArrowDown"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+
+                <MenuItem Header="Sync _Out..."
+                  Command="{Binding SelectSyncOutPathCommand}">
+                    <MenuItem.Icon>
+                        <materialDesign:PackIcon Kind="ArrowUp"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+
                 <Separator/>
                 <MenuItem Header="_Force Sync"
-                        Command="{Binding ElementName=ContainerConsoleControl, Path=DataContext.FileSync.StartForceSyncCommand}" />
+                  Command="{Binding ElementName=ContainerConsoleControl,
+                                    Path=DataContext.FileSync.StartForceSyncCommand}">
+                    <MenuItem.Icon>
+                        <materialDesign:PackIcon Kind="SyncAlert"/>
+                    </MenuItem.Icon>
+                </MenuItem>
             </MenuItem>
             <MenuItem Header="_Container"
-                      ToolTip="Container options">
-                <MenuItem Header="_Open Container in CMD" Command="{Binding ElementName=ContainerConsoleControl, Path=DataContext.ContainerList.OpenContainerInCmdCommand}" />
+              ToolTip="Container options">
+                <MenuItem.Icon>
+                    <materialDesign:PackIcon Kind="Docker"/>
+                </MenuItem.Icon>
+
+                <MenuItem Header="_Open Container in CMD"
+                  Command="{Binding ElementName=ContainerConsoleControl,
+                                    Path=DataContext.ContainerList.OpenContainerInCmdCommand}">
+                    <MenuItem.Icon>
+                        <materialDesign:PackIcon Kind="Console"/>
+                    </MenuItem.Icon>
+                </MenuItem>
             </MenuItem>
-            <MenuItem Header="_Settings" ToolTip="Settings options">
+
+            <MenuItem Header="_Settings"
+              ToolTip="Settings options">
+                <MenuItem.Icon>
+                    <materialDesign:PackIcon Kind="Cog"/>
+                </MenuItem.Icon>
+
                 <MenuItem Header="._env"
-                          Command="{Binding EnvironmentVM.OpenEnvFileCommand}"
-                          ToolTip="Edit .env file"/>
+                  Command="{Binding EnvironmentVM.OpenEnvFileCommand}"
+                  ToolTip="Edit .env file">
+                    <MenuItem.Icon>
+                        <materialDesign:PackIcon Kind="FileEdit"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+
                 <MenuItem Header="syncIgnore"
-                          Command="{Binding OpenSyncIgnoreFileCommand}"
-                          ToolTip="Edit syncIgnore file"/>
+                  Command="{Binding OpenSyncIgnoreFileCommand}"
+                  ToolTip="Edit syncIgnore file">
+                    <MenuItem.Icon>
+                        <materialDesign:PackIcon Kind="FileCancel"/>
+                    </MenuItem.Icon>
+                </MenuItem>
             </MenuItem>
         </Menu>
 

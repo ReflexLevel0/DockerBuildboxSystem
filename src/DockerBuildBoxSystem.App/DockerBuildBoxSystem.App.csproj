@@ -22,8 +22,11 @@
 
 	<ItemGroup>
 		<PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
-		<PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="9.0.10" />
-		<PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.10" />
+		<PackageReference Include="MaterialDesignColors" Version="5.3.0" />
+		<PackageReference Include="MaterialDesignThemes" Version="5.3.0" />
+		<PackageReference Include="MaterialDesignThemes.Wpf" Version="1.0.1" />
+		<PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.1" />
+		<PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.1" />
 	</ItemGroup>
 
   <ItemGroup>
@@ -42,7 +45,7 @@
 
 	</ItemGroup>
 
-	<!--Copy the pgn icons from the assets\icons-->
+	<!--Copy the pgn icons from the assets\icons for dynamic loading-->
 	<ItemGroup>
 		<None Update="Assets\icons\*.*">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -52,6 +55,10 @@
 	<ItemGroup>
 		<Resource Include="Assets\icons\*.*" />
 	</ItemGroup>
+	<!--Set application icon-->
+	<ItemGroup>
+	  <Content Include="Assets\icons\bb.ico" />
+	</ItemGroup>
 
 	<PropertyGroup>
 		<OutputType>WinExe</OutputType>
@@ -59,6 +66,7 @@
 		<Nullable>enable</Nullable>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<UseWPF>true</UseWPF>
+		<ApplicationIcon>Assets\icons\bb.ico</ApplicationIcon>
 	</PropertyGroup>
 
 </Project>
