@@ -180,6 +180,12 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             // Start the global UI update task
             UIHandler.Start();
 
+            // Load available images on initialization
+            await ContainerList.RefreshImagesCommand.ExecuteAsync(null);
+
+            // Load user-defined controls
+            await UserControls.LoadUserControlsAsync();
+
             // Check Docker engine availability
             var engineAvailable = await _containerService.IsEngineAvailableAsync();
             if (!engineAvailable)
@@ -190,12 +196,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 // Skip image refresh and user control load until engine is available
                 return;
             }
-
-            // Load available images on initialization
-            await ContainerList.RefreshImagesCommand.ExecuteAsync(null);
-
-            // Load user-defined controls
-            await UserControls.LoadUserControlsAsync();
+            
         }
 
 
