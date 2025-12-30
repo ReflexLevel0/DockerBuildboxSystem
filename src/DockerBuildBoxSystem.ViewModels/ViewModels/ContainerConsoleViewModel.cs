@@ -90,7 +90,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             Commands = new CommandExecutionViewModel(cmdRunner, containerService, userControlService, logger, UserControls);
 
 
-    FileSync.PropertyChanged += (s, e) =>
+            FileSync.PropertyChanged += (s, e) =>
             {
                 if (e.PropertyName == nameof(FileSync.IsSyncRunning))
                 {
