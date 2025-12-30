@@ -94,6 +94,10 @@ namespace DockerBuildBoxSystem.Contracts
     public interface IContainerService : IAsyncDisposable
     {
         /// <summary>
+        /// Raised after a container has successfully started.
+        /// </summary>
+        event EventHandler<string>? ContainerStarted;
+        /// <summary>
         /// Starts a stopped container.
         /// </summary>
         /// <param name="containerId">The id or name of the container to start</param>

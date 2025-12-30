@@ -3,6 +3,8 @@ using CommunityToolkit.Mvvm.Input;
 using Docker.DotNet.Models;
 using DockerBuildBoxSystem.Contracts;
 using DockerBuildBoxSystem.ViewModels.Common;
+using CommunityToolkit.Mvvm.Messaging;
+using DockerBuildBoxSystem.ViewModels.Messages;
 using Microsoft.Extensions.Configuration;
 using Microsoft.VisualBasic.Logging;
 using System;
@@ -87,48 +89,8 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             UserControls = new UserControlsViewModel(userControlService, logger);
             Commands = new CommandExecutionViewModel(cmdRunner, containerService, userControlService, logger, UserControls);
 
-            //propagate selection changes
-            bool prevWasRunning = false;
-            ContainerList.PropertyChanged += (s, e) =>
-            {
-                if (e.PropertyName == nameof(ContainerList.SelectedContainer))
-                {
-                    var container = ContainerList.SelectedContainer;
-                    var isRunning = container?.IsRunning == true;
 
-                    Logs.SelectedContainer = container;
-                    FileSync.SelectedContainer = container;
-                    Commands.SelectedContainer = container;
-
-                    // If the selected container just transitioned to running (e.g., after start), launch bash shell
-                    if (isRunning && !prevWasRunning)
-                    {
-                        if (Commands.StartShellCommand.CanExecute(null))
-                            Commands.StartShellCommand.Execute(null);
-                    }
-
-                    prevWasRunning = isRunning;
-                }
-            };
-
-            Commands.PropertyChanged += (s, e) =>
-            {
-                if (e.PropertyName == nameof(Commands.IsCommandRunning))
-                {
-                    FileSync.IsCommandRunning = Commands.IsCommandRunning;
-                }
-            };
-
-            Logs.PropertyChanged += (s, e) =>
-            {
-                if (e.PropertyName == nameof(Logs.IsLogsRunning))
-                {
-                    //...
-                }
-            };
-
-
-            FileSync.PropertyChanged += (s, e) =>
+    FileSync.PropertyChanged += (s, e) =>
             {
                 if (e.PropertyName == nameof(FileSync.IsSyncRunning))
                 {
@@ -136,14 +98,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 }
             };
 
-            Logs.PropertyChanged += (s, e) =>
-            {
-                if (e.PropertyName == nameof(Logs.AutoStartLogs))
-                {
-                    ContainerList.AutoStartLogs = Logs.AutoStartLogs;
-                }
-            };
-            ContainerList.AutoStartLogs = Logs.AutoStartLogs;
+                        
+            //send initial AutoStartLogs value to ensure the image list is synchronized
+            WeakReferenceMessenger.Default.Send(new AutoStartLogsChangedMessage(Logs.AutoStartLogs));
 
             // Periodically refreshing container and image info 
             var refreshImagesContainersTimer = new System.Timers.Timer(new TimeSpan(0, 0, 5));
