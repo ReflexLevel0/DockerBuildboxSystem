@@ -242,6 +242,5 @@ namespace DockerBuildBoxSystem.Contracts
             string hostPath,
             string containerPath,
             CancellationToken ct = default);
-
     }
 }
