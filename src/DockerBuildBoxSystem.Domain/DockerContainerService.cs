@@ -18,6 +18,7 @@ namespace DockerBuildBoxSystem.Domain
     public sealed class DockerContainerService : DockerServiceBase, IContainerService
     {
         private readonly IVolumeService _volumeService;
+        private readonly IEnvironmentService _environmentService;
 
         public event EventHandler<string>? ContainerStarted;
 
@@ -25,23 +26,27 @@ namespace DockerBuildBoxSystem.Domain
         /// Initializes a new instance of the <see cref="DockerContainerService"/> class.
         /// </summary>
         /// <param name="volumeService">The volume service for shared volume operations.</param>
+        /// <param name="environmentService">The environment service for managing container environments.</param>
         /// <param name="endpoint">The docker endpoint URI. If null, a platform default is used.</param>
         /// <param name="timeout">Optional timeout for Docker requests. Defaults to 100 seconds.</param>
-        public DockerContainerService(IVolumeService volumeService, string? endpoint = null, TimeSpan? timeout = null)
+        public DockerContainerService(IVolumeService volumeService, IEnvironmentService environmentService, string? endpoint = null, TimeSpan? timeout = null)
             : base(endpoint, timeout)
         {
             _volumeService = volumeService ?? throw new ArgumentNullException(nameof(volumeService));
+            _environmentService = environmentService ?? throw new ArgumentNullException(nameof(environmentService));
         }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="DockerContainerService"/> class with an existing client.
         /// </summary>
         /// <param name="volumeService">The volume service for shared volume operations.</param>
+        /// <param name="environmentService">The environment service for managing container environments.</param>
         /// <param name="client">An existing Docker client instance.</param>
-        public DockerContainerService(IVolumeService volumeService, DockerClient client)
+        public DockerContainerService(IVolumeService volumeService, IEnvironmentService environmentService, DockerClient client)
             : base(client)
         {
             _volumeService = volumeService ?? throw new ArgumentNullException(nameof(volumeService));
+            _environmentService = environmentService ?? throw new ArgumentNullException(nameof(environmentService));
         }
 
         #region Container Lifecycle Logic
@@ -55,6 +60,8 @@ namespace DockerBuildBoxSystem.Domain
             return started;
         }
 
+        
+
         public async Task<string> CreateContainerAsync(ContainerCreationOptions options, CancellationToken ct = default)
         {
             // Getting (or creating a new) shared volume and setting it as container mount
@@ -66,12 +73,16 @@ namespace DockerBuildBoxSystem.Domain
                 Source = sharedVolume?.Name,
                 Target = options.ContainerRootPath
             });
+            // load envs to a variable
+            var envList = await LoadContainerEnvAsync(ct);
 
             // Creating the container
             var response = await Client.Containers.CreateContainerAsync(new CreateContainerParameters
             {
                 Image = options.ImageName,
                 Name = options.ContainerName,
+
+                Env = envList,
                 Tty = true,
                 OpenStdin = true,
                 AttachStdin = true,
@@ -502,6 +513,24 @@ namespace DockerBuildBoxSystem.Domain
                 }
             }
         }
+        #endregion
+
+        #region Export Environment Variables
+        /// <summary>
+        /// Asynchronously loads the environment variables for the container and returns them as a list of key-value
+        /// assignment strings.
+        /// </summary>
+        /// <param name="ct">A cancellation token that can be used to cancel the asynchronous operation.</param>
+        /// <returns>A list of strings, each in the format "KEY=VALUE", representing the environment variables for the container.</returns>
+        private async Task<IList<string>> LoadContainerEnvAsync(
+            CancellationToken ct = default)
+        {
+            var envVars = await _environmentService.LoadEnvAsync();
+            return envVars
+                .Select(kv => $"{kv.Key}={kv.Value}")
+                .ToList();
+        }
+
         #endregion
 
         #region Helpers
