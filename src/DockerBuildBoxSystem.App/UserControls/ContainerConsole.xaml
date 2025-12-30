@@ -6,6 +6,7 @@
              xmlns:local="clr-namespace:DockerBuildBoxSystem.App.UserControls"
              xmlns:converters="clr-namespace:DockerBuildBoxSystem.App.Converters"
              xmlns:vm="clr-namespace:DockerBuildBoxSystem.ViewModels.ViewModels;assembly=DockerBuildBoxSystem.ViewModels"
+             xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="800"
              d:DataContext="{d:DesignInstance Type=vm:ContainerConsoleViewModel, IsDesignTimeCreatable=False}"
@@ -24,26 +25,27 @@
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
-        
         <!-- Container Selector -->
         <Grid Grid.Row="0" Margin="6">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <TextBlock Grid.Column="0" 
                        Text="Image:" 
+                       FontWeight="SemiBold"
                        VerticalAlignment="Center" 
                        Margin="0,0,6,0"/>
 
             <ComboBox Grid.Column="1" 
+                      Style="{DynamicResource MaterialDesignOutlinedComboBox}"
                       ItemsSource="{Binding ContainerList.Images}"
                       SelectedItem="{Binding ContainerList.SelectedImage}"
                       IsEnabled="{Binding ContainerList.Images.Count, Converter={StaticResource IntToBoolConverter}}"
                       ToolTip="Select a image to interact with"
-                      MinWidth="200">
+                      MinWidth="200"
+                      materialDesign:HintAssist.Hint="Select an image">
                 <ComboBox.ItemTemplate>
                     <DataTemplate>
                         <StackPanel Orientation="Horizontal">
@@ -53,25 +55,24 @@
                     </DataTemplate>
                 </ComboBox.ItemTemplate>
             </ComboBox>
-            <CheckBox Grid.Column="2" 
-                      Content="Show All" 
-                      IsChecked="{Binding ContainerList.ShowAllImages}"
-                      VerticalAlignment="Center"
-                      ToolTip="Show all containers, including stopped ones"
-                      Margin="6,0,6,0"/>
 
-            <Button Grid.Column="3" 
-                    Content="Refresh" 
+            <Button Grid.Column="2" 
+                    Style="{DynamicResource MaterialDesignFlatButton}"
                     Command="{Binding ContainerList.RefreshImagesCommand}"
                     ToolTip="Refresh the list of images"
-                    Padding="8,4"
-                    MinWidth="70"/>
+                    Margin="6,0,0,0"
+                    Width="30" Height="30"
+                    Padding="0">
+                <Image Source="pack://application:,,,/Assets/icons/refresh.png"
+                       Width="20"
+                       Height="20"/>
+            </Button>
         </Grid>
 
         <!-- User Controls -->
         <ItemsControl Grid.Row="1"
                       ItemsSource="{Binding UserControls.UserControls}"
-                      Margin="6">
+                      Margin="0,0,0,6">
             <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate>
                     <StackPanel Orientation="Horizontal"/>
@@ -83,10 +84,10 @@
                 <DataTemplate DataType="{x:Type vm:ButtonViewModel}">
                     <!--Global button styles in App/resources/styles.xaml-->
                     <Button Style="{StaticResource FlatIconButton}"
-                                ToolTip="{Binding Definition.Tooltip}"
-                                Command="{Binding DataContext.Commands.RunUserCommandCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                CommandParameter="{Binding Definition}"
-                                Width="30" Height="30">
+                            ToolTip="{Binding Definition.Tooltip}"
+                            Command="{Binding DataContext.Commands.RunUserCommandCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                            CommandParameter="{Binding Definition}"
+                            Width="30" Height="30">
                         <Image Source="{Binding Definition.IconPath}" Width="20" Height="20"/>
                     </Button>
                 </DataTemplate>
@@ -94,27 +95,39 @@
                 <!--Template for dropdown-->
                 <DataTemplate DataType="{x:Type vm:DropdownViewModel}">
                     <StackPanel Orientation="Horizontal" Margin="4">
-                        <TextBlock Text="{Binding Label}" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="{Binding Label}"
+                                   Margin="0,0,4,0"
+                                   FontWeight="SemiBold"
+                                   VerticalAlignment="Center"
+                                   />
                         <ComboBox ItemsSource="{Binding Values}"
                               SelectedItem="{Binding SelectedValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                               Width="80" Height="30"
+                              ToolTip="{Binding Definition.Tooltip}"
+                              Padding="6"
                               IsEnabled="{Binding DataContext.Commands.CanUseUserControls, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                              Padding="6"/>
+                              Style="{DynamicResource MaterialDesignOutlinedComboBox}"/>
                     </StackPanel>
                 </DataTemplate>
 
                 <!--Template for TextBox-->
                 <DataTemplate DataType="{x:Type vm:TextBoxViewModel}">
                     <StackPanel Orientation="Horizontal" Margin="4">
-                        <TextBlock Text="{Binding Label}" Margin="4,0,4,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="{Binding Label}"
+                                   Margin="4,0,4,0"
+                                   FontWeight="SemiBold"
+                                   VerticalAlignment="Center"/>
                         <TextBox Text="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                  Tag="{Binding Id}"
                                  Width="160"
                                  Height="30"
                                  Padding="6"
+                                 ToolTip="{Binding Definition.Tooltip}"
                                  FontFamily="Consolas"
                                  FontSize="12"
-                                 IsEnabled="{Binding DataContext.Commands.CanUseUserControls, RelativeSource={RelativeSource AncestorType=ItemsControl}}"/>
+                                 IsEnabled="{Binding DataContext.Commands.CanUseUserControls, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                 Style="{DynamicResource MaterialDesignOutlinedTextBox}"
+                                 materialDesign:HintAssist.Hint="{Binding Definition.Tooltip}"/>
                     </StackPanel>
                 </DataTemplate>
             </ItemsControl.Resources>
@@ -131,18 +144,36 @@
                      VerticalScrollBarVisibility="Auto"
                      Background="{StaticResource ContainerBackgroundBrush}"/>
             <StackPanel Orientation="Horizontal" Margin="8" VerticalAlignment="Top" HorizontalAlignment="Right">
-                <Button Content="Copy" Command="{Binding CopyCommand}" Padding="4,2" Margin="0,0,4,0" ToolTip="Copy terminal output to clipboard"/>
-                <Button Content="Clear" Command="{Binding ClearCommand}" Padding="4,2" ToolTip="Clear the terminal output"/>
+                <!-- Copy and Clear Buttons -->
+                <Button Style="{DynamicResource MaterialDesignFlatButton}"
+                        Command="{Binding CopyCommand}"
+                        Padding="4,2"
+                        Width="30" Height="30"
+                        Margin="0,0,6,0"
+                        ToolTip="Copy terminal output to clipboard">
+                    <Image Source="pack://application:,,,/Assets/icons/copy.png"
+                           Width="20"
+                           Height="20"/>
+                </Button>
+                <Button Style="{DynamicResource MaterialDesignFlatButton}"
+                        Command="{Binding ClearCommand}"
+                        Padding="4,2"
+                        Width="30" Height="30"
+                        ToolTip="Clear the terminal output">
+                    <Image Source="pack://application:,,,/Assets/icons/clear.png"
+                           Width="20"
+                           Height="20"/>
+                </Button>
             </StackPanel>
         </Grid>
-        
+
         <!-- Input -->
         <Grid Grid.Row="3" Margin="6">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="25" />
+                <ColumnDefinition Width="30" />
             </Grid.ColumnDefinitions>
 
             <TextBox x:Name="Input"
@@ -150,33 +181,45 @@
                  FontFamily="Consolas"
                  FontSize="13"
                  Margin="0,0,6,0"
-                 Text="{Binding Commands.Input, UpdateSourceTrigger=PropertyChanged}">
+                 Text="{Binding Commands.Input, UpdateSourceTrigger=PropertyChanged}"
+                 materialDesign:HintAssist.Hint="Type your command here">
                 <TextBox.InputBindings>
                     <KeyBinding Key="Enter" Command="{Binding Commands.SendCommand}" />
                 </TextBox.InputBindings>
             </TextBox>
-
+            <!-- Send Button -->
             <Button Grid.Column="1"
-                    Content="Send"
-                    Padding="12,4"
+                    Style="{DynamicResource MaterialDesignFlatButton}"
+                    Padding="0"
+                    Width="30" Height="30"
                     ToolTip="Send the input to the container"
-                    Command="{Binding Commands.SendCommand}" />
-
+                    Command="{Binding Commands.SendCommand}">
+                <Image Source="pack://application:,,,/Assets/icons/send.png"
+                       Width="20"
+                       Height="20"/>
+            </Button>
+            <!-- Ctrl + c Button -->
             <Button Grid.Column="2"
+                    Style="{DynamicResource MaterialDesignFlatButton}"
                     Content="Ctrl+C"
+                    Height="30"
                     Padding="12,4"
+                    Margin="6,0,0,0"
                     ToolTip="Stop the running command in the container"
-                    Command="{Binding Commands.InterruptExecCommand}" />
+                    Cursor="Hand"
+                    Command="{Binding Commands.InterruptExecCommand}"
+                    />
 
             <!-- Container status indicator -->
-            <Canvas Grid.Column="3"
+            <Grid Grid.Column="3"
                     ToolTip="Indicates the state of the selected container (Running, Exited, etc.)">
                 <Ellipse Width="15" 
                          Height="15" 
-                         Canvas.Top="5" 
-                         Canvas.Left="5" 
-                         Fill="{Binding ContainerList.SelectedContainer.StateKind, Converter={StaticResource StateToColorConverter}}"/>
-            </Canvas>
+                         HorizontalAlignment="Center"
+                         VerticalAlignment="Center"
+                         Fill="{Binding ContainerList.SelectedContainer.StateKind,
+                                Converter={StaticResource StateToColorConverter}}"/>
+            </Grid>
         </Grid>
     </Grid>
 </UserControl>
