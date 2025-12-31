@@ -1,5 +1,6 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
 using DockerBuildBoxSystem.Contracts;
 using CommunityToolkit.Mvvm.Messaging;
 using CommunityToolkit.Mvvm.Messaging.Messages;
@@ -11,7 +12,8 @@ using System.Threading.Tasks;
 
 namespace DockerBuildBoxSystem.ViewModels.ViewModels
 {
-    public partial class CommandExecutionViewModel : ViewModelBase, IRecipient<SelectedContainerChangedMessage>,
+    public partial class CommandExecutionViewModel : ViewModelBase,
+        IRecipient<SelectedContainerChangedMessage>,
         IRecipient<IsSyncRunningChangedMessage>,
         IRecipient<ContainerRunningMessage>
     {
@@ -67,6 +69,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                     RunUserCommandCommand.NotifyCanExecuteChanged();
                     StopExecCommand.NotifyCanExecuteChanged();
                     InterruptExecCommand.NotifyCanExecuteChanged();
+
                     //motify other view models about command running state change
                     WeakReferenceMessenger.Default.Send(new IsCommandRunningChangedMessage(IsCommandRunning));
                 });
@@ -74,6 +77,31 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
             //register to receive messages
             WeakReferenceMessenger.Default.RegisterAll(this);
+        }
+
+        /// <summary>
+        /// Handles the SelectedContainerChangedMessage.
+        /// </summary>
+        public void Receive(SelectedContainerChangedMessage message)
+        {
+            SelectedContainer = message.Value;
+        }
+
+        /// <summary>
+        /// Handles the IsSyncRunningChangedMessage.
+        /// </summary>
+        public void Receive(IsSyncRunningChangedMessage message)
+        {
+            IsSyncRunning = message.Value;
+        }
+
+        /// <summary>
+        /// Handles the ContainerRunningMessage.
+        /// </summary>
+        public void Receive(ContainerRunningMessage message)
+        {
+            if(StartShellCommand.CanExecute(null))
+                StartShellCommand.Execute(null);
         }
 
         private bool CanSend() => !string.IsNullOrWhiteSpace(ContainerId) && IsContainerRunning;
@@ -244,10 +272,12 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
         public override async ValueTask DisposeAsync()
         {
+            WeakReferenceMessenger.Default.UnregisterAll(this);
             await StopExecAsync();
             // Unregister message subscriptions
             WeakReferenceMessenger.Default.UnregisterAll(this);
             await base.DisposeAsync();
         }
+
     }
 }

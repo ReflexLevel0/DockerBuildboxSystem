@@ -1,5 +1,6 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
 using Docker.DotNet.Models;
 using DockerBuildBoxSystem.Contracts;
 using CommunityToolkit.Mvvm.Messaging;
@@ -19,7 +20,8 @@ using System.Net;
 
 namespace DockerBuildBoxSystem.ViewModels.ViewModels
 {
-    public partial class ContainerListViewModel : ViewModelBase, IRecipient<AutoStartLogsChangedMessage>
+    public partial class ContainerListViewModel : ViewModelBase,
+        IRecipient<AutoStartLogsChangedMessage>
     {
         private readonly IServiceProvider _serviceProvider;
         private readonly IImageService _imageService;
@@ -289,7 +291,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
                 _previousContainerId = ContainerId;
 
-                // At this stage, the container should be running
+                //At this stage, the container should be running...
                 WeakReferenceMessenger.Default.Send(new ContainerRunningMessage(container));
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -393,11 +395,11 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                         _containersStartedByApp.Add(SelectedContainer.Id);
 
                     _logger.LogWithNewline($"[info] Started container: {name}", false, false);
-                    
+
                     // Re-inspect to get the updated running state
                     SelectedContainer = await _containerService.InspectAsync(ContainerId, ct);
 
-                     //notify other view models about the container start
+                    //notify other view models about the container start
                     WeakReferenceMessenger.Default.Send(new ContainerStartedMessage(SelectedContainer));
                 }
                 else
@@ -502,6 +504,8 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 return;
             
             // Unregister message subscriptions
+            WeakReferenceMessenger.Default.UnregisterAll(this);
+
             WeakReferenceMessenger.Default.UnregisterAll(this);
 
             try

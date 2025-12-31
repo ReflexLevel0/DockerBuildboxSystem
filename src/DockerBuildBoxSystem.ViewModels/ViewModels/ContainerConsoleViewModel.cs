@@ -1,5 +1,6 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
 using Docker.DotNet.Models;
 using DockerBuildBoxSystem.Contracts;
 using DockerBuildBoxSystem.ViewModels.Common;
@@ -90,7 +91,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             Commands = new CommandExecutionViewModel(cmdRunner, containerService, userControlService, logger, UserControls);
 
 
-    FileSync.PropertyChanged += (s, e) =>
+            FileSync.PropertyChanged += (s, e) =>
             {
                 if (e.PropertyName == nameof(FileSync.IsSyncRunning))
                 {
@@ -98,7 +99,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 }
             };
 
-                        
             //send initial AutoStartLogs value to ensure the image list is synchronized
             WeakReferenceMessenger.Default.Send(new AutoStartLogsChangedMessage(Logs.AutoStartLogs));
 
