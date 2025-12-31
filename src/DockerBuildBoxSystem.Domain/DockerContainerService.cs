@@ -4,6 +4,7 @@ using DockerBuildBoxSystem.Contracts;
 using System;
 using System.Buffers;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Formats.Tar;
 using System.Linq;
 using System.Text;
@@ -65,6 +66,29 @@ namespace DockerBuildBoxSystem.Domain
         
         public async Task<bool> StartAsync(string containerId, CancellationToken ct = default)
         {
+            // Stop all other running containers except the selected/target one
+            try
+            {
+                var running = await ListContainersAsync(all: false, ct: ct);
+                var othersToStop = running
+                    .Where(c => !string.Equals(c.Id, containerId, StringComparison.OrdinalIgnoreCase))
+                    .Select(c => c.Id)
+                    .ToArray();
+
+                if (othersToStop.Length > 0)
+                {
+                    // best-effort: ignore failures when stopping non-target containers
+                    try
+                    {
+                        await StopAsync(othersToStop, timeout: TimeSpan.FromSeconds(10), ct: ct);
+                    }
+                    catch { }
+                }
+            }
+            catch
+            {
+                // ignore list failures; proceed to start target container
+            }
             var started = await Client.Containers.StartContainerAsync(containerId, new ContainerStartParameters(), ct);
             if (started)
             {
@@ -103,6 +127,15 @@ namespace DockerBuildBoxSystem.Domain
         public async Task StopAsync(string containerId, TimeSpan timeout, CancellationToken ct = default) =>
             await Client.Containers.StopContainerAsync(containerId,
                 new ContainerStopParameters { WaitBeforeKillSeconds = (uint)timeout.TotalSeconds }, ct);
+
+        public async Task StopAsync(IEnumerable<string> containerIds, TimeSpan timeout, CancellationToken ct = default)
+        {
+            var stopParams = new ContainerStopParameters { WaitBeforeKillSeconds = (uint)timeout.TotalSeconds };
+            foreach (var id in containerIds)
+            {
+                await Client.Containers.StopContainerAsync(id, stopParams, ct);
+            }
+        }
         public async Task RemoveAsync(string containerId, bool force = false, CancellationToken ct = default) =>
             await Client.Containers.RemoveContainerAsync(containerId,
                 new ContainerRemoveParameters { Force = force }, ct);
