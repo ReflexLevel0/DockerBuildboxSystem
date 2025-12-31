@@ -1,7 +1,10 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
 using DockerBuildBoxSystem.Contracts;
 using DockerBuildBoxSystem.ViewModels.Common;
+using CommunityToolkit.Mvvm.Messaging;
+using DockerBuildBoxSystem.ViewModels.Messages;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -10,7 +13,8 @@ using System.Threading.Tasks;
 
 namespace DockerBuildBoxSystem.ViewModels.ViewModels
 {
-    public partial class LogStreamViewModel : ViewModelBase
+    public partial class LogStreamViewModel : ViewModelBase,
+        IRecipient<SelectedContainerChangedMessage>
     {
         private readonly ILogRunner _logRunner;
         private readonly IContainerService _service;
@@ -26,6 +30,12 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
         [ObservableProperty]
         private bool _autoStartLogs = true;
+
+        partial void OnAutoStartLogsChanged(bool value)
+        {
+            //notify other view models about auto-start logs setting change
+            WeakReferenceMessenger.Default.Send(new AutoStartLogsChangedMessage(value));
+        }
 
         public bool IsLogsRunning => _logRunner.IsRunning;
         public LogStreamViewModel(ILogRunner logRunner, IContainerService service, IViewModelLogger logger)
@@ -43,7 +53,19 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                     StopLogsCommand.NotifyCanExecuteChanged();
                 });
             };
+
+            // Register to receive messages
+            WeakReferenceMessenger.Default.RegisterAll(this);
         }
+
+        /// <summary>
+        /// Handles the SelectedContainerChangedMessage.
+        /// </summary>
+        public void Receive(SelectedContainerChangedMessage message)
+        {
+            SelectedContainer = message.Value;
+        }
+
         /// <summary>
         /// Determines whether log streaming can be started.
         /// </summary>
@@ -66,7 +88,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 }
                 catch (OperationCanceledException)
                 {
-                    _logger.LogWithNewline("[logs] canceled", false, false);
+                    // Suppress cancellation message to avoid console noise
                 }
                 catch (Exception ex)
                 {
@@ -109,8 +131,10 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         {
             await _logRunner.StopAsync();
         }
+        
         public override async ValueTask DisposeAsync()
         {
+            WeakReferenceMessenger.Default.UnregisterAll(this);
             await StopLogsAsync();
             await base.DisposeAsync();
         }

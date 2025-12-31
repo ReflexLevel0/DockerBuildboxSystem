@@ -99,6 +99,9 @@ namespace DockerBuildBoxSystem.Contracts
         /// <param name="ct">Cancellation token</param>
         /// <returns>True if the engine is available; otherwise false.</returns>
         Task<bool> IsEngineAvailableAsync(CancellationToken ct = default);
+        /// Raised after a container has successfully started.
+        /// </summary>
+        event EventHandler<string>? ContainerStarted;
         /// <summary>
         /// Starts a stopped container.
         /// </summary>
