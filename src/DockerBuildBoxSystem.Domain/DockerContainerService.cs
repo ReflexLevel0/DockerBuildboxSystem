@@ -19,6 +19,8 @@ namespace DockerBuildBoxSystem.Domain
     {
         private readonly IVolumeService _volumeService;
 
+        public event EventHandler<string>? ContainerStarted;
+
         /// <summary>
         /// Initializes a new instance of the <see cref="DockerContainerService"/> class.
         /// </summary>
@@ -43,8 +45,15 @@ namespace DockerBuildBoxSystem.Domain
         }
 
         #region Container Lifecycle Logic
-        public async Task<bool> StartAsync(string containerId, CancellationToken ct = default) =>
-            await Client.Containers.StartContainerAsync(containerId, new ContainerStartParameters(), ct);
+        public async Task<bool> StartAsync(string containerId, CancellationToken ct = default)
+        {
+            var started = await Client.Containers.StartContainerAsync(containerId, new ContainerStartParameters(), ct);
+            if (started)
+            {
+                try { ContainerStarted?.Invoke(this, containerId); } catch { /* ignore listener errors */ }
+            }
+            return started;
+        }
 
         public async Task<string> CreateContainerAsync(ContainerCreationOptions options, CancellationToken ct = default)
         {

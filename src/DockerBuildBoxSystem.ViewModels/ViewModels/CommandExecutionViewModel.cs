@@ -2,6 +2,8 @@
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using DockerBuildBoxSystem.Contracts;
+using CommunityToolkit.Mvvm.Messaging;
+using CommunityToolkit.Mvvm.Messaging.Messages;
 using DockerBuildBoxSystem.ViewModels.Common;
 using DockerBuildBoxSystem.ViewModels.Messages;
 using System;
@@ -179,7 +181,34 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             //stop exec session from the previous container.
             if (_cmdRunner.IsRunning && StopExecCommand.CanExecute(null))
                 StopExecCommand.Execute(null);
+
         }
+
+        /// <summary>
+        /// Handles the SelectedContainerChangedMessage.
+        /// </summary>
+        public void Receive(SelectedContainerChangedMessage message)
+        {
+            SelectedContainer = message.Value;
+        }
+
+        /// <summary>
+        /// Handles the IsSyncRunningChangedMessage.
+        /// </summary>
+        public void Receive(IsSyncRunningChangedMessage message)
+        {
+            IsSyncRunning = message.Value;
+        }
+
+        /// <summary>
+        /// Handles the ContainerRunningMessage.
+        /// </summary>
+        public void Receive(ContainerRunningMessage message)
+        {
+            if(StartShellCommand.CanExecute(null))
+                StartShellCommand.Execute(null);
+        }
+
 
         /// <summary>
         /// Executes a command inside the selected container and streams output to the console UI.
@@ -245,6 +274,8 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         {
             WeakReferenceMessenger.Default.UnregisterAll(this);
             await StopExecAsync();
+            // Unregister message subscriptions
+            WeakReferenceMessenger.Default.UnregisterAll(this);
             await base.DisposeAsync();
         }
 

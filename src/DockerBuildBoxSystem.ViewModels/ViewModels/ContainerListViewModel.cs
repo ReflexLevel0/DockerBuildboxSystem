@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using Docker.DotNet.Models;
 using DockerBuildBoxSystem.Contracts;
+using CommunityToolkit.Mvvm.Messaging;
 using DockerBuildBoxSystem.ViewModels.Common;
 using DockerBuildBoxSystem.ViewModels.Messages;
 using System;
@@ -128,11 +129,13 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             OnSelectedImageChangedAsync(value).ConfigureAwait(false);
             WeakReferenceMessenger.Default.Send(new SelectedImageChangedMessage(value));
         }
+
         partial void OnSelectedContainerChanged(ContainerInfo? value)
         {
             //notify other view models about container selection change
             WeakReferenceMessenger.Default.Send(new SelectedContainerChangedMessage(value));
         }
+
         /// <summary>
         /// Refreshes the list of images from the image service.
         /// </summary>
@@ -499,6 +502,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         {
             if (Interlocked.Exchange(ref _disposeOnce, 1) != 0)
                 return;
+            
+            // Unregister message subscriptions
+            WeakReferenceMessenger.Default.UnregisterAll(this);
 
             WeakReferenceMessenger.Default.UnregisterAll(this);
 
