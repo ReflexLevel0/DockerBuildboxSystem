@@ -1,0 +1,216 @@
+@startuml File Sync Sequence
+!theme plain
+skinparam sequenceMessageAlign center
+
+title File Synchronization Workflow
+
+actor Developer
+participant "FileSyncViewModel" as VM
+participant "FileSyncService" as SyncSvc
+participant "FileSystemWatcher" as FSW
+participant "IIgnorePatternMatcher" as IgnoreMatcher
+participant "IContainerFileTransferService" as TransferSvc
+participant "Docker Engine" as Docker
+participant "Container" as Container
+
+== Sync Initialization ==
+
+Developer -> VM: Configure Paths\n(Host Path, Container Path)
+activate VM
+
+Developer -> VM: Start Sync
+VM -> SyncSvc: StartWatching(hostPath, containerId, containerPath)
+activate SyncSvc
+
+SyncSvc -> FSW: Create FileSystemWatcher
+activate FSW
+note right
+    Filters:
+    • FileName
+    • DirectoryName
+    • LastWrite
+    • Size
+    IncludeSubdirectories: true
+end note
+
+SyncSvc -> FSW: EnableRaisingEvents = true
+FSW --> SyncSvc: Watching...
+SyncSvc --> VM: Started
+deactivate SyncSvc
+VM --> Developer: Sync Active
+deactivate VM
+
+== File Change Detection ==
+
+Developer -> Developer: Edit file in\nhost directory
+
+FSW -> SyncSvc: OnFileChanged Event\n(path: /src/app.js)
+activate SyncSvc
+
+SyncSvc -> SyncSvc: Debounce Check\n(500ms window)
+
+alt Duplicate Event (< 500ms)
+    SyncSvc -> SyncSvc: Skip duplicate
+else New/Debounced Event
+    SyncSvc -> IgnoreMatcher: IsIgnored(path, patterns)
+    activate IgnoreMatcher
+
+    IgnoreMatcher -> IgnoreMatcher: Check against\n.gitignore patterns
+    alt File is Ignored
+        IgnoreMatcher --> SyncSvc: true (ignored)
+        SyncSvc -> SyncSvc: Skip ignored file
+    else File Not Ignored
+        IgnoreMatcher --> SyncSvc: false (process)
+        deactivate IgnoreMatcher
+
+        SyncSvc -> TransferSvc: CopyToContainerAsync(containerId, path, data)
+        activate TransferSvc
+
+        TransferSvc -> TransferSvc: Create TAR archive\n(in-memory)
+        note right
+            TAR format includes:
+            • File path
+            • File content
+            • Permissions
+            • Timestamps
+        end note
+
+        TransferSvc -> Docker: PUT /containers/{id}/archive\nExtractToPath: /data/src/
+        activate Docker
+        Docker -> Container: Extract TAR to filesystem
+        activate Container
+        Container --> Docker: File written
+        deactivate Container
+        Docker --> TransferSvc: OK
+        deactivate Docker
+
+        TransferSvc --> SyncSvc: Success
+        deactivate TransferSvc
+
+        SyncSvc -> VM: Add to Changes Log\n"Copied: app.js"
+        VM --> Developer: Display in UI
+    end
+end
+
+deactivate SyncSvc
+
+== File Deletion ==
+
+Developer -> Developer: Delete file
+
+FSW -> SyncSvc: OnFileDeleted Event\n(path: /src/old.js)
+activate SyncSvc
+
+SyncSvc -> IgnoreMatcher: IsIgnored(path, patterns)
+activate IgnoreMatcher
+IgnoreMatcher --> SyncSvc: false
+deactivate IgnoreMatcher
+
+SyncSvc -> TransferSvc: DeleteInContainerAsync(containerId, path)
+activate TransferSvc
+
+TransferSvc -> Docker: POST /containers/{id}/exec
+note right
+    Command: ["rm", "-rf", "/data/src/old.js"]
+end note
+activate Docker
+
+Docker -> Container: Execute command
+activate Container
+Container -> Container: rm -rf /data/src/old.js
+Container --> Docker: Exit code 0
+deactivate Container
+
+Docker --> TransferSvc: Exec Complete
+deactivate Docker
+
+TransferSvc --> SyncSvc: Deleted
+deactivate TransferSvc
+
+SyncSvc -> VM: Add to Changes Log\n"Deleted: old.js"
+deactivate SyncSvc
+
+== File Rename ==
+
+Developer -> Developer: Rename file
+
+FSW -> SyncSvc: OnFileRenamed Event\n(old: test.js, new: test2.js)
+activate SyncSvc
+
+SyncSvc -> TransferSvc: RenameInContainerAsync(containerId, oldPath, newPath)
+activate TransferSvc
+
+TransferSvc -> Docker: POST /containers/{id}/exec
+note right
+    Command: ["mv", "/data/src/test.js", "/data/src/test2.js"]
+end note
+activate Docker
+
+Docker -> Container: Execute command
+activate Container
+Container -> Container: mv test.js test2.js
+Container --> Docker: Exit code 0
+deactivate Container
+
+Docker --> TransferSvc: Renamed
+deactivate Docker
+TransferSvc --> SyncSvc: Success
+deactivate TransferSvc
+
+SyncSvc -> VM: Add to Changes Log\n"Renamed: test.js → test2.js"
+deactivate SyncSvc
+
+== Force Sync (Full Resynchronization) ==
+
+Developer -> VM: Click "Force Sync"
+activate VM
+
+VM -> SyncSvc: ForceSyncAsync()
+activate SyncSvc
+
+SyncSvc -> SyncSvc: Create temp directory\nCopy all non-ignored files
+
+SyncSvc -> TransferSvc: CleanContainerDirectoryAsync(containerId, path, exclusions)
+activate TransferSvc
+note right
+    Exclusions: ["build", "node_modules", etc.]
+end note
+
+TransferSvc -> Docker: Execute rm -rf with exclusions
+Docker -> Container: Clean directory
+Container --> Docker: Cleaned
+Docker --> TransferSvc: OK
+deactivate TransferSvc
+
+SyncSvc -> TransferSvc: CopyDirectoryToContainerAsync(containerId, tempDir, containerPath)
+activate TransferSvc
+
+TransferSvc -> TransferSvc: Create TAR of entire directory
+TransferSvc -> Docker: PUT /containers/{id}/archive\n(Full directory TAR)
+Docker -> Container: Extract complete directory
+Container --> Docker: Complete
+Docker --> TransferSvc: Success
+deactivate TransferSvc
+
+SyncSvc -> SyncSvc: Delete temp directory
+SyncSvc --> VM: Force Sync Complete
+deactivate SyncSvc
+
+VM --> Developer: "Full sync completed"
+deactivate VM
+
+== Stop Sync ==
+
+Developer -> VM: Stop Sync
+activate VM
+VM -> SyncSvc: StopWatching()
+activate SyncSvc
+SyncSvc -> FSW: EnableRaisingEvents = false
+SyncSvc -> FSW: Dispose()
+destroy FSW
+SyncSvc --> VM: Stopped
+deactivate SyncSvc
+VM --> Developer: Sync Inactive
+deactivate VM
+
+@enduml

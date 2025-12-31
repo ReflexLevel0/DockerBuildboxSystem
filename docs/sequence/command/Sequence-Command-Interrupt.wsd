@@ -1,0 +1,50 @@
+@startuml Command Interrupt
+!theme plain
+skinparam sequenceMessageAlign center
+
+title Interrupt Running Command (Ctrl+C)
+
+actor User
+participant "CommandExecutionViewModel" as VM
+participant "CommandRunner" as Runner
+participant "Docker Engine" as Docker
+participant "Container" as Container
+
+note over User,Container
+    Interactive shell session is running
+    with an active command executing
+end note
+
+User -> VM: Click Interrupt / Ctrl+C
+activate VM
+
+VM -> Runner: InterruptAsync()
+activate Runner
+
+Runner -> Runner: Write ETX character (0x03)
+Runner -> Docker: Write \x03 to stdin
+activate Docker
+
+Docker -> Container: SIGINT signal
+activate Container
+
+Container -> Container: Interrupt current command
+
+Container --> Docker: ^C\n[process terminated]
+deactivate Container
+
+Docker --> Runner: Output
+deactivate Docker
+
+Runner --> VM: Display interrupt
+deactivate Runner
+
+VM --> User: Command interrupted
+deactivate VM
+
+note over Container
+    Shell prompt returns,
+    ready for next command
+end note
+
+@enduml

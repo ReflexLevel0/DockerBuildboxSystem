@@ -1,0 +1,191 @@
+@startuml Service Implementations
+!theme plain
+left to right direction
+skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+
+title Service Implementations - Interface to Implementation Mapping
+
+' ====================================================================
+' CONTRACTS LAYER (INTERFACES)
+' ====================================================================
+package "Contracts Layer" <<contracts>> #Honeydew {
+    package "Tier 1: Docker Operations" {
+        interface IContainerService
+        interface IImageService
+        interface IVolumeService
+    }
+
+    package "Tier 2: Business Logic" {
+        interface IContainerFileTransferService
+        interface IFileSyncService
+        interface ICommandRunner
+        interface ILogRunner
+    }
+
+    package "Tier 3: Configuration & Utilities" {
+        interface ISettingsService
+        interface IEnvironmentService
+        interface ISyncIgnoreService
+    }
+}
+
+' ====================================================================
+' INFRASTRUCTURE LAYER (IMPLEMENTATIONS)
+' ====================================================================
+package "Infrastructure Layer" <<infrastructure>> #LemonChiffon {
+    package "Tier 1: Core Docker Services" #AliceBlue {
+        class DockerContainerService {
+            + ListContainersAsync()
+            + CreateContainerAsync()
+            + StartAsync()
+            + StopAsync()
+            + InspectAsync()
+            + StreamLogsAsync()
+            + CreateExecAsync()
+            + StreamExecAsync()
+        }
+
+        class DockerImageService {
+            + ListImagesAsync()
+            + PullImageAsync()
+            + RemoveImageAsync()
+            + InspectImageAsync()
+        }
+
+        class DockerVolumeService {
+            + ListVolumesAsync()
+            + CreateVolumeAsync()
+            + GetSharedVolumeAsync()
+            + RemoveVolumeAsync()
+        }
+    }
+
+    package "Tier 2: Business Services" #MistyRose {
+        class ContainerFileTransferService {
+            + CopyToContainerAsync()
+            + CopyDirectoryToContainerAsync()
+            + DeleteInContainerAsync()
+            + RenameInContainerAsync()
+            + CleanContainerDirectoryAsync()
+        }
+
+        class FileSyncService {
+            + StartWatching()
+            + StopWatching()
+            + ForceSyncAsync()
+        }
+
+        class CommandRunner {
+            + RunAsync()
+            + ExecuteAndLog()
+            + StreamExecAsync()
+            + InterruptAsync()
+            + StopAsync()
+            + TryWriteToInteractiveAsync()
+        }
+
+        class LogRunner {
+            + RunAsync()
+            + StopAsync()
+            + IsRunning
+        }
+    }
+
+    package "Tier 3: Supporting Services" #Lavender {
+        class SettingsService {
+            + LoadSettings()
+            + SaveSettings()
+            + GetSetting<T>()
+            + SetSetting<T>()
+        }
+
+        class EnvironmentService {
+            + GetEnvironmentVariables()
+            + SetEnvironmentVariable()
+            + RemoveEnvironmentVariable()
+            + ReloadEnvironmentVariables()
+        }
+
+        class SyncIgnoreService {
+            + LoadIgnorePatterns()
+            + GetIgnorePatterns()
+            + AddIgnorePattern()
+            + RemoveIgnorePattern()
+        }
+    }
+}
+
+' ====================================================================
+' IMPLEMENTATION RELATIONSHIPS (ONLY)
+' ====================================================================
+
+' Tier 1 implementations
+IContainerService <|.. DockerContainerService : implements
+IImageService <|.. DockerImageService : implements
+IVolumeService <|.. DockerVolumeService : implements
+
+' Tier 2 implementations
+IContainerFileTransferService <|.. ContainerFileTransferService : implements
+IFileSyncService <|.. FileSyncService : implements
+ICommandRunner <|.. CommandRunner : implements
+ILogRunner <|.. LogRunner : implements
+
+' Tier 3 implementations
+ISettingsService <|.. SettingsService : implements
+IEnvironmentService <|.. EnvironmentService : implements
+ISyncIgnoreService <|.. SyncIgnoreService : implements
+
+' ====================================================================
+' NOTES
+' ====================================================================
+
+' note right of "Tier 1: Docker Operations"
+'     <b>Low-Level Docker API</b>
+'     Direct wrappers around Docker.DotNet
+'     Minimal business logic
+' end note
+
+' note right of "Tier 2: Business Logic"
+'     <b>High-Level Operations</b>
+'     Workflow orchestration
+'     External integrations
+' end note
+
+' note right of "Tier 3: Configuration & Utilities"
+'     <b>Supporting Services</b>
+'     Configuration management
+'     Cross-cutting concerns
+' end note
+
+' note bottom of "Infrastructure Layer"
+'     <b>Implementation Pattern:</b>
+'     All services implement their corresponding
+'     interface using constructor injection.
+
+'     Services are registered in DI container
+'     at application startup (App.xaml.cs)
+' end note
+
+' ====================================================================
+' LEGEND
+' ====================================================================
+legend bottom left
+    <b>Service Implementation Mapping</b>
+
+    <b>Purpose:</b>
+    Shows which concrete classes implement which interfaces
+
+    <b>Key Principles:</b>
+    • One implementation per interface (1:1 mapping)
+    • Implementations in Infrastructure Layer
+    • Interfaces in Contracts Layer
+    • All use constructor-based dependency injection
+
+    <b>Benefits:</b>
+    • Clear separation of contract and implementation
+    • Easy to swap implementations for testing
+    • Supports dependency inversion principle
+end legend
+
+@enduml

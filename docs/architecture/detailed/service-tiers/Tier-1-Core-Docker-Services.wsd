@@ -1,0 +1,161 @@
+@startuml Core Docker Services
+!theme plain
+skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+
+title Core Docker Services - Tier 1 (Docker API Wrappers)
+
+' ====================================================================
+' EXTERNAL DEPENDENCIES
+' ====================================================================
+package "External Dependencies" <<external>> #F0F0F0 {
+    interface IDockerClient <<Docker.DotNet>> {
+        + Containers
+        + Images
+        + Volumes
+        + Exec
+        + System
+    }
+}
+
+' ====================================================================
+' CONTRACTS
+' ====================================================================
+package "Contracts Layer" <<contracts>> #Honeydew {
+    interface IContainerService {
+        + ListContainersAsync()
+        + CreateContainerAsync()
+        + StartAsync()
+        + StopAsync()
+        + InspectAsync()
+        + RemoveAsync()
+        + StreamLogsAsync()
+        + CreateExecAsync()
+        + StreamExecAsync()
+    }
+
+    interface IImageService {
+        + ListImagesAsync()
+        + PullImageAsync()
+        + RemoveImageAsync()
+        + InspectImageAsync()
+    }
+
+    interface IVolumeService {
+        + ListVolumesAsync()
+        + CreateVolumeAsync()
+        + GetSharedVolumeAsync()
+        + RemoveVolumeAsync()
+        + InspectVolumeAsync()
+    }
+}
+
+' ====================================================================
+' IMPLEMENTATIONS
+' ====================================================================
+package "Core Docker Services" <<infrastructure>> #AliceBlue {
+    abstract DockerServiceBase {
+        # IDockerClient _client
+        # DockerServiceBase(client)
+        + {static} GetDefaultDockerUri()
+    }
+
+    class DockerContainerService {
+        - IVolumeService _volumeService
+        + DockerContainerService(client, volumeService)
+        + ListContainersAsync()
+        + CreateContainerAsync()
+        + StartAsync()
+        + StopAsync()
+        + RestartAsync()
+        + KillAsync()
+        + InspectAsync()
+        + RemoveAsync()
+        + StreamLogsAsync()
+        + CreateExecAsync()
+        + StartExecAsync()
+        + StreamExecAsync()
+    }
+
+    class DockerImageService {
+        + DockerImageService(client)
+        + ListImagesAsync()
+        + PullImageAsync()
+        + RemoveImageAsync()
+        + InspectImageAsync()
+        + TagImageAsync()
+    }
+
+    class DockerVolumeService {
+        + DockerVolumeService(client)
+        + ListVolumesAsync()
+        + CreateVolumeAsync()
+        + GetSharedVolumeAsync()
+        + RemoveVolumeAsync()
+        + InspectVolumeAsync()
+    }
+
+    DockerServiceBase <|-- DockerContainerService
+    DockerServiceBase <|-- DockerImageService
+    DockerServiceBase <|-- DockerVolumeService
+}
+
+' ====================================================================
+' RELATIONSHIPS
+' ====================================================================
+DockerServiceBase --> IDockerClient : uses
+DockerContainerService ..|> IContainerService : implements
+DockerImageService ..|> IImageService : implements
+DockerVolumeService ..|> IVolumeService : implements
+
+DockerContainerService --> IVolumeService : uses\n(auto-mount shared volume)
+
+' ====================================================================
+' NOTES
+' ====================================================================
+note right of DockerServiceBase
+    <b>Base Class Responsibilities:</b>
+    • Manages IDockerClient instance
+    • Provides Docker URI resolution
+    • Shared across all Docker services
+
+    <b>Platform-specific URIs:</b>
+    Windows: npipe://./pipe/docker_engine
+    Linux/Mac: unix:///var/run/docker.sock
+end note
+
+note right of DockerContainerService
+    <b>Key Features:</b>
+    • Auto-creates shared volume on container creation
+    • Supports TTY and interactive modes
+    • Streaming logs with multiplexed output
+    • Exec sessions with bidirectional I/O
+end note
+
+note bottom of IDockerClient
+    <b>Docker.DotNet Library</b>
+    Official Docker API client for .NET
+    Provides low-level Docker Engine API access
+end note
+
+' ====================================================================
+' LEGEND
+' ====================================================================
+legend bottom left
+    <b>Tier 1: Core Docker Services</b>
+
+    <b>Purpose:</b>
+    Low-level wrappers around Docker.DotNet API
+
+    <b>Responsibilities:</b>
+    • Direct Docker Engine communication
+    • API request/response handling
+    • Error translation to domain exceptions
+
+    <b>Design Patterns:</b>
+    • Template Method: DockerServiceBase provides common setup
+    • Strategy: Separate service per resource type (Container/Image/Volume)
+    • Dependency Injection: All services use constructor injection
+end legend
+
+@enduml

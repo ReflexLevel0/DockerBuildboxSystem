@@ -1,0 +1,71 @@
+@startuml Single Command Execution
+!theme plain
+skinparam sequenceMessageAlign center
+
+title Single Command Execution (Non-Interactive)
+
+actor User
+participant "CommandExecutionViewModel" as VM
+participant "CommandRunner" as Runner
+participant "IContainerService" as ContainerSvc
+participant "Docker Engine" as Docker
+participant "Container" as Container
+
+== Execute Single Command ==
+
+User -> VM: Enter command\n"gcc main.c -o main"
+activate VM
+
+VM -> VM: RouteInputAsync(input)
+VM -> VM: Resolve variables
+VM -> VM: Parse command to argv
+
+VM -> Runner: ExecuteAndLog(containerId, ["gcc", "main.c", "-o", "main"])
+activate Runner
+
+Runner -> ContainerSvc: CreateExecAsync(id, params)
+activate ContainerSvc
+note right
+    Non-interactive:
+    • Tty: false
+    • AttachStdin: false
+end note
+
+ContainerSvc -> Docker: POST /containers/{id}/exec
+Docker --> ContainerSvc: Exec ID
+deactivate ContainerSvc
+
+Runner -> ContainerSvc: StartExecAsync(execId)
+activate ContainerSvc
+
+ContainerSvc -> Docker: POST /exec/{id}/start
+activate Docker
+
+Docker -> Container: Execute gcc command
+activate Container
+
+Container -> Container: gcc main.c -o main
+
+alt Success
+    Container --> Docker: stdout: compilation output\nExit Code: 0
+    deactivate Container
+    Docker --> ContainerSvc: Output + Exit Code 0
+    deactivate ContainerSvc
+    deactivate Docker
+
+    ContainerSvc --> Runner: Success with output
+    deactivate Runner
+
+    Runner --> VM: Command output
+    VM --> User: Display: "Compilation successful"
+    deactivate VM
+
+else Compilation Error
+    Container --> Docker: stderr: error messages\nExit Code: 1
+    Docker --> ContainerSvc: Error output + Exit Code 1
+    ContainerSvc --> Runner: Error output
+    Runner --> VM: Error output
+    VM --> User: Display errors in red
+end
+
+@enduml

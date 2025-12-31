@@ -1,0 +1,156 @@
+@startuml Docker Complete Architecture
+!theme plain
+top to bottom direction
+skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+
+title Complete Docker Logic Architecture - All Layers
+
+' ====================================================================
+' EXTERNAL DEPENDENCIES
+' ====================================================================
+package "External Dependencies" <<external>> #F0F0F0 {
+    interface IDockerClient <<Docker.DotNet>>
+    class FileSystemWatcher <<.NET>>
+    class Channel <<.NET>>
+    class "System.Text.Json" as SystemTextJson <<.NET>>
+}
+
+' ====================================================================
+' CONTRACTS LAYER
+' ====================================================================
+package "Contracts Layer" <<contracts>> #Honeydew {
+
+    package "Docker Operations" {
+        interface IContainerService
+        interface IImageService
+        interface IVolumeService
+    }
+
+    package "Business Logic" {
+        interface IContainerFileTransferService
+        interface IFileSyncService
+        interface ICommandRunner
+        interface ILogRunner
+    }
+
+    package "Configuration & Utilities" {
+        interface IEnvironmentService
+        interface ISettingsService
+        interface ISyncIgnoreService
+        interface IExternalProcessService
+        interface IUserControlService
+        interface IIgnorePatternMatcher
+    }
+}
+
+' ====================================================================
+' DOMAIN LAYER
+' ====================================================================
+package "Domain Layer (Infrastructure)" <<infrastructure>> #LemonChiffon {
+
+    ' Core Docker Services
+    package "Core Docker Services" #AliceBlue {
+        abstract DockerServiceBase {
+            # IDockerClient
+            + GetDefaultDockerUri()
+        }
+
+        class DockerContainerService
+        class DockerImageService
+        class DockerVolumeService
+
+        DockerServiceBase <|-- DockerContainerService
+        DockerServiceBase <|-- DockerImageService
+        DockerServiceBase <|-- DockerVolumeService
+    }
+
+    ' Business Services
+    package "Business Services" #MistyRose {
+        class ContainerFileTransferService
+        class FileSyncService
+        class CommandRunner
+        class LogRunner
+    }
+
+    ' Supporting Services
+    package "Supporting Services" #Lavender {
+        class EnvironmentService
+        class SettingsService
+        class SyncIgnoreService
+        class ExternalProcessService
+        class UserControlService
+        class IgnorePatternMatcher
+        class UserControlConverter
+    }
+}
+
+' ====================================================================
+' IMPLEMENTATION RELATIONSHIPS
+' ====================================================================
+DockerContainerService ..|> IContainerService
+DockerImageService ..|> IImageService
+DockerVolumeService ..|> IVolumeService
+
+ContainerFileTransferService ..|> IContainerFileTransferService
+FileSyncService ..|> IFileSyncService
+CommandRunner ..|> ICommandRunner
+LogRunner ..|> ILogRunner
+
+EnvironmentService ..|> IEnvironmentService
+SettingsService ..|> ISettingsService
+SyncIgnoreService ..|> ISyncIgnoreService
+ExternalProcessService ..|> IExternalProcessService
+UserControlService ..|> IUserControlService
+IgnorePatternMatcher ..|> IIgnorePatternMatcher
+
+' ====================================================================
+' DEPENDENCIES
+' ====================================================================
+
+' Core dependencies
+DockerServiceBase --> IDockerClient : uses
+DockerContainerService --> IVolumeService : auto-mounts
+
+' Business service dependencies
+ContainerFileTransferService --> IContainerService
+FileSyncService --> IContainerFileTransferService
+FileSyncService --> IIgnorePatternMatcher
+FileSyncService --> FileSystemWatcher
+CommandRunner --> IContainerService
+CommandRunner --> Channel
+LogRunner --> IContainerService
+LogRunner --> Channel
+
+' Supporting service dependencies
+EnvironmentService --> IExternalProcessService
+SyncIgnoreService --> IExternalProcessService
+UserControlService --> UserControlConverter
+SettingsService --> SystemTextJson
+
+' ====================================================================
+' LAYER ORGANIZATION
+' ====================================================================
+"External Dependencies" -[hidden]down-> "Contracts Layer"
+"Contracts Layer" -[hidden]down-> "Domain Layer (Infrastructure)"
+
+' ====================================================================
+' LEGEND
+' ====================================================================
+legend bottom left
+    <b>Architecture Tiers:</b>
+    • <b>Tier 1 (Core):</b> Low-level Docker API wrappers
+    • <b>Tier 2 (Business):</b> High-level operations & orchestration
+    • <b>Tier 3 (Supporting):</b> Configuration & utility services
+
+    <b>Key Patterns:</b>
+    • Strategy Pattern: Separate services per Docker resource type
+    • Adapter Pattern: ContainerFileTransferService wraps errors
+    • Observer Pattern: FileSystemWatcher for file changes
+    • Channel Pattern: Async streaming for logs/exec
+
+    <b>Data Flow:</b>
+    UI → Business Services → Core Services → Docker.DotNet → Docker Engine
+end legend
+
+@enduml

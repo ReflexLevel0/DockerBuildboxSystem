@@ -1,0 +1,143 @@
+@startuml Container Lifecycle Sequence
+!theme plain
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 150
+
+title Container Lifecycle - Image Selection to Container Running
+
+actor User
+participant "ContainerListViewModel" as VM
+participant "IContainerService" as ContainerSvc
+participant "IVolumeService" as VolumeSvc
+participant "Docker Engine" as Docker
+
+== Image Selection ==
+
+User -> VM: Select Image
+activate VM
+
+VM -> VM: OnSelectedImageChangedAsync()
+
+alt Previous Container Running
+    VM -> ContainerSvc: StopContainerByIdAsync(oldContainerId)
+    activate ContainerSvc
+    ContainerSvc -> Docker: StopAsync(id, timeout: 10s)
+    Docker --> ContainerSvc: OK
+    deactivate ContainerSvc
+end
+
+== Container Discovery ==
+
+VM -> ContainerSvc: ListContainersAsync(all: true)
+activate ContainerSvc
+ContainerSvc -> Docker: GET /containers/json?all=1
+Docker --> ContainerSvc: Container List
+deactivate ContainerSvc
+
+alt Container Exists for Image
+    VM -> VM: Found existing container
+    VM -> ContainerSvc: InspectAsync(containerId)
+    activate ContainerSvc
+    ContainerSvc -> Docker: GET /containers/{id}/json
+    Docker --> ContainerSvc: Container Details
+    deactivate ContainerSvc
+else No Container Found
+    VM -> VM: Need to create new container
+
+    == Container Creation ==
+
+    VM -> VolumeSvc: GetSharedVolumeAsync(createIfNotExists: true)
+    activate VolumeSvc
+
+    VolumeSvc -> Docker: GET /volumes/{name}
+    alt Volume Doesn't Exist
+        Docker --> VolumeSvc: 404 Not Found
+        VolumeSvc -> Docker: POST /volumes/create
+        Docker --> VolumeSvc: Volume Created
+    else Volume Exists
+        Docker --> VolumeSvc: Volume Info
+    end
+
+    deactivate VolumeSvc
+
+    VM -> ContainerSvc: CreateContainerAsync(options)
+    activate ContainerSvc
+    note right
+        Options include:
+        • Image name
+        • Volume mount: /data/
+        • TTY: true
+        • Stdin attached
+        • Stdout/Stderr attached
+    end note
+
+    ContainerSvc -> Docker: POST /containers/create
+    Docker --> ContainerSvc: Container ID
+    deactivate ContainerSvc
+
+    VM -> ContainerSvc: InspectAsync(containerId)
+    activate ContainerSvc
+    ContainerSvc -> Docker: GET /containers/{id}/json
+    Docker --> ContainerSvc: Container Details
+    deactivate ContainerSvc
+end
+
+== Container Start ==
+
+VM -> ContainerSvc: StartAsync(containerId)
+activate ContainerSvc
+ContainerSvc -> Docker: POST /containers/{id}/start
+Docker --> ContainerSvc: Started
+deactivate ContainerSvc
+
+VM -> ContainerSvc: InspectAsync(containerId)
+activate ContainerSvc
+ContainerSvc -> Docker: GET /containers/{id}/json
+Docker --> ContainerSvc: Updated State (Running)
+deactivate ContainerSvc
+
+VM -> VM: Update UI\nContainer is Running
+deactivate VM
+
+User <-- VM: Container Ready
+
+== Background Monitoring ==
+
+loop Periodic Refresh
+    VM -> VM: RefreshSelectedContainerAsync()
+    activate VM
+    VM -> ContainerSvc: InspectAsync(containerId)
+    activate ContainerSvc
+    ContainerSvc -> Docker: GET /containers/{id}/json
+
+    alt Container Stopped Externally
+        Docker --> ContainerSvc: State: Exited
+        ContainerSvc --> VM: Not Running
+        VM -> VM: Clear Selection\n(External Stop Detected)
+    else Container Still Running
+        Docker --> ContainerSvc: State: Running
+        ContainerSvc --> VM: Running
+    end
+
+    deactivate ContainerSvc
+    deactivate VM
+end
+
+== Application Exit ==
+
+User -> VM: Close Application
+activate VM
+
+VM -> VM: Dispose()
+
+loop For Each Started Container
+    VM -> ContainerSvc: StopContainerByIdAsync(id)
+    activate ContainerSvc
+    ContainerSvc -> Docker: POST /containers/{id}/stop
+    Docker --> ContainerSvc: Stopped
+    deactivate ContainerSvc
+end
+
+deactivate VM
+
+@enduml

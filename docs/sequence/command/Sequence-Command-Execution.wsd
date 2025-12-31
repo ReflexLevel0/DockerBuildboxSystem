@@ -1,0 +1,269 @@
+@startuml Command Execution Sequence
+!theme plain
+skinparam sequenceMessageAlign center
+
+title Command Execution - Interactive and Non-Interactive
+
+actor User
+participant "CommandExecutionViewModel" as VM
+participant "CommandRunner" as Runner
+participant "IContainerService" as ContainerSvc
+participant "Docker Engine" as Docker
+participant "Container Process" as Container
+
+== Interactive Shell Session ==
+
+User -> VM: Click "Start Shell"
+activate VM
+
+VM -> Runner: RunAsync(containerId, ["/bin/bash", "-i"])
+activate Runner
+
+Runner -> ContainerSvc: CreateExecAsync(id, params)
+activate ContainerSvc
+note right
+    Exec Parameters:
+    • Cmd: ["/bin/bash", "-i"]
+    • AttachStdin: true
+    • AttachStdout: true
+    • AttachStderr: true
+    • Tty: true
+end note
+
+ContainerSvc -> Docker: POST /containers/{id}/exec
+Docker --> ContainerSvc: Exec ID
+deactivate ContainerSvc
+
+Runner -> ContainerSvc: StreamExecAsync(execId)
+activate ContainerSvc
+
+ContainerSvc -> Docker: POST /exec/{id}/start\nDetach: false
+activate Docker
+
+Docker -> Container: Spawn /bin/bash -i
+activate Container
+
+Docker --> ContainerSvc: Multiplexed Stream\n+ Channels
+note right
+    Returns:
+    • ChannelReader<output>
+    • ChannelWriter<input>
+    • Task<exitCode>
+    Stream remains open for
+    interactive session
+end note
+
+ContainerSvc --> Runner: Stream Channels
+deactivate ContainerSvc
+
+note over Docker, Container
+    Docker and Container remain active
+    throughout the interactive session
+end note
+
+Runner -> Runner: Start Output Reader Task
+Runner -> Runner: Start Input Writer Task
+
+Runner --> VM: Session Active
+deactivate Runner
+
+VM --> User: Shell Prompt Displayed
+deactivate VM
+
+== User Input & Output ==
+
+loop Interactive Session
+
+    User -> VM: Type command\n"ls -la"
+    activate VM
+
+    VM -> Runner: TryWriteToInteractiveAsync("ls -la\\n")
+    activate Runner
+
+    Runner -> Runner: Normalize input\n(\\r\\n → \\r for TTY)
+    Runner -> Runner: Write to Input Channel
+    Runner -> Docker: Write to stdin stream
+    Docker -> Container: ls -la
+    deactivate Runner
+
+    Container -> Container: Execute ls command
+
+    Container --> Docker: stdout data\n(file listing)
+    Docker --> Runner: Read from Output Channel
+    activate Runner
+
+    Runner -> Runner: Process output\n(TTY: raw chunks)
+    note right
+        For TTY mode:
+        • No line buffering
+        • Send chunks immediately
+        • Preserve ANSI codes
+    end note
+
+    Runner --> VM: Output lines\n(IsStdErr: false, text)
+    deactivate Runner
+
+    VM --> User: Display output in console
+    deactivate VM
+
+    Container --> Docker: Shell prompt
+    Docker --> Runner: Prompt text
+    activate Runner
+    Runner --> VM: Prompt
+    deactivate Runner
+    VM --> User: Show prompt
+
+end
+
+== Interrupt Command (Ctrl+C) ==
+
+User -> VM: Click Interrupt / Ctrl+C
+activate VM
+
+VM -> Runner: InterruptAsync()
+activate Runner
+
+Runner -> Runner: Write ETX character (0x03)
+Runner -> Docker: Write \x03 to stdin
+
+Docker -> Container: SIGINT signal
+Container -> Container: Interrupt current command
+
+Container --> Docker: ^C\n[process terminated]
+Docker --> Runner: Output
+Runner --> VM: Display interrupt
+deactivate Runner
+VM --> User: Command interrupted
+deactivate VM
+
+== Non-Interactive Single Command ==
+
+User -> VM: Enter command\n"gcc main.c -o main"
+activate VM
+
+VM -> VM: RouteInputAsync(input)
+VM -> VM: Resolve variables
+VM -> VM: Parse command to argv
+
+VM -> Runner: ExecuteAndLog(containerId, ["gcc", "main.c", "-o", "main"])
+activate Runner
+
+Runner -> ContainerSvc: CreateExecAsync(id, params)
+activate ContainerSvc
+note right
+    Non-interactive:
+    • Tty: false
+    • AttachStdin: false
+end note
+
+ContainerSvc -> Docker: POST /containers/{id}/exec
+Docker --> ContainerSvc: Exec ID
+deactivate ContainerSvc
+
+Runner -> ContainerSvc: StartExecAsync(execId)
+activate ContainerSvc
+
+ContainerSvc -> Docker: POST /exec/{id}/start
+
+Docker -> Container: Execute gcc command
+
+Container -> Container: gcc main.c -o main
+
+alt Success
+    Container --> Docker: stdout: compilation output
+    Docker --> ContainerSvc: Output + Exit Code 0
+
+    ContainerSvc --> Runner: Success with output
+
+    Runner --> VM: Command output
+
+    VM --> User: Display: "Compilation successful"
+
+else Compilation Error
+    Container --> Docker: stderr: error messages\nExit Code: 1
+    deactivate Container
+
+    Docker --> ContainerSvc: Error output + Exit Code 1
+    deactivate Docker
+
+    ContainerSvc --> Runner: Error output
+    deactivate ContainerSvc
+
+    Runner --> VM: Error output
+    deactivate Runner
+
+    VM --> User: Display errors in red
+    deactivate VM
+end
+
+== User-Defined Button Command ==
+
+User -> VM: Click Custom Button\n"Run Tests"
+activate VM
+
+note right of VM
+    Button configured with:
+    Command: "npm test"
+    Variables: ${SOURCE_PATH}
+end note
+
+VM -> VM: RunUserCommandAsync(command)
+VM -> VM: Resolve variables\nReplace ${SOURCE_PATH}
+
+VM -> Runner: ExecuteAndLog(containerId, ["npm", "test"])
+activate Runner
+
+Runner -> ContainerSvc: CreateExecAsync(id, params)
+activate ContainerSvc
+
+ContainerSvc -> Docker: Create exec
+activate Docker
+
+Docker -> Container: npm test
+activate Container
+
+Container -> Container: Run test suite
+
+Container --> Docker: Test output + results
+deactivate Container
+
+Docker --> ContainerSvc: Complete
+deactivate Docker
+
+ContainerSvc --> Runner: Test results
+deactivate ContainerSvc
+
+Runner --> VM: Test results
+deactivate Runner
+
+VM --> User: Display test output
+deactivate VM
+
+== Session Termination ==
+
+User -> VM: Stop Command / Exit Shell
+activate VM
+
+VM -> Runner: StopAsync()
+activate Runner
+
+Runner -> Runner: Cancel all tokens
+Runner -> Runner: Close input channel
+Runner -> Runner: Dispose streams
+
+Runner -> Docker: Stream closed
+Docker -> Container: EOF on stdin
+Container -> Container: Bash exits
+Container --> Docker: Exit code: 0
+deactivate Container
+
+Docker --> Runner: Exit code
+deactivate Docker
+
+Runner --> VM: Session ended\nExit code: 0
+deactivate Runner
+
+VM --> User: "Session terminated (exit code: 0)"
+deactivate VM
+
+@enduml

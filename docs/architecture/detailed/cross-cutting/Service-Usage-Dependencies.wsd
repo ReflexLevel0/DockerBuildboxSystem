@@ -1,0 +1,170 @@
+@startuml Service Usage Dependencies
+!theme plain
+left to right direction
+skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+
+title Service Usage Dependencies - "Uses" Relationships & Data Flow
+
+' ====================================================================
+' PRESENTATION LAYER
+' ====================================================================
+package "Presentation Layer" <<presentation>> #AliceBlue {
+    [ContainerListViewModel] as ContainerVM
+    [FileSyncViewModel] as FileSyncVM
+    [CommandExecutionViewModel] as CommandVM
+    [LogStreamViewModel] as LogVM
+}
+
+' ====================================================================
+' SERVICE INTERFACES
+' ====================================================================
+package "Service Interfaces" <<contracts>> #Honeydew {
+    ' Tier 1
+    interface IContainerService
+    interface IImageService
+    interface IVolumeService
+
+    ' Tier 2
+    interface IContainerFileTransferService
+    interface IFileSyncService
+    interface ICommandRunner
+    interface ILogRunner
+
+    ' Tier 3
+    interface ISettingsService
+    interface IEnvironmentService
+    interface ISyncIgnoreService
+}
+
+' ====================================================================
+' SERVICE IMPLEMENTATIONS
+' ====================================================================
+package "Service Implementations" <<infrastructure>> #LemonChiffon {
+    ' Tier 1
+    [DockerContainerService] as ContainerSvc
+    [DockerImageService] as ImageSvc
+    [DockerVolumeService] as VolumeSvc
+
+    ' Tier 2
+    [ContainerFileTransferService] as TransferSvc
+    [FileSyncService] as SyncSvc
+    [CommandRunner] as CmdRunner
+    [LogRunner] as LogRunner
+
+    ' Tier 3
+    [SettingsService] as SettingsSvc
+    [EnvironmentService] as EnvSvc
+    [SyncIgnoreService] as IgnoreSvc
+}
+
+' ====================================================================
+' EXTERNAL DEPENDENCIES
+' ====================================================================
+cloud "External Systems" <<external>> #F0F0F0 {
+    [Docker Engine] as DockerEngine
+    [FileSystemWatcher] as FSW
+    [System.Text.Json] as Json
+}
+
+' ====================================================================
+' PRESENTATION → INTERFACES (ViewModels use service interfaces)
+' ====================================================================
+ContainerVM --> IContainerService : uses
+ContainerVM --> IImageService : uses
+ContainerVM --> IVolumeService : uses
+
+FileSyncVM --> IFileSyncService : uses
+FileSyncVM --> ISettingsService : uses
+
+CommandVM --> ICommandRunner : uses
+CommandVM --> IEnvironmentService : uses
+
+LogVM --> ILogRunner : uses
+
+' ====================================================================
+' TIER 1 DEPENDENCIES (Core Docker Services)
+' ====================================================================
+ContainerSvc --> DockerEngine : Docker API calls
+ImageSvc --> DockerEngine : Docker API calls
+VolumeSvc --> DockerEngine : Docker API calls
+
+ContainerSvc ..> IVolumeService : uses\n(auto-mount volume)
+
+' ====================================================================
+' TIER 2 DEPENDENCIES (Business Services)
+' ====================================================================
+TransferSvc --> IContainerService : uses\n(exec commands)
+
+SyncSvc --> IContainerFileTransferService : uses\n(file operations)
+SyncSvc --> FSW : monitors\nfile changes
+
+CmdRunner --> IContainerService : uses\n(exec & streaming)
+
+LogRunner --> IContainerService : uses\n(log streaming)
+
+' ====================================================================
+' TIER 3 DEPENDENCIES (Supporting Services)
+' ====================================================================
+SettingsSvc --> Json : serialization
+
+EnvSvc ..> ISyncIgnoreService : uses\n(load patterns)
+
+' ====================================================================
+' NOTES
+' ====================================================================
+
+note top of "Presentation Layer"
+    <b>ViewModels depend only on interfaces</b>
+    • No direct reference to implementations
+    • Enables testing with mocks
+    • Supports dependency injection
+end note
+
+note left of "External Systems"
+    <b>External Dependencies</b>
+    • Docker Engine: Container runtime
+    • FileSystemWatcher: .NET file monitoring
+    • System.Text.Json: Settings persistence
+end note
+
+note bottom of "Service Implementations"
+    <b>Service Inter-Dependencies</b>
+    Services use interfaces of other services
+    within same tier or lower tiers only.
+
+    <b>Dependency Rules:</b>
+    • Tier 2 can use Tier 1 interfaces
+    • Tier 3 can use Tier 1 & 2 interfaces
+    • No upward dependencies
+end note
+
+' ====================================================================
+' LEGEND
+' ====================================================================
+legend bottom right
+    <b>Usage Dependencies ("uses" relationships)</b>
+
+    <b>Arrow Types:</b>
+    ──> Solid: Direct usage/dependency
+    ··> Dashed: Optional or conditional usage
+
+    <b>Data Flow:</b>
+    User Input → ViewModel → Service Interface
+              → Service Implementation → External System
+
+    <b>Example Flow (Container Start):</b>
+    1. User clicks Start in UI
+    2. ContainerListViewModel calls IContainerService.StartAsync()
+    3. DockerContainerService receives call
+    4. Calls IVolumeService.GetSharedVolumeAsync()
+    5. Makes Docker API call to Docker Engine
+    6. Returns result through interface chain
+
+    <b>Key Benefits:</b>
+    • Clear separation of concerns
+    • Testable architecture (mock interfaces)
+    • Flexible (swap implementations easily)
+end legend
+
+@enduml

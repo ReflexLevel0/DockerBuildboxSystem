@@ -1,0 +1,233 @@
+@startuml Business Services
+!theme plain
+skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+
+title Business Services - Tier 2 (High-Level Operations & Orchestration)
+
+' ====================================================================
+' EXTERNAL DEPENDENCIES
+' ====================================================================
+package "External Dependencies" <<external>> #F0F0F0 {
+    class FileSystemWatcher <<.NET>> {
+        + Path
+        + Filter
+        + IncludeSubdirectories
+        + NotifyFilter
+        + EnableRaisingEvents
+        --Events--
+        + Changed
+        + Created
+        + Deleted
+        + Renamed
+    }
+}
+
+' ====================================================================
+' CONTRACTS
+' ====================================================================
+package "Contracts Layer" <<contracts>> #Honeydew {
+    interface IContainerService {
+        + CreateExecAsync()
+        + StartExecAsync()
+        + StreamExecAsync()
+        + StreamLogsAsync()
+    }
+
+    interface IContainerFileTransferService {
+        + CopyToContainerAsync()
+        + CopyDirectoryToContainerAsync()
+        + DeleteInContainerAsync()
+        + RenameInContainerAsync()
+        + CleanContainerDirectoryAsync()
+    }
+
+    interface IFileSyncService {
+        + StartWatching()
+        + StopWatching()
+        + ForceSyncAsync()
+    }
+
+    interface ICommandRunner {
+        + RunAsync()
+        + ExecuteAndLog()
+        + StreamExecAsync()
+        + InterruptAsync()
+        + StopAsync()
+        + TryWriteToInteractiveAsync()
+    }
+
+    interface ILogRunner {
+        + RunAsync()
+        + StopAsync()
+        + IsRunning
+        --Events--
+        + RunningChanged
+    }
+
+    interface IIgnorePatternMatcher {
+        + IsIgnored()
+        + LoadPatterns()
+    }
+}
+
+' ====================================================================
+' IMPLEMENTATIONS
+' ====================================================================
+package "Business Services" <<infrastructure>> #MistyRose {
+    class ContainerFileTransferService {
+        - IContainerService _containerService
+        + CopyToContainerAsync()
+        + CopyDirectoryToContainerAsync()
+        + DeleteInContainerAsync()
+        + RenameInContainerAsync()
+        + CleanContainerDirectoryAsync()
+        --Private--
+        - CreateTarArchive()
+        - ExecuteCommandInContainer()
+    }
+
+    class FileSyncService {
+        - IContainerFileTransferService _transferService
+        - IIgnorePatternMatcher _ignoreMatcher
+        - FileSystemWatcher _watcher
+        - Dictionary<string, DateTime> _eventHistory
+        + StartWatching()
+        + StopWatching()
+        + ForceSyncAsync()
+        --Private--
+        - OnFileChanged()
+        - OnFileDeleted()
+        - OnFileRenamed()
+        - IsDuplicateEvent()
+        - IsIgnored()
+    }
+
+    class CommandRunner {
+        - IContainerService _containerService
+        - CancellationTokenSource _cts
+        - ChannelWriter _inputWriter
+        + RunAsync()
+        + ExecuteAndLog()
+        + StreamExecAsync()
+        + InterruptAsync()
+        + StopAsync()
+        + TryWriteToInteractiveAsync()
+        --Private--
+        - ReadOutputAsync()
+        - WriteInputAsync()
+        - NormalizeInput()
+    }
+
+    class LogRunner {
+        - IContainerService _containerService
+        - CancellationTokenSource _cts
+        - bool _isRunning
+        + RunAsync()
+        + StopAsync()
+        + IsRunning
+        --Events--
+        + RunningChanged
+        --Private--
+        - ProcessLogStream()
+    }
+}
+
+' ====================================================================
+' RELATIONSHIPS
+' ====================================================================
+
+' Implementations
+ContainerFileTransferService .up.|> IContainerFileTransferService : implements
+FileSyncService .up.|> IFileSyncService : implements
+CommandRunner .up.|> ICommandRunner : implements
+LogRunner .up.|> ILogRunner : implements
+
+' Dependencies
+ContainerFileTransferService --> IContainerService : uses
+FileSyncService --> IContainerFileTransferService : uses
+FileSyncService --> IIgnorePatternMatcher : uses
+FileSyncService -up-> FileSystemWatcher : uses
+CommandRunner --> IContainerService : uses
+LogRunner --> IContainerService : uses
+
+' Layout control - place External Dependencies to the left
+"External Dependencies" -[hidden]right-> "Contracts Layer"
+"Contracts Layer" -[hidden]down-> "Business Services"
+
+' ====================================================================
+' NOTES
+' ====================================================================
+
+' note right of ContainerFileTransferService
+'     <b>Purpose:</b>
+'     Simplifies file transfer operations
+'     between host and container
+
+'     <b>Key Features:</b>
+'     • TAR archive creation
+'     • Batch file operations
+'     • Error wrapping
+'     • Directory synchronization
+' end note
+
+' note right of FileSyncService
+'     <b>Purpose:</b>
+'     Real-time file synchronization
+'     from host to container
+
+'     <b>Key Features:</b>
+'     • Debouncing (500ms)
+'     • .gitignore pattern support
+'     • Change event tracking
+'     • Force full sync option
+' end note
+
+' note right of CommandRunner
+'     <b>Purpose:</b>
+'     Execute commands in containers
+'     with interactive support
+
+'     <b>Key Features:</b>
+'     • Interactive shell sessions
+'     • Non-interactive single commands
+'     • Bidirectional I/O streaming
+'     • TTY support
+'     • Ctrl+C interrupt handling
+' end note
+
+' note right of LogRunner
+'     <b>Purpose:</b>
+'     Stream container logs in real-time
+
+'     <b>Key Features:</b>
+'     • Follow mode (tail -f)
+'     • Multiplexed stdout/stderr
+'     • Graceful cancellation
+'     • State management
+' end note
+
+' ====================================================================
+' LEGEND
+' ====================================================================
+legend bottom left
+    <b>Tier 2: Business Services</b>
+
+    <b>Purpose:</b>
+    High-level operations and workflow orchestration
+
+    <b>Responsibilities:</b>
+    • Compose Core Services for complex operations
+    • Implement business logic
+    • Manage external integrations (FileSystemWatcher)
+    • Handle async streaming (Channels)
+
+    <b>Design Patterns:</b>
+    • Facade: Simplify complex Docker operations
+    • Adapter: ContainerFileTransferService wraps Docker API
+    • Observer: FileSystemWatcher for file changes
+    • Channel: Async streaming for logs and exec I/O
+    • Decorator: Add debouncing and filtering to file events
+end legend
+
+@enduml

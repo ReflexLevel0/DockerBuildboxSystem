@@ -1,0 +1,193 @@
+@startuml Docker Supporting Services
+!theme plain
+skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+
+title Supporting Services - Configuration & Utilities
+
+' ====================================================================
+' CONTRACTS
+' ====================================================================
+package "Contracts Layer" <<contracts>> #Honeydew {
+    interface IEnvironmentService {
+        + LoadEnvironmentAsync()
+        + SaveEnvironmentAsync()
+        + OpenInEditorAsync()
+    }
+
+    interface ISettingsService {
+        + LoadSettingsAsync()
+        + SaveSettingsAsync()
+    }
+
+    interface ISyncIgnoreService {
+        + LoadIgnorePatternsAsync()
+        + SaveIgnorePatternsAsync()
+        + OpenInEditorAsync()
+    }
+
+    interface IExternalProcessService {
+        + StartProcess()
+    }
+
+    interface IUserControlService {
+        + LoadUserControlsAsync()
+        + SaveUserControlsAsync()
+    }
+}
+
+' ====================================================================
+' SUPPORTING SERVICES
+' ====================================================================
+
+class EnvironmentService <<sealed>> {
+    - _processService: IExternalProcessService
+    --
+    + LoadEnvironmentAsync(path): Task<Dictionary<string, string>>
+    + SaveEnvironmentAsync(path, vars): Task
+    + OpenInEditorAsync(path): void
+    --
+    <i>Manages .env files for</i>
+    <i>container environment variables</i>
+}
+
+class SettingsService <<sealed>> {
+    --
+    + LoadSettingsAsync<T>(path): Task<T?>
+    + SaveSettingsAsync<T>(path, settings): Task
+    --
+    <i>JSON-based settings persistence</i>
+    <i>using System.Text.Json</i>
+}
+
+class SyncIgnoreService <<sealed>> {
+    - _processService: IExternalProcessService
+    --
+    + LoadIgnorePatternsAsync(path): Task<IEnumerable<string>>
+    + SaveIgnorePatternsAsync(path, patterns): Task
+    + OpenInEditorAsync(path): void
+    --
+    <i>Manages .syncignore files</i>
+    <i>(similar to .gitignore)</i>
+}
+
+class ExternalProcessService <<sealed>> {
+    --
+    + StartProcess(filename, args?): void
+    --
+    <i>Launches external processes</i>
+    <i>(e.g., notepad for editing)</i>
+}
+
+class UserControlService <<sealed>> {
+    - _converter: UserControlConverter
+    --
+    + LoadUserControlsAsync(path): Task<ObservableCollection<UserControl>>
+    + SaveUserControlsAsync(path, controls): Task
+    --
+    <i>Manages custom UI control definitions</i>
+}
+
+class UserControlConverter <<sealed>> {
+    --
+    + DeserializeControls(json): ObservableCollection<UserControl>
+    + SerializeControls(controls): string
+    --
+    <i>JSON serialization for UserControl DTOs</i>
+}
+
+class InvalidJsonControlsException {
+    + Message: string
+    + InnerException: Exception?
+    --
+    <i>Thrown when user control JSON is invalid</i>
+}
+
+' ====================================================================
+' RELATIONSHIPS
+' ====================================================================
+
+' Implementations
+EnvironmentService ..|> IEnvironmentService
+SettingsService ..|> ISettingsService
+SyncIgnoreService ..|> ISyncIgnoreService
+ExternalProcessService ..|> IExternalProcessService
+UserControlService ..|> IUserControlService
+
+' Dependencies
+EnvironmentService --> IExternalProcessService : opens editor
+SyncIgnoreService --> IExternalProcessService : opens editor
+UserControlService --> UserControlConverter : serializes
+
+' Exception
+UserControlConverter ..> InvalidJsonControlsException : throws
+
+' ====================================================================
+' DATA MODELS
+' ====================================================================
+package "Models (DTOs)" <<models>> #LightYellow {
+    class UserControl {
+        + Id: string
+        + Type: UserControlType
+        + Label: string
+        + Value: string?
+        + Placeholder: string?
+        + Options: List<string>?
+    }
+
+    enum UserControlType {
+        TextBox
+        ComboBox
+        CheckBox
+    }
+}
+
+UserControlService ..> UserControl : loads/saves
+UserControlConverter ..> UserControl : converts
+
+' ====================================================================
+' FILE FORMATS
+' ====================================================================
+note right of EnvironmentService
+    <b>.env File Format:</b>
+    KEY1=value1
+    KEY2=value2
+    # Comments supported
+
+    Used for container environment variables
+end note
+
+note right of SyncIgnoreService
+    <b>.syncignore File Format:</b>
+    *.tmp
+    node_modules/
+    .git/
+
+    Glob patterns (similar to .gitignore)
+end note
+
+note right of SettingsService
+    <b>Settings JSON Format:</b>
+    {
+        "property1": "value1",
+        "property2": 123
+    }
+
+    Generic settings persistence
+end note
+
+note right of UserControlService
+    <b>User Controls JSON:</b>
+    [
+        {
+            "id": "input1",
+            "type": "TextBox",
+            "label": "Enter value:",
+            "placeholder": "Type here..."
+        }
+    ]
+
+    Defines dynamic UI controls
+end note
+
+@enduml

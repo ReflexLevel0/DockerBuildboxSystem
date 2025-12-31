@@ -1,0 +1,267 @@
+@startuml Supporting Services
+!theme plain
+skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+
+title Supporting Services - Tier 3 (Configuration & Utilities)
+
+' ====================================================================
+' EXTERNAL DEPENDENCIES
+' ====================================================================
+package "External Dependencies" <<external>> as external  #F0F0F0 {
+    class "System.Text.Json" as SystemTextJson <<.NET>> {
+        + JsonSerializer
+        + JsonSerializerOptions
+    }
+}
+
+' ====================================================================
+' CONTRACTS
+' ====================================================================
+package "Contracts Layer" <<contracts>> as contracts #Honeydew {
+    interface IEnvironmentService {
+        + GetEnvironmentVariables()
+        + SetEnvironmentVariable()
+        + RemoveEnvironmentVariable()
+        + ReloadEnvironmentVariables()
+    }
+
+    interface ISettingsService {
+        + LoadSettings()
+        + SaveSettings()
+        + GetSetting<T>()
+        + SetSetting<T>()
+    }
+
+    interface ISyncIgnoreService {
+        + LoadIgnorePatterns()
+        + GetIgnorePatterns()
+        + AddIgnorePattern()
+        + RemoveIgnorePattern()
+    }
+
+    interface IExternalProcessService {
+        + RunProcess()
+        + RunProcessAsync()
+        + KillProcess()
+    }
+
+    interface IUserControlService {
+        + GetUserControls()
+        + SaveUserControl()
+        + DeleteUserControl()
+        + ConvertToJson()
+        + ConvertFromJson()
+    }
+
+    interface IIgnorePatternMatcher {
+        + IsIgnored(path, patterns)
+        + LoadPatterns(path)
+    }
+}
+
+' ====================================================================
+' IMPLEMENTATIONS
+' ====================================================================
+package "Supporting Services" <<infrastructure>> as infrastructure #Lavender {
+    class EnvironmentService {
+        - IExternalProcessService _processService
+        - Dictionary<string, string> _variables
+        + GetEnvironmentVariables()
+        + SetEnvironmentVariable()
+        + RemoveEnvironmentVariable()
+        + ReloadEnvironmentVariables()
+        --Private--
+        - LoadFromSystem()
+        - LoadFromFile()
+    }
+
+    class SettingsService {
+        - string _settingsPath
+        - JsonSerializerOptions _options
+        - Dictionary<string, object> _settings
+        + LoadSettings()
+        + SaveSettings()
+        + GetSetting<T>()
+        + SetSetting<T>()
+        --Private--
+        - EnsureSettingsFileExists()
+    }
+
+    class SyncIgnoreService {
+        - IExternalProcessService _processService
+        - List<string> _patterns
+        + LoadIgnorePatterns()
+        + GetIgnorePatterns()
+        + AddIgnorePattern()
+        + RemoveIgnorePattern()
+        --Private--
+        - ParseIgnoreFile()
+    }
+
+    class ExternalProcessService {
+        + RunProcess(filename, args)
+        + RunProcessAsync(filename, args)
+        + KillProcess(processId)
+        --Private--
+        - CreateProcessStartInfo()
+        - CaptureOutput()
+    }
+
+    class UserControlService {
+        - UserControlConverter _converter
+        - string _storagePath
+        + GetUserControls()
+        + SaveUserControl()
+        + DeleteUserControl()
+        + ConvertToJson()
+        + ConvertFromJson()
+    }
+
+    class IgnorePatternMatcher {
+        + IsIgnored(path, patterns)
+        + LoadPatterns(path)
+        --Private--
+        - MatchWildcard()
+        - NormalizePath()
+        - IsDirectory()
+    }
+
+    class UserControlConverter {
+        + ToJson(control)
+        + FromJson(json)
+        --Private--
+        - SerializeControl()
+        - DeserializeControl()
+    }
+}
+
+' ====================================================================
+' RELATIONSHIPS
+' ====================================================================
+
+' Implementations
+EnvironmentService .up.|> IEnvironmentService : implements
+SettingsService .up.|> ISettingsService : implements
+SyncIgnoreService .up.|> ISyncIgnoreService : implements
+ExternalProcessService .up.|> IExternalProcessService : implements
+UserControlService .up.|> IUserControlService : implements
+IgnorePatternMatcher .up.|> IIgnorePatternMatcher : implements
+
+' Dependencies
+EnvironmentService --> IExternalProcessService : uses
+SyncIgnoreService --> IExternalProcessService : uses
+UserControlService --> UserControlConverter : uses
+SettingsService -up-> SystemTextJson : uses
+
+contracts -[hidden]down-> infrastructure
+
+' ====================================================================
+' NOTES
+' ====================================================================
+
+'  note bottom of EnvironmentService
+'      <b>Purpose:</b>
+'      Manage environment variables
+'      for container configuration
+
+'      <b>Key Features:</b>
+'      • Load from system
+'      • Load from .env files
+'      • Variable substitution
+'      • Persistence
+'  end note
+
+'  note bottom of SettingsService
+'      <b>Purpose:</b>
+'      Application settings management
+
+'      <b>Key Features:</b>
+'      • JSON-based storage
+'      • Type-safe get/set
+'      • Auto-save
+'      • Default values
+
+'      <b>Settings:</b>
+'      • Source paths
+'      • Container paths
+'      • Auto-sync enabled
+'      • Auto-start logs
+'  end note
+
+'  note bottom of SyncIgnoreService
+'      <b>Purpose:</b>
+'      Manage file sync ignore patterns
+
+'      <b>Key Features:</b>
+'      • .gitignore format support
+'      • Pattern persistence
+'      • Runtime modification
+
+'      <b>Default Patterns:</b>
+'      • .git/
+'      • node_modules/
+'      • build/
+'      • *.tmp
+'      • __pycache__/
+'  end note
+
+'  note bottom of IgnorePatternMatcher
+'      <b>Purpose:</b>
+'      Pattern matching for file paths
+
+'      <b>Key Features:</b>
+'      • Wildcard support (*, **, ?)
+'      • Directory matching
+'      • Negation patterns (!)
+'      • Case sensitivity options
+
+'      <b>Compatible with:</b>
+'      .gitignore, .dockerignore
+'  end note
+
+'  note bottom of UserControlService
+'      <b>Purpose:</b>
+'      User-defined command buttons
+
+'      <b>Key Features:</b>
+'      • Save custom commands
+'      • Variable substitution
+'      • Persistence
+'      • JSON serialization
+'  end note
+
+'  note bottom of ExternalProcessService
+'      <b>Purpose:</b>
+'      Execute external processes
+
+'      <b>Used By:</b>
+'      • EnvironmentService (loading env)
+'      • SyncIgnoreService (git commands)
+'      • SettingsService (file operations)
+'  end note
+
+' ====================================================================
+' LEGEND
+' ====================================================================
+legend bottom left
+    <b>Tier 3: Supporting Services</b>
+
+    <b>Purpose:</b>
+    Configuration, utilities, and cross-cutting concerns
+
+    <b>Responsibilities:</b>
+    • Application configuration management
+    • File pattern matching
+    • External process execution
+    • User preferences
+    • Environment variable handling
+
+    <b>Design Patterns:</b>
+    • Repository: Settings and UserControl persistence
+    • Strategy: IgnorePatternMatcher for different pattern types
+    • Factory: ExternalProcessService creates processes
+    • Converter: UserControlConverter for serialization
+end legend
+
+@enduml

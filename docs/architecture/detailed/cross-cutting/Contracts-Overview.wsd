@@ -1,0 +1,220 @@
+@startuml Contracts Layer Overview
+!theme plain
+skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+skinparam interfaceStyle rectangle
+
+title Contracts Layer - Service Interfaces & Abstractions
+
+' ====================================================================
+' CONTRACTS LAYER
+' ====================================================================
+package "Contracts Layer" <<contracts>> #Honeydew {
+
+    package "Tier 1: Docker Operations" #LightBlue {
+        interface IContainerService {
+            --Container Lifecycle--
+            + ListContainersAsync(all)
+            + CreateContainerAsync(options)
+            + StartAsync(containerId)
+            + StopAsync(containerId, timeout)
+            + RestartAsync(containerId, timeout)
+            + KillAsync(containerId)
+            + RemoveAsync(containerId)
+            + InspectAsync(containerId)
+            --Logs & Execution--
+            + StreamLogsAsync(containerId, params)
+            + CreateExecAsync(containerId, params)
+            + StartExecAsync(execId)
+            + StreamExecAsync(execId)
+        }
+
+        interface IImageService {
+            + ListImagesAsync()
+            + PullImageAsync(imageName, tag)
+            + RemoveImageAsync(imageId)
+            + InspectImageAsync(imageId)
+            + TagImageAsync(imageId, tag)
+        }
+
+        interface IVolumeService {
+            + ListVolumesAsync()
+            + CreateVolumeAsync(name, options)
+            + GetSharedVolumeAsync(createIfNotExists)
+            + RemoveVolumeAsync(name)
+            + InspectVolumeAsync(name)
+        }
+    }
+
+    package "Tier 2: Business Logic" #LightGreen {
+        interface IContainerFileTransferService {
+            + CopyToContainerAsync(containerId, path, data)
+            + CopyDirectoryToContainerAsync(containerId, srcPath, destPath)
+            + DeleteInContainerAsync(containerId, path)
+            + RenameInContainerAsync(containerId, oldPath, newPath)
+            + CleanContainerDirectoryAsync(containerId, path, exclusions)
+        }
+
+        interface IFileSyncService {
+            + StartWatching(hostPath, containerId, containerPath)
+            + StopWatching()
+            + ForceSyncAsync()
+            --Events--
+            + FileChanged
+            + FileSyncError
+        }
+
+        interface ICommandRunner {
+            + RunAsync(containerId, command)
+            + ExecuteAndLog(containerId, args)
+            + StreamExecAsync(execId)
+            + InterruptAsync()
+            + StopAsync()
+            + TryWriteToInteractiveAsync(input)
+            --Properties--
+            + IsRunning
+            + ExitCode
+        }
+
+        interface ILogRunner {
+            + RunAsync(containerId)
+            + StopAsync()
+            --Properties--
+            + IsRunning
+            --Events--
+            + RunningChanged
+            + LogReceived
+        }
+    }
+
+    package "Tier 3: Configuration & Utilities" #LightYellow {
+        interface IEnvironmentService {
+            + GetEnvironmentVariables()
+            + SetEnvironmentVariable(name, value)
+            + RemoveEnvironmentVariable(name)
+            + ReloadEnvironmentVariables()
+        }
+
+        interface ISettingsService {
+            + LoadSettings()
+            + SaveSettings()
+            + GetSetting<T>(key, defaultValue)
+            + SetSetting<T>(key, value)
+        }
+
+        interface ISyncIgnoreService {
+            + LoadIgnorePatterns(path)
+            + GetIgnorePatterns()
+            + AddIgnorePattern(pattern)
+            + RemoveIgnorePattern(pattern)
+        }
+
+        interface IExternalProcessService {
+            + RunProcess(filename, args)
+            + RunProcessAsync(filename, args)
+            + KillProcess(processId)
+        }
+
+        interface IUserControlService {
+            + GetUserControls()
+            + SaveUserControl(control)
+            + DeleteUserControl(id)
+            + ConvertToJson(control)
+            + ConvertFromJson(json)
+        }
+
+        interface IIgnorePatternMatcher {
+            + IsIgnored(path, patterns)
+            + LoadPatterns(path)
+        }
+    }
+}
+
+' ====================================================================
+' GROUPING & RELATIONSHIPS
+' ====================================================================
+
+' Layout hints for vertical stacking within packages
+IContainerService -[hidden]down-> IImageService
+IImageService -[hidden]down-> IVolumeService
+
+ICommandRunner -[hidden]down-> ILogRunner
+ILogRunner -[hidden]down-> IFileSyncService
+IFileSyncService -[hidden]down-> IContainerFileTransferService
+
+IEnvironmentService -[hidden]down-> ISettingsService
+ISettingsService -[hidden]down-> ISyncIgnoreService
+ISyncIgnoreService -[hidden]down-> IExternalProcessService
+IExternalProcessService -[hidden]down-> IUserControlService
+IUserControlService -[hidden]down-> IIgnorePatternMatcher
+
+' Tier relationships
+"Tier 1: Docker Operations" -[hidden]down-> "Tier 2: Business Logic"
+"Tier 2: Business Logic" -[hidden]down-> "Tier 3: Configuration & Utilities"
+
+' Key cross-tier dependencies
+IFileSyncService ..> IContainerFileTransferService : uses
+IContainerFileTransferService ..> IContainerService : uses
+IFileSyncService ..> IIgnorePatternMatcher : uses
+ICommandRunner ..> IContainerService : uses
+ILogRunner ..> IContainerService : uses
+IEnvironmentService ..> IExternalProcessService : uses
+ISyncIgnoreService ..> IExternalProcessService : uses
+
+' ====================================================================
+' NOTES
+' ====================================================================
+
+note top of "Contracts Layer"
+    <b>Purpose:</b>
+    Define service abstractions and contracts
+    Enable dependency injection and testability
+    Decouple presentation layer from infrastructure
+end note
+
+note right of "Tier 1: Docker Operations"
+    <b>Low-Level Docker API</b>
+    Direct wrappers around Docker.DotNet
+    Resource-specific operations
+    Minimal business logic
+end note
+
+note right of "Tier 2: Business Logic"
+    <b>High-Level Operations</b>
+    Compose Tier 1 services
+    Implement workflows
+    Manage external integrations
+end note
+
+note right of "Tier 3: Configuration & Utilities"
+    <b>Cross-Cutting Concerns</b>
+    Configuration management
+    Pattern matching
+    Process execution
+    User preferences
+end note
+
+' ====================================================================
+' LEGEND
+' ====================================================================
+legend bottom left
+    <b>Contracts Layer</b>
+
+    <b>Purpose:</b>
+    • Define service interfaces
+    • Enable dependency injection
+    • Support unit testing with mocks
+    • Enforce separation of concerns
+
+    <b>Architecture Benefits:</b>
+    • ViewModels depend only on interfaces (not implementations)
+    • Infrastructure can be swapped without affecting UI
+    • Easy to mock for testing
+    • Clear service boundaries
+
+    <b>Dependency Flow:</b>
+    Presentation → Contracts ← Infrastructure
+    (Dependency Inversion Principle)
+end legend
+
+@enduml

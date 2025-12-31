@@ -1,0 +1,185 @@
+@startuml Service Dependencies
+!theme plain
+left to right direction
+skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+
+title Service Dependencies & Data Flow
+
+' ====================================================================
+' PRESENTATION LAYER
+' ====================================================================
+package "Presentation Layer" <<presentation>> #AliceBlue {
+    component ViewModels {
+        [ContainerListViewModel]
+        [FileSyncViewModel]
+        [CommandExecutionViewModel]
+        [LogStreamViewModel]
+    }
+}
+
+' ====================================================================
+' CONTRACTS LAYER (INTERFACES)
+' ====================================================================
+package "Contracts Layer" <<contracts>> #Honeydew {
+    together {
+        interface IContainerService
+        interface IImageService
+        interface IVolumeService
+    }
+
+    together {
+        interface IContainerFileTransferService
+        interface IFileSyncService
+        interface ICommandRunner
+        interface ILogRunner
+    }
+
+    together {
+        interface ISettingsService
+        interface IEnvironmentService
+        interface ISyncIgnoreService
+        interface IIgnorePatternMatcher
+    }
+}
+
+' ====================================================================
+' INFRASTRUCTURE LAYER (IMPLEMENTATIONS)
+' ====================================================================
+package "Infrastructure Layer" <<infrastructure>> #LemonChiffon {
+    package "Tier 1: Core" #AliceBlue {
+        [DockerContainerService]
+        [DockerImageService]
+        [DockerVolumeService]
+    }
+
+    package "Tier 2: Business" #MistyRose {
+        [ContainerFileTransferService]
+        [FileSyncService]
+        [CommandRunner]
+        [LogRunner]
+    }
+
+    package "Tier 3: Supporting" #Lavender {
+        [SettingsService]
+        [EnvironmentService]
+        [SyncIgnoreService]
+        [IgnorePatternMatcher]
+    }
+}
+
+' ====================================================================
+' EXTERNAL DEPENDENCIES
+' ====================================================================
+cloud "External" <<external>> #F0F0F0 {
+    [Docker Engine]
+    [FileSystemWatcher]
+    [System.Text.Json]
+}
+
+' ====================================================================
+' PRESENTATION → CONTRACTS
+' ====================================================================
+[ContainerListViewModel] --> IContainerService
+[ContainerListViewModel] --> IImageService
+[ContainerListViewModel] --> IVolumeService
+
+[FileSyncViewModel] --> IFileSyncService
+[FileSyncViewModel] --> ISettingsService
+
+[CommandExecutionViewModel] --> ICommandRunner
+[CommandExecutionViewModel] --> IEnvironmentService
+
+[LogStreamViewModel] --> ILogRunner
+
+' ====================================================================
+' CONTRACTS → IMPLEMENTATIONS
+' ====================================================================
+IContainerService <|.. [DockerContainerService] : implements
+IImageService <|.. [DockerImageService] : implements
+IVolumeService <|.. [DockerVolumeService] : implements
+
+IContainerFileTransferService <|.. [ContainerFileTransferService] : implements
+IFileSyncService <|.. [FileSyncService] : implements
+ICommandRunner <|.. [CommandRunner] : implements
+ILogRunner <|.. [LogRunner] : implements
+
+ISettingsService <|.. [SettingsService] : implements
+IEnvironmentService <|.. [EnvironmentService] : implements
+ISyncIgnoreService <|.. [SyncIgnoreService] : implements
+IIgnorePatternMatcher <|.. [IgnorePatternMatcher] : implements
+
+
+' ====================================================================
+' SERVICE INTER-DEPENDENCIES
+' ====================================================================
+
+' Tier 1 dependencies
+[DockerContainerService] --> [Docker Engine]
+[DockerImageService] --> [Docker Engine]
+[DockerVolumeService] --> [Docker Engine]
+[DockerContainerService] ..> IVolumeService : uses
+
+' Tier 2 dependencies
+[ContainerFileTransferService] --> IContainerService
+[FileSyncService] --> IContainerFileTransferService
+[FileSyncService] --> IIgnorePatternMatcher
+[FileSyncService] --> [FileSystemWatcher]
+[CommandRunner] --> IContainerService
+[LogRunner] --> IContainerService
+
+' Tier 3 dependencies
+[SettingsService] --> [System.Text.Json]
+[EnvironmentService] ..> ISyncIgnoreService : uses
+[SyncIgnoreService] ..> IIgnorePatternMatcher : uses
+
+' ====================================================================
+' NOTES
+' ====================================================================
+
+note top of ViewModels
+    <b>Presentation Layer</b>
+    • Depends only on interfaces
+    • No direct infrastructure references
+    • Testable with mocks
+end note
+
+'note bottom of "Tier 1: Core"
+'    <b>Core Services</b>
+'    • Direct Docker API access
+'    • Low-level operations
+'    • Stateless services
+'end note
+
+'note bottom of "Tier 2: Business"
+'    <b>Business Services</b>
+'    • Compose core services
+'    • Implement workflows
+'    • Handle external I/O
+'end note
+
+'note bottom of "Tier 3: Supporting"
+'    <b>Supporting Services</b>
+'    • Configuration
+'    • Utilities
+'    • Cross-cutting concerns
+'end note
+
+' ====================================================================
+' LEGEND
+' ====================================================================
+legend bottom right
+    <b>Legend: Line Types</b>
+    <color:#000000>───></color>  <b>Dependency / Association</b> (Class uses Interface/Service)
+    <color:#000000>..|></color>  <b>Realization</b> (Class implements Interface)
+    <color:#000000>....></color>  <b>Usage</b> (Weak Dependency)
+
+    <b>Architectural Principles:</b>
+    • <b>Dependency Inversion:</b> High-level modules (ViewModels) depend on abstractions (Contracts), not details.
+    • <b>Composition:</b> Services are injected via constructor.
+
+    <b>Data Flow:</b>
+    User → ViewModel → Interface → Implementation → Docker Engine
+end legend
+
+@enduml

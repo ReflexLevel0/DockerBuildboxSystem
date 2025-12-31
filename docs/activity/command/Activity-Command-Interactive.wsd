@@ -1,0 +1,111 @@
+@startuml Interactive Command Flow
+!theme plain
+skinparam activityDiamondBackgroundColor LightGray
+skinparam activityStartColor Green
+skinparam activityEndColor Red
+
+title Interactive Shell Session Flow
+
+start
+
+:User enters command or\nclicks command button;
+
+if (Interactive session\nalready running?) then (yes)
+    :Route to existing session;
+    :Write to input channel;
+    note right
+        Session already has
+        active reader/writer tasks.
+        Input is queued and processed
+        by the Interactive Loop.
+    end note
+    #LightBlue:Input sent to running shell;
+    stop
+else (no)
+    :Start new interactive session;
+endif
+
+partition "Session Setup" {
+    :Create exec instance;
+    note right
+        Command: ["/bin/bash", "-i"]
+        Tty: true
+        AttachStdin: true
+        AttachStdout: true
+        AttachStderr: true
+    end note
+
+    :Start exec with streaming;
+
+    :Create bidirectional channels;
+    note right
+        • ChannelReader<output>
+        • ChannelWriter<input>
+        • Task<exitCode>
+    end note
+
+    fork
+        :Start Output Reader Task;
+    fork again
+        :Start Input Writer Task;
+    end fork
+}
+
+#LightGreen:Shell prompt displayed;
+
+partition "Interactive Loop" {
+    repeat
+        :Wait for user action;
+
+        if (User action?) then (Type command)
+            :Receive user input;
+            :Normalize line endings;
+            note right
+                \r\n → \r (for TTY)
+            end note
+            :Write to input channel;
+            :Send to container stdin;
+
+            :Container executes command;
+            :Read output from stdout/stderr;
+
+            if (TTY mode?) then (yes)
+                :Send raw chunks immediately;
+                note right
+                    No line buffering
+                    Preserves prompts
+                end note
+            else (no)
+                :Split by newlines;
+                :Buffer incomplete lines;
+            endif
+
+            :Display output in console;
+
+        elseif (Ctrl+C / Interrupt) then
+            :Write ETX character (0x03);
+            :Send SIGINT to container;
+            :Display ^C;
+            note right
+                Interrupts current command,
+                shell remains active
+            end note
+
+        elseif (Stop / Exit) then
+            :Cancel all tokens;
+            :Close input channel;
+            :Exit loop;
+        endif
+
+    repeat while (Session active?)
+}
+
+partition "Cleanup" {
+    :Dispose streams;
+    :Wait for exit code;
+    :Display exit code;
+}
+
+stop
+
+@enduml
