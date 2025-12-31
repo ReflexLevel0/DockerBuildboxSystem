@@ -81,6 +81,7 @@ namespace DockerBuildBoxSystem.Domain
                 {
                     // Load environment variables
                     var envs = await _environmentService.LoadEnvAsync().ConfigureAwait(false);
+                    
                     // Build new args with exports
                     args = BuildShellArgsWithExports(envs);
 
@@ -97,9 +98,7 @@ namespace DockerBuildBoxSystem.Domain
             }
 
             _reader = await svc.StreamExecAsync(containerId, args, containerInfo.Tty || _forceTtyExec, linked.Token).ConfigureAwait(false);
-
             IsRunning = true;
-
             try
             {
                 await foreach (var item in _reader.Value.Output.ReadAllAsync(linked.Token).ConfigureAwait(false))
@@ -153,8 +152,8 @@ namespace DockerBuildBoxSystem.Domain
         /// <summary>
         /// Builds shell arguments with export commands for the given environment variables.
         /// </summary>
-        /// <param name="envs"></param>
-        /// <returns></returns>
+        /// <param name="envs">Environmental variables to be exported to the container</param>
+        /// <returns>List of commands to be executed in the container</returns>
         private string[] BuildShellArgsWithExports(
             List<EnvVariable> envs)
         {
