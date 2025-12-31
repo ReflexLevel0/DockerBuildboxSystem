@@ -1,5 +1,6 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
 using DockerBuildBoxSystem.Contracts;
 using DockerBuildBoxSystem.ViewModels.Common;
 using CommunityToolkit.Mvvm.Messaging;
@@ -12,7 +13,8 @@ using System.Threading.Tasks;
 
 namespace DockerBuildBoxSystem.ViewModels.ViewModels
 {
-    public partial class LogStreamViewModel : ViewModelBase, IRecipient<SelectedContainerChangedMessage>
+    public partial class LogStreamViewModel : ViewModelBase,
+        IRecipient<SelectedContainerChangedMessage>
     {
         private readonly ILogRunner _logRunner;
         private readonly IContainerService _service;
@@ -129,9 +131,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         {
             await _logRunner.StopAsync();
         }
+        
         public override async ValueTask DisposeAsync()
         {
-            // Unregister message subscriptions
             WeakReferenceMessenger.Default.UnregisterAll(this);
             await StopLogsAsync();
             await base.DisposeAsync();
