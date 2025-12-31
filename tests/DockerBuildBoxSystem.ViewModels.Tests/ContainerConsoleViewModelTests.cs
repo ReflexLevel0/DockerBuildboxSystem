@@ -15,6 +15,7 @@ public class ContainerConsoleViewModelTests
         IServiceProvider? serviceProvider = null,
         IContainerService? service = null,
         IImageService? imageService = null,
+        IDialogService? dialogService = null,
         IFileSyncService? fileSyncService = null,
         IConfiguration? configuration = null,
         ISettingsService? settingsService = null,
@@ -29,6 +30,7 @@ public class ContainerConsoleViewModelTests
         serviceProvider ??= Substitute.For<IServiceProvider>();
         service ??= Substitute.For<IContainerService>();
         imageService ??= Substitute.For<IImageService>();
+        dialogService ??= Substitute.For<IDialogService>();
         fileSyncService ??= Substitute.For<IFileSyncService>();
         fileSyncService.Changes.Returns(new System.Collections.ObjectModel.ObservableCollection<string>());
         configuration ??= Substitute.For<IConfiguration>();
@@ -39,7 +41,7 @@ public class ContainerConsoleViewModelTests
         clipboard ??= Substitute.For<IClipboardService>();
         externalProcessService ??= Substitute.For<IExternalProcessService>();
 
-        return new ContainerConsoleViewModel(serviceProvider, imageService, service, fileSyncService, configuration, settingsService, userControlService, logRunner, commandRunner, externalProcessService, clipboard);
+        return new ContainerConsoleViewModel(serviceProvider, imageService, service, dialogService, fileSyncService, configuration, settingsService, userControlService, logRunner, commandRunner, externalProcessService, clipboard);
     }
 
     /// <summary>

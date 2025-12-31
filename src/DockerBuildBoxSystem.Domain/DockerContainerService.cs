@@ -45,6 +45,24 @@ namespace DockerBuildBoxSystem.Domain
         }
 
         #region Container Lifecycle Logic
+        public async Task<bool> IsEngineAvailableAsync(CancellationToken ct = default)
+        {
+            try
+            {
+                // Use a short cancellation window to avoid long hangs when the engine
+                // is not running (the global client timeout is ~100s by default).
+                using var quickCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                quickCts.CancelAfter(TimeSpan.FromSeconds(5));
+
+                await Client.System.PingAsync(quickCts.Token).ConfigureAwait(false);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+        
         public async Task<bool> StartAsync(string containerId, CancellationToken ct = default)
         {
             var started = await Client.Containers.StartContainerAsync(containerId, new ContainerStartParameters(), ct);

@@ -94,6 +94,11 @@ namespace DockerBuildBoxSystem.Contracts
     public interface IContainerService : IAsyncDisposable
     {
         /// <summary>
+        /// Checks whether the Docker engine is reachable and responding.
+        /// </summary>
+        /// <param name="ct">Cancellation token</param>
+        /// <returns>True if the engine is available; otherwise false.</returns>
+        Task<bool> IsEngineAvailableAsync(CancellationToken ct = default);
         /// Raised after a container has successfully started.
         /// </summary>
         event EventHandler<string>? ContainerStarted;
