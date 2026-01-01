@@ -187,10 +187,12 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private void OnSourcePathChanged(object? sender, string newPath)
         {
             HostSyncPath = newPath;
-            //if sync is running, we might want to restart it or notify user
-            if (IsSyncRunning)
+            
+            //if container is running, restart sync with new path
+            if (IsContainerRunning)
             {
-                _logger.LogWithNewline($"[sync] Warning: Source path changed to {newPath}. Stop and restart sync to apply.", true, false);
+                _logger.LogWithNewline($"[sync] Source path changed to {newPath}. Restarting sync...", false, false);
+                StartAutoSync();
             }
         }
 
