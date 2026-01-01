@@ -4,6 +4,7 @@ using DockerBuildBoxSystem.Contracts;
 using System;
 using System.Buffers;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Formats.Tar;
 using System.Linq;
 using System.Text;
@@ -18,6 +19,8 @@ namespace DockerBuildBoxSystem.Domain
     public sealed class DockerContainerService : DockerServiceBase, IContainerService
     {
         private readonly IVolumeService _volumeService;
+
+        public event EventHandler<string>? ContainerStarted;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="DockerContainerService"/> class.
@@ -43,8 +46,56 @@ namespace DockerBuildBoxSystem.Domain
         }
 
         #region Container Lifecycle Logic
-        public async Task<bool> StartAsync(string containerId, CancellationToken ct = default) =>
-            await Client.Containers.StartContainerAsync(containerId, new ContainerStartParameters(), ct);
+        public async Task<bool> IsEngineAvailableAsync(CancellationToken ct = default)
+        {
+            try
+            {
+                // Use a short cancellation window to avoid long hangs when the engine
+                // is not running (the global client timeout is ~100s by default).
+                using var quickCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                quickCts.CancelAfter(TimeSpan.FromSeconds(5));
+
+                await Client.System.PingAsync(quickCts.Token).ConfigureAwait(false);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+        
+        public async Task<bool> StartAsync(string containerId, CancellationToken ct = default)
+        {
+            // Stop all other running containers except the selected/target one
+            try
+            {
+                var running = await ListContainersAsync(all: false, ct: ct);
+                var othersToStop = running
+                    .Where(c => !string.Equals(c.Id, containerId, StringComparison.OrdinalIgnoreCase))
+                    .Select(c => c.Id)
+                    .ToArray();
+
+                if (othersToStop.Length > 0)
+                {
+                    // best-effort: ignore failures when stopping non-target containers
+                    try
+                    {
+                        await StopAsync(othersToStop, timeout: TimeSpan.FromSeconds(10), ct: ct);
+                    }
+                    catch { }
+                }
+            }
+            catch
+            {
+                // ignore list failures; proceed to start target container
+            }
+            var started = await Client.Containers.StartContainerAsync(containerId, new ContainerStartParameters(), ct);
+            if (started)
+            {
+                try { ContainerStarted?.Invoke(this, containerId); } catch { /* ignore listener errors */ }
+            }
+            return started;
+        }
 
         public async Task<string> CreateContainerAsync(ContainerCreationOptions options, CancellationToken ct = default)
         {
@@ -76,6 +127,15 @@ namespace DockerBuildBoxSystem.Domain
         public async Task StopAsync(string containerId, TimeSpan timeout, CancellationToken ct = default) =>
             await Client.Containers.StopContainerAsync(containerId,
                 new ContainerStopParameters { WaitBeforeKillSeconds = (uint)timeout.TotalSeconds }, ct);
+
+        public async Task StopAsync(IEnumerable<string> containerIds, TimeSpan timeout, CancellationToken ct = default)
+        {
+            var stopParams = new ContainerStopParameters { WaitBeforeKillSeconds = (uint)timeout.TotalSeconds };
+            foreach (var id in containerIds)
+            {
+                await Client.Containers.StopContainerAsync(id, stopParams, ct);
+            }
+        }
         public async Task RemoveAsync(string containerId, bool force = false, CancellationToken ct = default) =>
             await Client.Containers.RemoveContainerAsync(containerId,
                 new ContainerRemoveParameters { Force = force }, ct);

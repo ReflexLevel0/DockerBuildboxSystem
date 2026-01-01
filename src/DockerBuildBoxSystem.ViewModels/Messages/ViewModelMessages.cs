@@ -41,4 +41,3 @@ namespace DockerBuildBoxSystem.ViewModels.Messages
     /// </summary>
     public sealed class ContainerRunningMessage(ContainerInfo container) : ValueChangedMessage<ContainerInfo>(container);
 }
-

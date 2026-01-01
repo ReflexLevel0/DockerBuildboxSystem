@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using DockerBuildBoxSystem.Contracts;
 using DockerBuildBoxSystem.ViewModels.Common;
+using CommunityToolkit.Mvvm.Messaging;
 using DockerBuildBoxSystem.ViewModels.Messages;
 using System;
 using System.Collections.Generic;
@@ -87,7 +88,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 }
                 catch (OperationCanceledException)
                 {
-                    _logger.LogWithNewline("[logs] canceled", false, false);
+                    // Suppress cancellation message to avoid console noise
                 }
                 catch (Exception ex)
                 {
@@ -130,6 +131,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         {
             await _logRunner.StopAsync();
         }
+        
         public override async ValueTask DisposeAsync()
         {
             WeakReferenceMessenger.Default.UnregisterAll(this);

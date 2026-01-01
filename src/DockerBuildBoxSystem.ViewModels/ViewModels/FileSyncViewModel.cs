@@ -15,12 +15,16 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 {
     public partial class FileSyncViewModel : ViewModelBase,
         IRecipient<SelectedContainerChangedMessage>,
-        IRecipient<IsCommandRunningChangedMessage>,
-        IRecipient<ContainerStartedMessage>
+        IRecipient<ContainerStartedMessage>,
+        IRecipient<ContainerRunningMessage>
     {
         private readonly IFileSyncService _fileSyncService;
         private readonly ISettingsService _settingsService;
         private readonly IViewModelLogger _logger;
+
+        //tracks if we just handled a ContainerStartedMessage to avoid duplicate sync start
+        private string? _lastStartedContainerId;
+
         private string ContainerId
         {
             get => SelectedContainer?.Id ?? string.Empty;
@@ -35,11 +39,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [ObservableProperty]
         [NotifyCanExecuteChangedFor(nameof(StartSyncCommand))]
         [NotifyCanExecuteChangedFor(nameof(StartForceSyncCommand))]
-        private bool _isCommandRunning;
-
-        [ObservableProperty]
-        [NotifyCanExecuteChangedFor(nameof(StartSyncCommand))]
-        [NotifyCanExecuteChangedFor(nameof(StartForceSyncCommand))]
         private bool _isSwitching;
 
         [ObservableProperty]
@@ -48,8 +47,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [NotifyCanExecuteChangedFor(nameof(StopSyncCommand))]
         private bool _isSyncRunning;
 
-        [ObservableProperty]
-        private bool _isAutoSyncEnabled;
 
 
         [ObservableProperty]
@@ -58,11 +55,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [ObservableProperty]
         private string _containerSyncPath = "/data/";
 
-        /// <summary>
-        /// Gets a value indicating whether the automatic synchronization setting can be toggled for the currently
-        /// selected container.
-        /// </summary>
-        public bool CanToggleAutoSync => SelectedContainer != null; 
+        //synchronization semaphore and cancellation token source for sync operations
+        private readonly object _autoSyncSemaphore = new();
+        private CancellationTokenSource? _autoSyncCts;
 
         public FileSyncViewModel(IFileSyncService fileSyncService, ISettingsService settingsService, IViewModelLogger logger)
         {
@@ -87,6 +82,60 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             //register to receive messages
             WeakReferenceMessenger.Default.RegisterAll(this);
         }
+        private void CancelAutoSync()
+        {
+            CancellationTokenSource? cts = null;
+
+            lock (_autoSyncSemaphore)
+            {
+                cts = _autoSyncCts;
+                _autoSyncCts = null;
+            }
+
+            if (cts is null) return;
+
+            try { cts.Cancel(); } catch { /* ignore */ }
+            cts.Dispose();
+        }
+
+        private void StartAutoSync()
+        {
+            //start by canceling any existing auto-sync operation
+            CancelAutoSync();
+
+            var cts = new CancellationTokenSource();
+            lock (_autoSyncSemaphore)
+            {
+                _autoSyncCts = cts;
+            }
+
+            _ = RunAutoSyncAsync(cts.Token);
+        }
+
+        private async Task RunAutoSyncAsync(CancellationToken ct)
+        {
+            try
+            {
+                await StopSyncCoreAsync();
+
+                //force sync first
+                await StartForceSyncCoreAsync(ct);
+                ct.ThrowIfCancellationRequested();
+
+                //then start normal sync/watching
+                await StartSyncAsync();
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogWithNewline("[sync] Auto sync start cancelled.", true, false);
+                await StopSyncCoreAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWithNewline($"[sync-error] Auto sync start failed: {ex.Message}", true, false);
+                await StopSyncCoreAsync();
+            }
+        }
 
         partial void OnIsSyncRunningChanged(bool value)
         {
@@ -102,26 +151,44 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             SelectedContainer = message.Value;
         }
 
-        /// <summary>
-        /// Handles the IsCommandRunningChangedMessage.
-        /// </summary>
-        public void Receive(IsCommandRunningChangedMessage message)
-        {
-            IsCommandRunning = message.Value;
-        }
-
         public void Receive(ContainerStartedMessage message)
         {
             if (SelectedContainer == null || SelectedContainer.Id != message.Value.Id)
                 return;
 
-            if (string.IsNullOrEmpty(HostSyncPath))
+            if (string.IsNullOrEmpty(HostSyncPath) || !Directory.Exists(HostSyncPath))
             {
                 _logger.LogWithNewline("[sync] Warning: Host sync path is not set! Can't run force sync on container start.", true, false);
                 return;
             }
 
-            StartForceSyncAsync().ConfigureAwait(false);
+            //track that we handled this container start to avoid duplicate sync in ContainerRunningMessage
+            _lastStartedContainerId = message.Value.Id;
+
+            //container just started: run force sync then start auto sync
+            StartAutoSync();
+        }
+
+        public void Receive(ContainerRunningMessage message)
+        {
+            if (SelectedContainer == null || SelectedContainer.Id != message.Value.Id)
+                return;
+
+            //if we just handled ContainerStartedMessage for this container, skip (already started sync)
+            if (_lastStartedContainerId == message.Value.Id)
+            {
+                _lastStartedContainerId = null;
+                return;
+            }
+
+            if (string.IsNullOrEmpty(HostSyncPath) || !Directory.Exists(HostSyncPath))
+            {
+                _logger.LogWithNewline("[sync] Warning: Host sync path is not set! Can't start auto sync.", true, false);
+                return;
+            }
+
+            //container was already running: only start auto sync (no force sync)
+            _ = StartSyncAsync();
         }
 
         private async Task InitializeSettingsAsync()
@@ -184,7 +251,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// To be implemented once file sync functionality is in place.
         /// </summary>
         [RelayCommand(CanExecute = nameof(CanForceSync))]
-        public async Task StartForceSyncAsync()
+        public Task StartForceSyncAsync() => StartForceSyncCoreAsync(CancellationToken.None);
+
+        private async Task StartForceSyncCoreAsync(CancellationToken ct)
         {
             IsSyncRunning = true;
 
@@ -198,22 +267,22 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                     return;
                 }
 
+                ct.ThrowIfCancellationRequested();
+
                 _fileSyncService.Configure(HostSyncPath, ContainerId, ContainerSyncPath);
 
-                await _fileSyncService.CleanDirectoryAsync(["build"]);
-                await _fileSyncService.ForceSyncAsync();
+                await _fileSyncService.CleanDirectoryAsync(["build"], ct);
+                ct.ThrowIfCancellationRequested();
+
+                await _fileSyncService.ForceSyncAsync(ct);
+                ct.ThrowIfCancellationRequested();
 
                 _logger.LogWithNewline("[force-sync] Completed force sync operation", false, false);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWithNewline($"[force-sync-error] {ex.Message}", true, false);
             }
             finally
             {
                 IsSyncRunning = false;
             }
-
         }
 
         /// <summary>
@@ -225,41 +294,27 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// Stops the current sync task, if it is running.
         /// </summary>
         [RelayCommand(CanExecute = nameof(CanStopSync))]
-        public async Task StopSyncAsync()
+        private async Task StopSyncAsync()
+        {
+            CancelAutoSync();
+            await StopSyncCoreAsync();
+        }
+        public Task StopSyncCoreAsync()
         {
             _fileSyncService.StopWatching();
             IsSyncRunning = false;
-            await Task.CompletedTask;
+            return Task.CompletedTask;
         }
+
 
         public override async ValueTask DisposeAsync()
         {
+            CancelAutoSync();
             WeakReferenceMessenger.Default.UnregisterAll(this);
             _settingsService.SourcePathChanged -= OnSourcePathChanged;
             _fileSyncService.StopWatching();
             await base.DisposeAsync();
         }
 
-        /// <summary>
-        /// Used to start/stop auto sync when IsAutoSyncEnabled changes.
-        /// </summary>
-        /// <param name="value">the new value of IsAutoSyncEnabled</param>
-        partial void OnIsAutoSyncEnabledChanged(bool value)
-        {
-            if (value)
-                StartSyncCommand.Execute(null);
-            else
-                StopSyncCommand.Execute(null);
-        }
-
-        /// <summary>
-        /// Used to update CanToggleAutoSync when SelectedContainer changes.
-        /// </summary>
-        /// <param name="oldValue">the old selected container</param>
-        /// <param name="newValue">the new selected container</param>
-        partial void OnSelectedContainerChanged(ContainerInfo? oldValue, ContainerInfo? newValue)
-        {
-            OnPropertyChanged(nameof(CanToggleAutoSync));
-        }
     }
 }
