@@ -21,6 +21,7 @@ namespace DockerBuildBoxSystem.Domain
         private string _syncOutFolderPath = string.Empty;
 
         public event EventHandler<string>? SourcePathChanged;
+        public event EventHandler<string>? SyncOutPathChanged;
 
         public string SourceFolderPath
         {
@@ -44,6 +45,7 @@ namespace DockerBuildBoxSystem.Domain
                 if (_syncOutFolderPath != value)
                 {
                     _syncOutFolderPath = value;
+                    SyncOutPathChanged?.Invoke(this, _syncOutFolderPath);
                     _ = SaveSettingsAsync();
                 }
             }

@@ -32,6 +32,25 @@ namespace DockerBuildBoxSystem.Domain
             }
         }
 
+        public async Task<(bool Success, string Error)> CopyFromContainerAsync(string containerId, string containerPath, string hostPath, CancellationToken ct = default)
+        {
+            try
+            {
+                ct.ThrowIfCancellationRequested();
+                await _containerService.CopyFileFromContainerAsync(containerId, containerPath, hostPath, ct);
+                return (true, string.Empty);
+            }
+            catch (OperationCanceledException)
+            {
+                return (false, "Cancelled");
+            }
+            catch (Exception ex)
+            {
+                return (false, "EXCEPTION: " + ex.Message);
+            }
+        }
+
+
         public async Task<(bool Success, string Error)> DeleteInContainerAsync(string containerId, string containerPath, CancellationToken ct = default)
         {
             try
@@ -118,6 +137,23 @@ namespace DockerBuildBoxSystem.Domain
             try
             {
                 await _containerService.CopyDirectoryToContainerAsync(containerId, hostPath, containerPath, ct);
+                return (true, string.Empty);
+            }
+            catch (OperationCanceledException)
+            {
+                return (false, "Cancelled");
+            }
+            catch (Exception ex)
+            {
+                return (false, "ERROR: " + ex.Message);
+            }
+        }
+
+        public async Task<(bool Success, string Error)> CopyDirectoryFromContainerAsync(string containerId, string containerPath, string hostPath, CancellationToken ct = default)
+        {
+            try
+            {
+                await _containerService.CopyDirectoryFromContainerAsync(containerId, containerPath, hostPath, ct);
                 return (true, string.Empty);
             }
             catch (OperationCanceledException)

@@ -53,6 +53,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private string _hostSyncPath = string.Empty;
 
         [ObservableProperty]
+        private string _SyncOutPath = string.Empty;
+
+        [ObservableProperty]
         private string _containerSyncPath = "/data/";
 
         //synchronization semaphore and cancellation token source for sync operations
@@ -77,11 +80,14 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             };
 
             _settingsService.SourcePathChanged += OnSourcePathChanged;
+            _settingsService.SyncOutPathChanged += OnSyncOutPathChanged;
             InitializeSettingsAsync();
 
             //register to receive messages
             WeakReferenceMessenger.Default.RegisterAll(this);
         }
+
+
         private void CancelAutoSync()
         {
             CancellationTokenSource? cts = null;
@@ -206,6 +212,11 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             }
         }
 
+        private void OnSyncOutPathChanged(object? sender, string newPath)
+        {
+            SyncOutPath = newPath;
+        }
+
         /// <summary>
         /// Determines whether sync can be started.
         /// </summary>
@@ -247,11 +258,69 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
         /// <summary>
         /// Starts the force sync operation (same constraints as startSync).
-        /// This functiona should delete all sync in data from docker volume and resync everything.
-        /// To be implemented once file sync functionality is in place.
         /// </summary>
         [RelayCommand(CanExecute = nameof(CanForceSync))]
         public Task StartForceSyncAsync() => StartForceSyncCoreAsync(CancellationToken.None);
+
+        /// <summary>
+        /// Initiates an asynchronous synchronization of files from the container to the host directory.
+        /// </summary>
+        /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
+
+        [RelayCommand(CanExecute = nameof(CanForceSync))]
+        public async Task StartSyncOutAsync()
+        {
+            if (string.IsNullOrWhiteSpace(SyncOutPath))
+            {
+                _logger.LogWithNewline("[sync-out] Error: Sync out path is not set.", true, false);
+                return;
+            }
+
+            if (!Directory.Exists(SyncOutPath))
+            {
+                try
+                {
+                    Directory.CreateDirectory(SyncOutPath);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWithNewline($"[sync-out] Error creating sync out directory: {ex.Message}", true, false);
+                    return;
+                }
+            }
+
+            bool wasWatching = IsSyncRunning;
+
+            try
+            {
+                //pause the file watcher to prevent events from files being copied
+                if (wasWatching)
+                {
+                    _fileSyncService.PauseWatching();
+                }
+
+                _logger.LogWithNewline("[sync-out] Starting sync from container to host...", false, false);
+
+                _fileSyncService.Configure(SyncOutPath, ContainerId, ContainerSyncPath);
+                await _fileSyncService.ForceSyncFromContainerAsync();
+
+                _logger.LogWithNewline("[sync-out] Completed sync from container to host.", false, false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWithNewline($"[sync-out] Error: {ex.Message}", true, false);
+            }
+            finally
+            {
+                //resume the file watcher if it was running before
+                if (wasWatching)
+                {
+                    //reconfigure back to the original host sync path
+                    _fileSyncService.Configure(HostSyncPath, ContainerId, ContainerSyncPath);
+                    _fileSyncService.ResumeWatching();
+                }
+            }
+        }
 
         private async Task StartForceSyncCoreAsync(CancellationToken ct)
         {

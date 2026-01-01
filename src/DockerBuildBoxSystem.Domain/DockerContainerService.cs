@@ -485,10 +485,10 @@ namespace DockerBuildBoxSystem.Domain
         #region File Operations
 
         public async Task CopyFileToContainerAsync(
-    string containerId,
-    string hostPath,
-    string containerPath,
-    CancellationToken ct = default)
+            string containerId,
+            string hostPath,
+            string containerPath,
+            CancellationToken ct = default)
         {
             if (!File.Exists(hostPath))
                 throw new FileNotFoundException("File not found", hostPath);
@@ -519,6 +519,8 @@ namespace DockerBuildBoxSystem.Domain
                 memoryStream,
                 ct);
         }
+
+
         public async Task CopyDirectoryToContainerAsync(
             string containerId,
             string hostPath,
@@ -550,6 +552,81 @@ namespace DockerBuildBoxSystem.Domain
                 if (File.Exists(tempTarPath))
                 {
                     try { File.Delete(tempTarPath); } catch { }
+                }
+            }
+        }
+
+        public async Task CopyFileFromContainerAsync(
+            string containerId,
+            string containerPath,
+            string hostPath,
+            CancellationToken ct = default)
+        {
+            //get the archive stream from the container
+            var response = await Client.Containers.GetArchiveFromContainerAsync(
+                containerId,
+                new GetArchiveFromContainerParameters { Path = containerPath },
+                statOnly: false,
+                ct);
+
+            //eensure the host directory exists
+            string? hostDir = Path.GetDirectoryName(hostPath);
+            if (!string.IsNullOrEmpty(hostDir))
+            {
+                Directory.CreateDirectory(hostDir);
+            }
+
+            //extract the file from the tar archive
+            using var tarReader = new TarReader(response.Stream);
+            TarEntry? entry = await tarReader.GetNextEntryAsync(cancellationToken: ct);
+
+            if (entry is null)
+            {
+                throw new FileNotFoundException($"File not found in container: {containerPath}");
+            }
+
+            //extract to the host path
+            await entry.ExtractToFileAsync(hostPath, overwrite: true, ct);
+        }
+
+        public async Task CopyDirectoryFromContainerAsync(
+            string containerId,
+            string containerPath,
+            string hostPath,
+            CancellationToken ct = default)
+        {
+            //get the archive stream from the container
+            var response = await Client.Containers.GetArchiveFromContainerAsync(
+                containerId,
+                new GetArchiveFromContainerParameters { Path = containerPath },
+                statOnly: false,
+                ct);
+
+            //eensure the host directory exists
+            Directory.CreateDirectory(hostPath);
+
+            //extract all entries from the tar archive
+            using var tarReader = new TarReader(response.Stream);
+            while (await tarReader.GetNextEntryAsync(cancellationToken: ct) is { } entry)
+            {
+                //skip the root directory entry (it matches the source directory name)
+                if (entry.EntryType == TarEntryType.Directory)
+                {
+                    string dirPath = Path.Combine(hostPath, entry.Name);
+                    Directory.CreateDirectory(dirPath);
+                    continue;
+                }
+
+                if (entry.EntryType == TarEntryType.RegularFile)
+                {
+                    string filePath = Path.Combine(hostPath, entry.Name);
+                    string? fileDir = Path.GetDirectoryName(filePath);
+                    if (!string.IsNullOrEmpty(fileDir))
+                    {
+                        Directory.CreateDirectory(fileDir);
+                    }
+
+                    await entry.ExtractToFileAsync(filePath, overwrite: true, ct);
                 }
             }
         }
