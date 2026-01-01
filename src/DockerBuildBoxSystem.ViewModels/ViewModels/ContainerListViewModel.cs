@@ -398,8 +398,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                     if (!alreadyRunning)
                         _logger.LogWithNewline($"[info] Started container: {name}", false, false);
 
-                    _logger.LogWithNewline($"[info] Started container: {name}", false, false);
-
                     // Re-inspect to get the updated running state
                     SelectedContainer = await _containerService.InspectAsync(ContainerId, ct);
 
