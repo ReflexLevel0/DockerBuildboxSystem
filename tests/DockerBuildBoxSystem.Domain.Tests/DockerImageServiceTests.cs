@@ -39,7 +39,7 @@ namespace DockerBuildBoxSystem.Domain.Tests
                 client.Images.InspectImageAsync(imageReponse.ID).Returns(Task.FromResult(imageReponse));
             }else
             {
-                client.Images.InspectImageAsync(imageReponse.ID).ThrowsAsync(new DockerImageNotFoundException(HttpStatusCode.OK, ""));
+                client.Images.InspectImageAsync(imageReponse.ID).ThrowsAsync(new DockerImageNotFoundException(HttpStatusCode.NotFound, ""));
             }
 
             // Act
