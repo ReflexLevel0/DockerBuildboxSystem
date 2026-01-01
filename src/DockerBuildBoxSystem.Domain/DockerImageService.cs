@@ -29,24 +29,31 @@ namespace DockerBuildBoxSystem.Domain
         /// Initializes a new instance of the <see cref="DockerImageService"/> class with an existing client.
         /// </summary>
         /// <param name="client">An existing Docker client instance.</param>
-        public DockerImageService(DockerClient client)
+        public DockerImageService(IDockerClient client)
             : base(client)
         {
         }
 
         /// <inheritdoc/>
-        public async Task<ImageInfo> InspectImageAsync(string imageId, CancellationToken ct = default)
+        public async Task<ImageInfo?> InspectImageAsync(string imageId, CancellationToken ct = default)
         {
-            var inspect = await Client.Images.InspectImageAsync(imageId, ct);
-            return new ImageInfo
+            try
             {
-                Id = inspect.ID,
-                RepoTags = inspect.RepoTags is null ? Array.Empty<string>() : inspect.RepoTags.ToArray(),
-                Created = inspect.Created,
-                Size = inspect.Size,
-                VirtualSize = inspect.VirtualSize,
-                Labels = inspect.Config?.Labels is null ? new Dictionary<string, string>() : new Dictionary<string, string>(inspect.Config.Labels)
-            };
+                var inspect = await Client.Images.InspectImageAsync(imageId, ct);
+                return new ImageInfo
+                {
+                    Id = inspect.ID,
+                    RepoTags = inspect.RepoTags is null ? Array.Empty<string>() : inspect.RepoTags.ToArray(),
+                    Created = inspect.Created,
+                    Size = inspect.Size,
+                    VirtualSize = inspect.VirtualSize,
+                    Labels = inspect.Config?.Labels is null ? new Dictionary<string, string>() : new Dictionary<string, string>(inspect.Config.Labels)
+                };
+            }
+            catch (DockerImageNotFoundException ex)
+            {
+                return null;
+            }
         }
 
         /// <inheritdoc/>
