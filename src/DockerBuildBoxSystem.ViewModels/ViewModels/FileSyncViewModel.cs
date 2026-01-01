@@ -15,15 +15,14 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 {
     public partial class FileSyncViewModel : ViewModelBase,
         IRecipient<SelectedContainerChangedMessage>,
-        IRecipient<ContainerStartedMessage>,
         IRecipient<ContainerRunningMessage>
     {
         private readonly IFileSyncService _fileSyncService;
         private readonly ISettingsService _settingsService;
         private readonly IViewModelLogger _logger;
 
-        //tracks if we just handled a ContainerStartedMessage to avoid duplicate sync start
-        private string? _lastStartedContainerId;
+        //tracks containers that have been force-synced and the path they were synced with
+        private readonly Dictionary<string, string> _forceSyncedContainers = new();
 
         private string ContainerId
         {
@@ -118,9 +117,23 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             {
                 await StopSyncCoreAsync();
 
-                //force sync first
-                await StartForceSyncCoreAsync(ct);
-                ct.ThrowIfCancellationRequested();
+                //check if we need to force sync
+                bool shouldForceSync = true;
+                if (_forceSyncedContainers.TryGetValue(ContainerId, out string? lastSyncedPath) && lastSyncedPath == HostSyncPath)
+                {
+                    shouldForceSync = false;
+                }
+
+                if (shouldForceSync)
+                {
+                    //force sync first
+                    await StartForceSyncCoreAsync(ct);
+                    ct.ThrowIfCancellationRequested();
+                }
+                else
+                {
+                    _logger.LogWithNewline($"[sync] Skipping force sync for {ContainerId} (already synced with {HostSyncPath})", false, false);
+                }
 
                 //then start normal sync/watching
                 await StartSyncAsync();
@@ -151,35 +164,10 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             SelectedContainer = message.Value;
         }
 
-        public void Receive(ContainerStartedMessage message)
-        {
-            if (SelectedContainer == null || SelectedContainer.Id != message.Value.Id)
-                return;
-
-            if (string.IsNullOrEmpty(HostSyncPath) || !Directory.Exists(HostSyncPath))
-            {
-                _logger.LogWithNewline("[sync] Warning: Host sync path is not set! Can't run force sync on container start.", true, false);
-                return;
-            }
-
-            //track that we handled this container start to avoid duplicate sync in ContainerRunningMessage
-            _lastStartedContainerId = message.Value.Id;
-
-            //container just started: run force sync then start auto sync
-            StartAutoSync();
-        }
-
         public void Receive(ContainerRunningMessage message)
         {
             if (SelectedContainer == null || SelectedContainer.Id != message.Value.Id)
                 return;
-
-            //if we just handled ContainerStartedMessage for this container, skip (already started sync)
-            if (_lastStartedContainerId == message.Value.Id)
-            {
-                _lastStartedContainerId = null;
-                return;
-            }
 
             if (string.IsNullOrEmpty(HostSyncPath) || !Directory.Exists(HostSyncPath))
             {
@@ -187,8 +175,8 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 return;
             }
 
-            //container was already running: only start auto sync (no force sync)
-            _ = StartSyncAsync();
+            //container is running: start auto sync (force sync if needed)
+            StartAutoSync();
         }
 
         private async Task InitializeSettingsAsync()
@@ -276,6 +264,12 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
                 await _fileSyncService.ForceSyncAsync(ct);
                 ct.ThrowIfCancellationRequested();
+
+                //update the tracker
+                if (!string.IsNullOrEmpty(ContainerId))
+                {
+                    _forceSyncedContainers[ContainerId] = HostSyncPath;
+                }
 
                 _logger.LogWithNewline("[force-sync] Completed force sync operation", false, false);
             }
