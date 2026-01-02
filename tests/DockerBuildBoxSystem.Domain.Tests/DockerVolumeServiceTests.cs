@@ -11,10 +11,8 @@ namespace DockerBuildBoxSystem.Domain.Tests
 {
     public class DockerVolumeServiceTests
     {
-        private static DockerVolumeService CreateDockerVolumeService(IDockerClient dockerClient)
-        {
-            return new DockerVolumeService(dockerClient);
-        }
+        private static DockerVolumeService CreateDockerVolumeService(IDockerClient dockerClient) =>
+            new DockerVolumeService(dockerClient);
 
         [Fact]
         public async Task CreateVolumeAsync()
