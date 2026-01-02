@@ -569,7 +569,6 @@ namespace DockerBuildBoxSystem.Domain
                 statOnly: false,
                 ct);
 
-            //eensure the host directory exists
             //ensure the host directory exists
             string? hostDir = Path.GetDirectoryName(hostPath);
             if (!string.IsNullOrEmpty(hostDir))
@@ -608,7 +607,6 @@ namespace DockerBuildBoxSystem.Domain
                 statOnly: false,
                 ct);
 
-            //eensure the host directory exists
             //ensure the host directory exists
             Directory.CreateDirectory(hostPath);
 
