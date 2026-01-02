@@ -272,17 +272,19 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 return;
             }
 
-            if (!Directory.Exists(SyncOutPath))
+            try
             {
-                try
+                string buildPath = $"{SyncOutPath}/build";
+                if (Directory.Exists(buildPath))
                 {
-                    Directory.CreateDirectory(SyncOutPath);
+                    Directory.Delete(buildPath, true);
                 }
-                catch (Exception ex)
-                {
-                    _logger.LogWithNewline($"[sync-out] Error creating sync out directory: {ex.Message}", true, false);
-                    return;
-                }
+                Directory.CreateDirectory(SyncOutPath);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWithNewline($"[sync-out] Error creating sync out directory: {ex.Message}", true, false);
+                return;
             }
 
             bool wasWatching = IsSyncRunning;
