@@ -91,6 +91,24 @@ namespace DockerBuildBoxSystem.Domain
             }
         }
 
+        public void PauseWatching()
+        {
+            if (_watcher != null)
+            {
+                _watcher.EnableRaisingEvents = false;
+                Log("Paused watching.");
+            }
+        }
+
+        public void ResumeWatching()
+        {
+            if (_watcher != null)
+            {
+                _watcher.EnableRaisingEvents = true;
+                Log("Resumed watching.");
+            }
+        }
+
         public async Task CleanDirectoryAsync(IEnumerable<string>? excludedPaths, CancellationToken ct = default)
         {
             ct.ThrowIfCancellationRequested();
@@ -176,6 +194,59 @@ namespace DockerBuildBoxSystem.Domain
                 {
                     Log("Failed to delete temp folder: " + ex.Message);
                 }
+            }
+        }
+
+        public async Task ForceSyncFromContainerAsync(CancellationToken ct = default)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            if (string.IsNullOrWhiteSpace(_rootPath))
+            {
+                Log("Error: Host path is not set.");
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(_containerId))
+            {
+                Log("Error: Container ID is not set.");
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(_containerRootPath))
+            {
+                Log("Error: Container sync path is not set.");
+                return;
+            }
+
+            try
+            {
+                Log("Starting Force Sync from Container...");
+
+                // Ensure target directory exists
+                if (!Directory.Exists(_rootPath))
+                {
+                    Directory.CreateDirectory(_rootPath);
+                }
+
+                // Copy directly from container to host folder
+                var (success, error) = await _fileTransferService.CopyDirectoryFromContainerAsync(_containerId, _containerRootPath, _rootPath, ct);
+
+                ct.ThrowIfCancellationRequested();
+
+                if (success)
+                    Log($"Full Folder Sync <- {_containerId}:{_containerRootPath} | Success");
+                else
+                    Log($"Failed to copy from container: {error}");
+            }
+            catch (OperationCanceledException)
+            {
+                Log("[force-sync-from-container] Cancelled.");
+                throw;
+            }
+            catch (Exception ex)
+            {
+                Log("EXCEPTION during container-to-host sync: " + ex.Message);
             }
         }
 

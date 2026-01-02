@@ -13,7 +13,10 @@ namespace DockerBuildBoxSystem.Contracts
         void Configure(string path, string containerId, string containerRootPath = "/data/");
         void StartWatching(string path, string containerId, string containerRootPath = "/data/");
         void StopWatching();
+        void PauseWatching();
+        void ResumeWatching();
         Task ForceSyncAsync(CancellationToken ct = default);
+        Task ForceSyncFromContainerAsync(CancellationToken ct = default);
         Task CleanDirectoryAsync(IEnumerable<string>? excludedPaths, CancellationToken ct = default);
         void UpdateIgnorePatterns(string patterns);
     }
