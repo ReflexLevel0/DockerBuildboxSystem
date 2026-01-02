@@ -1,8 +1,11 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
 using Docker.DotNet.Models;
 using DockerBuildBoxSystem.Contracts;
+using CommunityToolkit.Mvvm.Messaging;
 using DockerBuildBoxSystem.ViewModels.Common;
+using DockerBuildBoxSystem.ViewModels.Messages;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -12,16 +15,20 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Xml.Linq;
+using Docker.DotNet;
+using System.Net;
 
 namespace DockerBuildBoxSystem.ViewModels.ViewModels
 {
-    public partial class ContainerListViewModel : ViewModelBase
+    public partial class ContainerListViewModel : ViewModelBase,
+        IRecipient<AutoStartLogsChangedMessage>
     {
         private readonly IServiceProvider _serviceProvider;
         private readonly IImageService _imageService;
         private readonly IContainerService _containerService;
         private readonly IExternalProcessService _externalProcessService;
         private readonly IViewModelLogger _logger;
+        private readonly HashSet<string> _stopRequestedByApp = new(StringComparer.OrdinalIgnoreCase);
 
         private string ContainerId
         {
@@ -92,6 +99,17 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             _containerService = containerService ?? throw new ArgumentNullException(nameof(containerService));
             _externalProcessService = externalProcessService ?? throw new ArgumentNullException(nameof(externalProcessService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+
+            //register to receive messages
+            WeakReferenceMessenger.Default.RegisterAll(this);
+        }
+
+        /// <summary>
+        /// Handles the AutoStartLogsChangedMessage.
+        /// </summary>
+        public void Receive(AutoStartLogsChangedMessage message)
+        {
+            AutoStartLogs = message.Value;
         }
 
         /// <summary>
@@ -106,7 +124,17 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// Triggers the async image selection handler.
         /// </summary>
         /// <param name="value">The newly selected image info or null.</param>
-        partial void OnSelectedImageChanged(ImageInfo? value) => _ = OnSelectedImageChangedAsync(value);
+        partial void OnSelectedImageChanged(ImageInfo? value)
+        {
+            OnSelectedImageChangedAsync(value).ConfigureAwait(false);
+            WeakReferenceMessenger.Default.Send(new SelectedImageChangedMessage(value));
+        }
+
+        partial void OnSelectedContainerChanged(ContainerInfo? value)
+        {
+            //notify other view models about container selection change
+            WeakReferenceMessenger.Default.Send(new SelectedContainerChangedMessage(value));
+        }
 
         /// <summary>
         /// Refreshes the list of images from the image service.
@@ -237,10 +265,13 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
                 ct.ThrowIfCancellationRequested();
 
-                //start the container
+                // Delegate exclusive-run behavior to service-level StartAsync
                 await StartContainerInternalAsync(ct);
 
                 _previousContainerId = ContainerId;
+
+                //At this stage, the container should be running...
+                WeakReferenceMessenger.Default.Send(new ContainerRunningMessage(container));
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -259,18 +290,67 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             }
         }
 
+        /// <summary>
+        /// Refreshes the currently selected Docker container and keeps the UI state in sync
+        /// with external Docker changes.
+        /// </summary> 
         public async Task RefreshSelectedContainerAsync()
         {
-            if (string.IsNullOrWhiteSpace(ContainerId)) return;
             try
             {
-                SelectedContainer = await _containerService.InspectAsync(ContainerId);
+                if (!await _imageSwitchLock.WaitAsync(0))
+                    return;
             }
-            catch (Exception ex)
+            catch (ObjectDisposedException)
             {
-                _logger.LogWithNewline($"[refresh-error] {ex.Message}", true, false);
+                return;
+            }
+
+            try
+            {
+                var id = ContainerId;
+                if (string.IsNullOrWhiteSpace(id))
+                    return;
+
+                try
+                {
+                    var refreshed = await _containerService.InspectAsync(id);
+
+                    if (!string.Equals(id, ContainerId, StringComparison.OrdinalIgnoreCase))
+                        return;
+
+                    // Still running or stop was requested by app
+                    if (refreshed?.IsRunning == true || _stopRequestedByApp.Remove(id))
+                    {
+                        SelectedContainer = refreshed;
+                        return;
+                    }
+
+                    var name = refreshed?.Names?.FirstOrDefault() ?? id;
+                    _logger.LogWithNewline($"[info] Container stopped externally: {name}", false, false);
+                    SelectedContainer = null;
+                }
+                catch (DockerApiException dae) when (dae.StatusCode == HttpStatusCode.NotFound)
+                {
+                    _stopRequestedByApp.Remove(id);
+                    _logger.LogWithNewline($"[info] Selected container was removed externally: {id}", false, false);
+                    SelectedContainer = null;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWithNewline($"[refresh-error] {ex.Message}", true, false);
+                }
+            }
+            finally
+            {
+                try
+                {
+                    _imageSwitchLock.Release();
+                }
+                catch (ObjectDisposedException) { }
             }
         }
+
         private bool CanStartContainer() => !string.IsNullOrWhiteSpace(ContainerId) && !IsContainerRunning;
         
         /// <summary>
@@ -293,15 +373,19 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private async Task StartContainerInternalAsync(CancellationToken ct)
         {
             if (SelectedContainer is null) return;
+            var containerId = SelectedContainer.Id;
 
             if (ct.IsCancellationRequested) return;
 
-            var name = SelectedContainer.Names.FirstOrDefault() ?? SelectedContainer.Id;
+            var name = SelectedContainer.Names.FirstOrDefault() ?? containerId;
             try
             {
-                _logger.LogWithNewline($"[info] Starting container: {name}", false, false);
+                var alreadyRunning = SelectedContainer.IsRunning;
+                _logger.LogWithNewline(alreadyRunning
+                    ? $"[info] Already running container: {name}"
+                    : $"[info] Starting container: {name}", false, false);
 
-                var status = await _containerService.StartAsync(ContainerId, ct);
+                var status = await _containerService.StartAsync(containerId, ct);
 
                 if (ct.IsCancellationRequested)
                 {
@@ -311,17 +395,30 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
                 if (status)
                 {
-                    if (!string.IsNullOrWhiteSpace(SelectedContainer?.Id))
-                        _containersStartedByApp.Add(SelectedContainer.Id);
+                    if (!string.IsNullOrWhiteSpace(containerId))
+                        _containersStartedByApp.Add(containerId);
 
-                    _logger.LogWithNewline($"[info] Started container: {name}", false, false);
-                    
+                    if (!alreadyRunning)
+                        _logger.LogWithNewline($"[info] Started container: {name}", false, false);
+
                     // Re-inspect to get the updated running state
                     SelectedContainer = await _containerService.InspectAsync(ContainerId, ct);
+
+                    //notify other view models about the container start
+                    WeakReferenceMessenger.Default.Send(new ContainerStartedMessage(SelectedContainer));
                 }
                 else
                 {
-                    _logger.LogWithNewline($"[start-container] Container did not start: {name}", true, false);
+                    // If start returned false, verify current state; if running, treat as benign and log accordingly
+                    var refreshed = await _containerService.InspectAsync(containerId, ct);
+                    if (refreshed.IsRunning)
+                    {
+                        SelectedContainer = refreshed;
+                    }
+                    else
+                    {
+                        _logger.LogWithNewline($"[start-container] Container did not start: {name}", true, false);
+                    }
                 }
             }
             catch (OperationCanceledException)
@@ -333,6 +430,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 _logger.LogWithNewline($"[start-container-error] {ex.Message}", true, false);
             }
         }
+
 
         private bool CanStopContainer() => !string.IsNullOrWhiteSpace(ContainerId) && IsContainerRunning;
 
@@ -353,6 +451,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             {
                 var name = container.Names.FirstOrDefault() ?? container.Id;
                 _logger.LogWithNewline($"[info] Stopping container: {name}", false, false);
+                _stopRequestedByApp.Add(container.Id);
                 await _containerService.StopAsync(container.Id, timeout: TimeSpan.FromSeconds(10));
                 _logger.LogWithNewline($"[info] Stopped container: {name}", false, false);
                 
@@ -418,6 +517,11 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         {
             if (Interlocked.Exchange(ref _disposeOnce, 1) != 0)
                 return;
+            
+            // Unregister message subscriptions
+            WeakReferenceMessenger.Default.UnregisterAll(this);
+
+            WeakReferenceMessenger.Default.UnregisterAll(this);
 
             try
             {

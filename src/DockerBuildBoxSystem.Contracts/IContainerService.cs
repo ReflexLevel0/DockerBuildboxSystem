@@ -111,6 +111,16 @@ namespace DockerBuildBoxSystem.Contracts
     public interface IContainerService : IAsyncDisposable
     {
         /// <summary>
+        /// Checks whether the Docker engine is reachable and responding.
+        /// </summary>
+        /// <param name="ct">Cancellation token</param>
+        /// <returns>True if the engine is available; otherwise false.</returns>
+        Task<bool> IsEngineAvailableAsync(CancellationToken ct = default);
+        /// Raised after a container has successfully started.
+        /// </summary>
+        event EventHandler<string>? ContainerStarted;
+        
+        /// <summary>
         /// Stops all currently running containers and starts the container with id <paramref name="containerId"/>.
         /// </summary>
         /// <param name="containerId">The id or name of the container to start</param>
@@ -135,6 +145,15 @@ namespace DockerBuildBoxSystem.Contracts
         /// <param name="ct">Cancellation token</param>
         /// <returns></returns>
         Task StopAsync(string containerId, TimeSpan timeout, CancellationToken ct = default);
+
+        /// <summary>
+        /// Stops multiple running containers.
+        /// </summary>
+        /// <param name="containerIds">Sequence of container IDs to stop.</param>
+        /// <param name="timeout">Time to wait before forcibly kill each container.</param>
+        /// <param name="ct">Cancellation token</param>
+        /// <returns>Task that completes when all stop requests finish.</returns>
+        Task StopAsync(IEnumerable<string> containerIds, TimeSpan timeout, CancellationToken ct = default);
 
         /// <summary>
         /// Removes a container for the Docker host
@@ -256,6 +275,32 @@ namespace DockerBuildBoxSystem.Contracts
             string containerId,
             string hostPath,
             string containerPath,
+            CancellationToken ct = default);
+
+        /// <summary>
+        /// Copies a file from the container to the host.
+        /// </summary>
+        /// <param name="containerId">The id or name of the container</param>
+        /// <param name="containerPath">The absolute path to the file in the container</param>
+        /// <param name="hostPath">The absolute path to the destination on the host</param>
+        /// <param name="ct">Cancellation token</param>
+        Task CopyFileFromContainerAsync(
+            string containerId,
+            string containerPath,
+            string hostPath,
+            CancellationToken ct = default);
+
+        /// <summary>
+        /// Copies a directory from the container to the host.
+        /// </summary>
+        /// <param name="containerId">The id or name of the container</param>
+        /// <param name="containerPath">The absolute path to the directory in the container</param>
+        /// <param name="hostPath">The absolute path to the destination directory on the host</param>
+        /// <param name="ct">Cancellation token</param>
+        Task CopyDirectoryFromContainerAsync(
+            string containerId,
+            string containerPath,
+            string hostPath,
             CancellationToken ct = default);
     }
 }

@@ -60,7 +60,7 @@ namespace DockerBuildBoxSystem.Contracts
         /// <param name="imageId">The unique identifier of the image to inspect.</param>
         /// <param name="ct">Cancellation token</param>
         /// <returns>A <see cref="ImageInfo"/> object containing detailed information about the specified image.</returns>
-        Task<ImageInfo> InspectImageAsync(string imageId, CancellationToken ct = default);
+        Task<ImageInfo?> InspectImageAsync(string imageId, CancellationToken ct = default);
 
         /// <summary>
         /// Removes an image from the Docker host.

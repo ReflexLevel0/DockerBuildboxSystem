@@ -1,30 +1,34 @@
 ﻿[
-
   {
-    "Control": "dropdown",
-    "Id": "platform",
-    "Label": "Platform:",
-    "Values": [ "arm", "intel", "x86" ],
-    "Tooltip": "Choose your platform"
-  },
-  {
-    "Control": "dropdown",
-    "Id": "target",
-    "Label": "Target:",
-    "Values": [ "builder", "dev", "prod", "test" ],
-    "Tooltip": "Choose your target"
+    "Control": "textbox",
+    "Id": "gcc_input_file",
+    "Label": "gcc input:",
+    "Tooltip": "Enter gcc input file path"
   },
   {
     "Control": "textbox",
-    "Id": "username",
-    "Label": "username:",
-    "Tooltip": "Enter a username"
+    "Id": "gcc_output_file",
+    "Label": "gcc output:",
+    "Tooltip": "Enter gcc output file name"
   },
   {
-    "Control": "textbox",
-    "Id": "dir",
-    "Label": "Directory:",
-    "Tooltip": "Enter a path"
+    "Control": "dropdown",
+    "Id": "make_arg",
+    "Label": "make arg:",
+    "Values": [ "all", "hello.exe", "hello.o", "clean" ],
+    "Tooltip": "Choose make argument"
+  },
+  {
+    "Control": "button",
+    "Command": [ "mkdir -p /data/build && gcc -o /data/build/${gcc_output_file} /data/${gcc_input_file}" ],
+    "Tooltip": "Execute gcc compilation",
+    "IconPath": "Assets/icons/gcc.png"
+  },
+  {
+    "Control": "button",
+    "Command": [ "mkdir -p /data/build && (cd /data && make ${make_arg})" ],
+    "Tooltip": "Execute make",
+    "IconPath": "Assets/icons/linux.png"
   },
   {
     "Control": "button",
