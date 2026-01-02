@@ -70,10 +70,7 @@ namespace DockerBuildBoxSystem.Domain
 
         public async Task StopAsync()
         {
-            if (!IsRunning) return;
-
             _logsCts?.Cancel();
-            IsRunning = false;
         }
 
         public ValueTask DisposeAsync()

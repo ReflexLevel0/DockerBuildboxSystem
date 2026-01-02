@@ -2,6 +2,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DockerBuildBoxSystem.Contracts;
 using DockerBuildBoxSystem.ViewModels.Common;
+using DockerBuildBoxSystem.ViewModels.ViewModels;
 using Microsoft.Extensions.Configuration;
 
 namespace DockerBuildBoxSystem.ViewModels.Main;
@@ -14,8 +15,12 @@ public partial class MainViewModel : ViewModelBase
     private readonly IConfiguration _configuration;
     private readonly IDialogService _dialogService;
     private readonly ISettingsService _settingsService;
+    private readonly ISyncIgnoreService _syncIgnoreService;
     // Suppress persisting SourcePath while we are loading the initial value
     private bool _isLoadingSourcePath;
+
+
+    public EnvironmentViewModel EnvironmentVM { get; }
 
     /// <summary>
     /// Event raised when the application should exit.
@@ -33,12 +38,18 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     private string? _syncOutPath;
 
-    public MainViewModel(IConfiguration configuration, IDialogService dialogService, ISettingsService settingsService)
+    public MainViewModel(IConfiguration configuration,
+                        IDialogService dialogService,
+                        ISettingsService settingsService,
+                        ISyncIgnoreService syncIgnoreService,
+                        EnvironmentViewModel environmentViewModel)
     {
         _configuration = configuration;
         _dialogService = dialogService;
         _settingsService = settingsService;
-        
+        _syncIgnoreService = syncIgnoreService;
+        EnvironmentVM = environmentViewModel;
+
         //load title from configuration
         var appName = _configuration["Application:Name"] ?? "Docker BuildBox System";
         var version = _configuration["Application:Version"];
@@ -62,6 +73,9 @@ public partial class MainViewModel : ViewModelBase
 
             // Load persisted source folder path if available
             await LoadSourcePathFromConfigAsync();
+
+            // Load environment variables
+            await EnvironmentVM.LoadEnvASync();
         }
         finally
         {
@@ -113,7 +127,7 @@ public partial class MainViewModel : ViewModelBase
     {
         //clean up event handlers
         ExitRequested = null;
-        
+
         await base.DisposeAsync();
     }
 
@@ -125,7 +139,7 @@ public partial class MainViewModel : ViewModelBase
         try
         {
             await _settingsService.LoadSettingsAsync();
-            
+
             _isLoadingSourcePath = true;
             if (!string.IsNullOrWhiteSpace(_settingsService.SourceFolderPath))
             {
@@ -147,7 +161,7 @@ public partial class MainViewModel : ViewModelBase
     {
         if (_isLoadingSourcePath) return; // skip persisting initial load value
         if (value == null) return;
-        
+
         _settingsService.SourceFolderPath = value;
     }
 
@@ -155,7 +169,7 @@ public partial class MainViewModel : ViewModelBase
     {
         if (_isLoadingSourcePath) return;
         if (value == null) return;
-        
+
         _settingsService.SyncOutFolderPath = value;
     }
 
@@ -205,5 +219,15 @@ public partial class MainViewModel : ViewModelBase
 
         await Task.CompletedTask;
     }
+
+    /// <summary>
+    /// Opens the .syncignore file in notepad for viewing/editing.
+    /// </summary>
+    [RelayCommand]
+    private void OpenSyncIgnoreFile()
+    {
+        _syncIgnoreService.OpenSyncIgnore();
+    }
 }
+
 

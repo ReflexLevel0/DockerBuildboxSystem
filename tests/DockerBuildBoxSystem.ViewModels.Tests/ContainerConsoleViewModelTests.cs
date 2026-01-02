@@ -5,26 +5,43 @@ using DockerBuildBoxSystem.ViewModels.Common;
 using Microsoft.Extensions.Configuration;
 using NSubstitute;
 using static DockerBuildBoxSystem.TestUtils.ChannelTestUtil;
+using Docker.DotNet.Models;
 
 namespace DockerBuildBoxSystem.ViewModels.Tests;
 
 public class ContainerConsoleViewModelTests
 {
     private static ContainerConsoleViewModel CreateViewModel(
+        IServiceProvider? serviceProvider = null,
         IContainerService? service = null,
+        IImageService? imageService = null,
+        IDialogService? dialogService = null,
         IFileSyncService? fileSyncService = null,
         IConfiguration? configuration = null,
         ISettingsService? settingsService = null,
-        IClipboardService? clipboard = null)
+        IUserControlService? userControlService = null,
+        ILogRunner? logRunner = null,
+        ICommandRunner? commandRunner = null,
+        IClipboardService? clipboard = null,
+        HostConfig? hostConfig = null,
+        IExternalProcessService? externalProcessService = null
+        )
     {
+        serviceProvider ??= Substitute.For<IServiceProvider>();
         service ??= Substitute.For<IContainerService>();
+        imageService ??= Substitute.For<IImageService>();
+        dialogService ??= Substitute.For<IDialogService>();
         fileSyncService ??= Substitute.For<IFileSyncService>();
         fileSyncService.Changes.Returns(new System.Collections.ObjectModel.ObservableCollection<string>());
         configuration ??= Substitute.For<IConfiguration>();
         settingsService ??= Substitute.For<ISettingsService>();
+        userControlService ??= Substitute.For<IUserControlService>();
+        logRunner ??= Substitute.For<ILogRunner>();
+        commandRunner ??= Substitute.For<ICommandRunner>();
         clipboard ??= Substitute.For<IClipboardService>();
+        externalProcessService ??= Substitute.For<IExternalProcessService>();
 
-        return new ContainerConsoleViewModel(service, fileSyncService, configuration, settingsService, clipboard);
+        return new ContainerConsoleViewModel(serviceProvider, imageService, service, dialogService, fileSyncService, configuration, settingsService, userControlService, logRunner, commandRunner, externalProcessService, clipboard);
     }
 
     /// <summary>
@@ -33,26 +50,26 @@ public class ContainerConsoleViewModelTests
     /// <remarks>This test ensures that the <c>InitializeCommand</c> properly retrieves a list of running
     /// containers and populates the <c>Containers</c> and <c>UserCommands</c> collections in the view model.</remarks>
     [Fact]
-    public async Task Initialize_Loads_Containers_And_UserCommands()
+    public async Task Initialize_Loads_Images_And_UserCommands()
     {
         //Arrange
-        var ContainerService = Substitute.For<IContainerService>();
+        var imageService = Substitute.For<IImageService>();
 
-        //The ListContainersAsync method is subbed to return a list with one running container
-        ContainerService
-            .ListContainersAsync(true, null, default)
-            .Returns(Task.FromResult<IList<ContainerInfo>>(new List<ContainerInfo>
+        //The ListImagesAsync method is subbed to return a list with one image
+        imageService
+            .ListImagesAsync(true, default)
+            .Returns(Task.FromResult<IList<ImageInfo>>(new List<ImageInfo>
             {
-                new ContainerInfo { Id = "1", Names = new []{"n1"}, State = "running" }
+                new ImageInfo { Id = "1", RepoTags = new []{"n1"} }
             }));
 
-        var vm = CreateViewModel(ContainerService);
+        var vm = CreateViewModel(imageService: imageService);
 
         //Act
         await vm.InitializeCommand.ExecuteAsync(null);
 
         //Assert
-        Assert.Single(vm.Containers);
+        Assert.Single(vm.ContainerList.Images);
     }
 
     /// <summary>
@@ -68,6 +85,7 @@ public class ContainerConsoleViewModelTests
     {
         //Arrange
         var ContainerService = Substitute.For<IContainerService>();
+        var LogsService = Substitute.For<ILogRunner>();
 
         //The InspectAsync method is stubbed to return a container
         ContainerService
@@ -79,15 +97,37 @@ public class ContainerConsoleViewModelTests
             .StreamLogsAsync(Arg.Any<string>(), true, Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(ci => Task.FromResult(CreateCancellableReader([(false, "sup")])));
 
-        var vm = CreateViewModel(ContainerService);
+
+        LogsService
+            .RunAsync(ContainerService, Arg.Any<string>())
+            .Returns(ci =>
+            {
+                async IAsyncEnumerable<(bool IsStdErr, string Line)> Stream()
+                {
+                    LogsService.IsRunning.Returns(true);
+                    yield return (false, "sup");
+                }
+                return Stream();
+            });
+
+        LogsService.StopAsync()
+            .Returns(ci =>
+            {
+                LogsService.IsRunning.Returns(false);
+                return Task.CompletedTask;
+            });
+
+        var vm = CreateViewModel(service: ContainerService, logRunner: LogsService);
+
+        vm.Logs.AutoStartLogs = true;
+        vm.ContainerList.SelectedContainer = new ContainerInfo { Id = "abc", Names = ["abc"], Status = "running" };
+
         await vm.InitializeCommand.ExecuteAsync(null);
 
-        vm.AutoStartLogs = true;
-        vm.SelectedContainer = new ContainerInfo { Id = "abc", Names = ["abc"] };
 
         //Act
         //Wait until line appears., with timeout after 2 seconds...
-        var logsStarted = await WaitUntilAsync(() => vm.IsLogsRunning, TimeSpan.FromSeconds(2));
+        var logsStarted = await WaitUntilAsync(() => vm.Logs.IsLogsRunning, TimeSpan.FromSeconds(2));
         Assert.True(logsStarted, "Logs should have started!");
 
         //wait until line appears, with timeout after 2 seconds...
@@ -95,10 +135,10 @@ public class ContainerConsoleViewModelTests
 
         //Assert
         Assert.True(ok, "Line 'sup' should have appeared!");
-        Assert.True(vm.IsLogsRunning, "Logs should still be running!");
+        Assert.True(vm.Logs.IsLogsRunning, "Logs should still be running!");
      
         //cleanup
-        await vm.StopLogsCommand.ExecuteAsync(null);
+        await vm.Logs.StopLogsCommand.ExecuteAsync(null);
     }
 
     /// <summary>
@@ -121,6 +161,7 @@ public class ContainerConsoleViewModelTests
     {
         //Arrange
         var ContainerService = Substitute.For<IContainerService>();
+        var CommandService = Substitute.For<ICommandRunner>();
 
         //The InspectAsync method is stubbed to return a container
         ContainerService
@@ -138,23 +179,48 @@ public class ContainerConsoleViewModelTests
         ContainerService.StreamExecAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult((output, inputWriter, (Task<long>)exitTask)));
 
-        var vm = CreateViewModel(ContainerService);
+        CommandService
+            .RunAsync(ContainerService, Arg.Any<string>(), Arg.Any<string[]>(), Arg.Any<CancellationToken>())
+            .Returns(ci =>
+            {
+                async IAsyncEnumerable<(bool IsStdErr, string Line)> Stream()
+                {
+                    CommandService.IsRunning.Returns(true);
+                    await foreach (var (isErr, line) in output.ReadAllAsync().ConfigureAwait(false))
+                    {
+                        yield return (isErr, line);
+                    }
+                    CommandService.IsRunning.Returns(false);
+                }
+                return Stream();
+            });
+
+        CommandService.ExitCode.Returns(exitTask);
+
+        CommandService.StopAsync()
+            .Returns(ci =>
+            {
+                CommandService.IsRunning.Returns(false);
+                return Task.CompletedTask;
+            });
+
+        var vm = CreateViewModel(service: ContainerService, commandRunner: CommandService);
 
         //start the UI update loop
         await vm.InitializeCommand.ExecuteAsync(null);
-        vm.SelectedContainer = new ContainerInfo { Id = "abc", Names = ["abc"] };
+        vm.ContainerList.SelectedContainer = new ContainerInfo { Id = "abc", Names = ["abc"] };
         //Example command to send
-        vm.Input = "echo hi";
+        vm.Commands.Input = "echo hi";
 
         //Act
-        await vm.SendCommand.ExecuteAsync(null);
+        await vm.Commands.SendCommand.ExecuteAsync(null);
 
         //Assert
         var ok = await WaitUntilAsync(() => vm.UIHandler.Output.Contains("[exit] 0"), TimeSpan.FromSeconds(2));
         Assert.True(ok);
         Assert.Contains("line1", vm.UIHandler.Output);
         Assert.Contains("err1", vm.UIHandler.Output);
-        Assert.False(vm.IsCommandRunning);
+        Assert.False(vm.Commands.IsCommandRunning);
     }
 
     /// <summary>
@@ -169,31 +235,51 @@ public class ContainerConsoleViewModelTests
     {
         //Arrange
         var ContainerService = Substitute.For<IContainerService>();
+        var LogsService = Substitute.For<ILogRunner>();
 
         //The InspectAsync method is stubbed to return a container
         ContainerService.InspectAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(new ContainerInfo { Id = "abc", Names = ["abc"], Tty = false }));
+
+        LogsService
+            .RunAsync(ContainerService, Arg.Any<string>())
+            .Returns(ci =>
+            {
+                async IAsyncEnumerable<(bool IsStdErr, string Line)> Stream()
+                {
+                    LogsService.IsRunning.Returns(true);
+                    yield return (false, "sup");
+                }
+                return Stream();
+            });
+
+        LogsService.StopAsync()
+            .Returns(ci =>
+            {
+                LogsService.IsRunning.Returns(false);
+                return Task.CompletedTask;
+            });
 
         //create a reader that ONLY completes when cancelled
         var reader = CreateCancellableReader([(false, "start")]);
         ContainerService.StreamLogsAsync(Arg.Any<string>(), true, Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(reader));
 
-        var vm = CreateViewModel(ContainerService);
+        var vm = CreateViewModel(service: ContainerService, logRunner: LogsService);
         //start the UI update loop
         await vm.InitializeCommand.ExecuteAsync(null);
-        vm.ContainerId = "abc";
+        vm.ContainerList.SelectedContainer = new ContainerInfo { Id = "abc", Names = ["abc"] };
 
         //Act & Assert
-        _ = vm.StartLogsCommand.ExecuteAsync(null);
+        _ = vm.Logs.StartLogsCommand.ExecuteAsync(null);
 
         //wait for logs to actually start streaming
-        var logsStarted = await WaitUntilAsync(() => vm.IsLogsRunning == true, TimeSpan.FromSeconds(2));
+        var logsStarted = await WaitUntilAsync(() => vm.Logs.IsLogsRunning == true, TimeSpan.FromSeconds(2));
         Assert.True(logsStarted, "Logs should have started");
 
-        await vm.StopLogsCommand.ExecuteAsync(null);
+        await vm.Logs.StopLogsCommand.ExecuteAsync(null);
 
-        var ok = await WaitUntilAsync(() => vm.IsLogsRunning == false, TimeSpan.FromSeconds(2));
+        var ok = await WaitUntilAsync(() => vm.Logs.IsLogsRunning == false, TimeSpan.FromSeconds(2));
         Assert.True(ok);
     }
 
@@ -208,9 +294,10 @@ public class ContainerConsoleViewModelTests
     {
         //Arrange
         var ContainerService = Substitute.For<IContainerService>();
+        var LogsService = Substitute.For<ILogRunner>();
         var Clipboard = Substitute.For<IClipboardService>();
 
-        var vm = CreateViewModel(service: ContainerService, clipboard: Clipboard);
+        var vm = CreateViewModel(service: ContainerService, clipboard: Clipboard, logRunner: LogsService);
 
         ContainerService
             .InspectAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
@@ -220,9 +307,22 @@ public class ContainerConsoleViewModelTests
             .StreamLogsAsync(Arg.Any<string>(), true, Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(CreateCompletedReader([(false, "sup")])));
 
+        LogsService
+            .RunAsync(ContainerService, Arg.Any<string>())
+            .Returns(ci =>
+            {
+                async IAsyncEnumerable<(bool IsStdErr, string Line)> Stream()
+                {
+                    LogsService.IsRunning.Returns(true);
+                    yield return (false, "sup");
+                    LogsService.IsRunning.Returns(false);
+                }
+                return Stream();
+            });
+
         await vm.InitializeCommand.ExecuteAsync(null);
-        vm.ContainerId = "abc";
-        await vm.StartLogsCommand.ExecuteAsync(null);
+        vm.ContainerList.SelectedContainer = new ContainerInfo { Id = "abc", Names = ["abc"] };
+        await vm.Logs.StartLogsCommand.ExecuteAsync(null);
 
         await WaitUntilAsync(() => vm.UIHandler.Output.Contains("sup"), TimeSpan.FromSeconds(2));
 

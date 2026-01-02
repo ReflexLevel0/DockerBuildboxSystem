@@ -1,11 +1,16 @@
-﻿using System.IO;
-using System.Windows;
+﻿using Docker.DotNet.Models;
+using DockerBuildBoxSystem.App.Services;
+using DockerBuildBoxSystem.App.UserControls;
+using DockerBuildBoxSystem.Contracts;
+using DockerBuildBoxSystem.Domain;
+using DockerBuildBoxSystem.ViewModels.Main;
+using DockerBuildBoxSystem.ViewModels.ViewModels;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using DockerBuildBoxSystem.ViewModels.Main;
-using DockerBuildBoxSystem.Contracts;
-using DockerBuildBoxSystem.Domain;
+using Newtonsoft.Json;
+using System.IO;
+using System.Windows;
 
 namespace DockerBuildBoxSystem.App;
 
@@ -91,8 +96,9 @@ public partial class App : Application
     {
         //register ViewModels as Transient (creates a new instance each time)
         services.AddTransient<MainViewModel>();
+        services.AddTransient<EnvironmentViewModel>();
         //The DockerConsoleViewModel depends on IContainerService, which has beem registered as a Singleton
-        services.AddTransient<DockerBuildBoxSystem.ViewModels.ViewModels.ContainerConsoleViewModel>();
+        services.AddTransient<ContainerConsoleViewModel>();
     }
 
     /// <summary>
@@ -102,9 +108,9 @@ public partial class App : Application
     {
         //register Windows as Transient (creates a new instance each time)
         services.AddTransient<MainWindow>();
-        
+
         //register UserControls as Transient
-        services.AddTransient<UserControls.ContainerConsole>();
+        services.AddTransient<ContainerConsole>();
     }
 
     /// <summary>
@@ -113,18 +119,37 @@ public partial class App : Application
     private static void ConfigureServices(IServiceCollection services)
     {
         //register container services
-        services.AddSingleton<IContainerService, DockerService>();
+        services.AddSingleton<IContainerService, DockerContainerService>();
+        services.AddSingleton<IVolumeService, DockerVolumeService>();
+        services.AddSingleton<IImageService, DockerImageService>();
         services.AddSingleton<IContainerFileTransferService, ContainerFileTransferService>();
         services.AddTransient<IIgnorePatternMatcher, IgnorePatternMatcher>();
         services.AddTransient<IFileSyncService, FileSyncService>();
-        
+
+        //register user control service
+        services.AddSingleton<IUserControlService, UserControlService>();
+
+        //register runners used by ContainerConsoleViewModel
+        services.AddTransient<ILogRunner, LogRunner>();
+        services.AddTransient<ICommandRunner, CommandRunner>();
+
         //register settings service
         services.AddSingleton<ISettingsService, SettingsService>();
 
         //register UI services
-        services.AddSingleton<IDialogService, Services.WPFDialogService>();
-        services.AddSingleton<Services.IViewLocator, Services.ViewLocator>();
-        services.AddSingleton<IClipboardService, Services.WPFClipboardService>();
+        services.AddSingleton<IDialogService, WPFDialogService>();
+        services.AddSingleton<IViewLocator, ViewLocator>();
+        services.AddSingleton<IClipboardService, WPFClipboardService>();
+
+        // register external process service
+        services.AddSingleton<IExternalProcessService, ExternalProcessService>();
+        services.AddSingleton<ISyncIgnoreService, SyncIgnoreService>();
+
+        // register environment service abstraction
+        services.AddSingleton<IEnvironmentService, EnvironmentService>();
+
+        // reading the container creation arguments from the file and creating a HostConfig from it
+        string hostConfigStr = File.ReadAllText(Path.Combine("Config", "container_creation_args.json"));
+        services.AddTransient<HostConfig>(_ => JsonConvert.DeserializeObject<HostConfig>(hostConfigStr)!);
     }
 }
-

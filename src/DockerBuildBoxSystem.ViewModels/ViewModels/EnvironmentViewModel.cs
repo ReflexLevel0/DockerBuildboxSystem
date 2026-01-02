@@ -1,7 +1,6 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DockerBuildBoxSystem.Contracts;
-using DockerBuildBoxSystem.Domain;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -25,9 +24,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private readonly IEnvironmentService _envService;
 
         public ObservableCollection<EnvVariable> EnvVariables { get; }
-        public EnvironmentViewModel()
+        public EnvironmentViewModel(IEnvironmentService envService)
         {
-            _envService = new EnvironmentService();
+            _envService = envService;
             EnvVariables = new ObservableCollection<EnvVariable>();
 
         }

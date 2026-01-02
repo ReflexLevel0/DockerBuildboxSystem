@@ -6,170 +6,124 @@
         xmlns:local="clr-namespace:DockerBuildBoxSystem.App"
         xmlns:vm="clr-namespace:DockerBuildBoxSystem.ViewModels.Main;assembly=DockerBuildBoxSystem.ViewModels"
         xmlns:uc="clr-namespace:DockerBuildBoxSystem.App.UserControls"
+        xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:MainViewModel}"
         Title="{Binding Title}"
         WindowStartupLocation="CenterScreen">
     <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Menu Grid.Row="0">
+            <MenuItem Header="_Sync">
+                <MenuItem.Icon>
+                    <materialDesign:PackIcon Kind="Flash"
+                                             Foreground="{DynamicResource PrimaryHueMidBrush}"/>
+                </MenuItem.Icon>
+
+                <MenuItem Header="Sync _In..."
+                  Command="{Binding SelectSourcePathCommand}">
+                    <MenuItem.Icon>
+                        <materialDesign:PackIcon Kind="ArrowDown"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+
+                <MenuItem Header="Sync _Out..."
+                  Command="{Binding SelectSyncOutPathCommand}">
+                    <MenuItem.Icon>
+                        <materialDesign:PackIcon Kind="ArrowUp"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+
+                <Separator/>
+                <MenuItem Header="_Force Sync"
+                  Command="{Binding ElementName=ContainerConsoleControl,
+                                    Path=DataContext.FileSync.StartForceSyncCommand}">
+                    <MenuItem.Icon>
+                        <materialDesign:PackIcon Kind="SyncAlert"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="_Sync Out"
+                  Command="{Binding ElementName=ContainerConsoleControl,
+                                    Path=DataContext.FileSync.StartSyncOutCommand}">
+                    <MenuItem.Icon>
+                        <materialDesign:PackIcon Kind="SyncAlert"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+            </MenuItem>
+            <MenuItem Header="_Container"
+              ToolTip="Container options">
+                <MenuItem.Icon>
+                    <materialDesign:PackIcon Kind="Docker"/>
+                </MenuItem.Icon>
+
+                <MenuItem Header="_Open Container in CMD"
+                  Command="{Binding ElementName=ContainerConsoleControl,
+                                    Path=DataContext.ContainerList.OpenContainerInCmdCommand}">
+                    <MenuItem.Icon>
+                        <materialDesign:PackIcon Kind="Console"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+            </MenuItem>
+
+            <MenuItem Header="_Settings"
+              ToolTip="Settings options">
+                <MenuItem.Icon>
+                    <materialDesign:PackIcon Kind="Cog"/>
+                </MenuItem.Icon>
+
+                <MenuItem Header="._env"
+                  Command="{Binding EnvironmentVM.OpenEnvFileCommand}"
+                  ToolTip="Edit .env file">
+                    <MenuItem.Icon>
+                        <materialDesign:PackIcon Kind="FileEdit"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+
+                <MenuItem Header="syncIgnore"
+                  Command="{Binding OpenSyncIgnoreFileCommand}"
+                  ToolTip="Edit syncIgnore file">
+                    <MenuItem.Icon>
+                        <materialDesign:PackIcon Kind="FileCancel"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+            </MenuItem>
+        </Menu>
+
+        <!--  Main Content Area - the UserControl is responsible for its own ViewModel lifecycle  -->
+        <uc:ContainerConsole x:Name="ContainerConsoleControl" Grid.Row="1" />
+
+        <!-- Footer with Exit Button -->
+        <Grid Grid.Row="2" Margin="6">
             <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
-                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
-            <!-- Header with Title, Select Source Button and Path Display -->
-            <Grid Grid.Row="0" Margin="6">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
+            <!-- Sync In -->
+            <StackPanel Orientation="Horizontal" Grid.Row="0">
+                <TextBlock Text="Sync In: "
+                   FontWeight="SemiBold"/>
+                <TextBlock Text="{Binding SourcePath}"
+                   TextTrimming="CharacterEllipsis"
+                   ToolTip="{Binding SourcePath}"
+                   Foreground="Gray"/>
+            </StackPanel>
 
-                <TextBlock
-                    Grid.Column="0"
-                    Text="Buildbox Manager"
-                    FontSize="18"
-                    FontWeight="Bold"
-                    VerticalAlignment="Center"
-                    Margin="0,0,25,0" />
+            <!-- Sync Out -->
+            <StackPanel Orientation="Horizontal" Grid.Row="1" Margin="0,2,0,0">
+                <TextBlock Text="Sync Out: "
+                   FontWeight="SemiBold"/>
+                <TextBlock Text="{Binding SyncOutPath}"
+                   TextTrimming="CharacterEllipsis"
+                   ToolTip="{Binding SyncOutPath}"
+                   Foreground="Gray"/>
+            </StackPanel>
+        </Grid>
 
-                <Button
-                    Grid.Column="1"
-                    MinWidth="32"
-                    Padding="2,2"
-                    Background="Transparent"
-                    BorderBrush="Transparent"
-                    BorderThickness="0"
-                    Command="{Binding SelectSourcePathCommand}"
-                    Focusable="False"
-                    ToolTip="Choose sync-in folder"
-                    Margin="0,0,4,0">
-                    <Grid>
-                        <!-- Base folder icon -->
-                        <TextBlock
-                            FontFamily="Segoe MDL2 Assets"
-                            FontSize="22"
-                            Text="&#xE838;"
-                            Foreground="#FFC107" />
-                        <!-- Modern green tick overlay with circular background -->
-                        <Border
-                            HorizontalAlignment="Right"
-                            VerticalAlignment="Bottom"
-                            Margin="0,0,0,0"
-                            Width="14"
-                            Height="14"
-                            Background="#FF2ECC71"
-                            CornerRadius="7">
-                            <TextBlock
-                                FontFamily="Segoe MDL2 Assets"
-                                FontSize="12"
-                                Text="&#xE73E;"
-                                Foreground="White"
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Center" />
-                        </Border>
-                    </Grid>
-                </Button>
-
-                <Border
-                    Grid.Column="2"
-                    MinWidth="400"
-                    Margin="2,2,0,2"
-                    VerticalAlignment="Center"
-                    Padding="4,2"
-                    BorderThickness="1"
-                    BorderBrush="Gray"
-                    CornerRadius="2"
-                    Background="#08000000"
-                    AllowDrop="True" 
-                    DragEnter="Path_DragEnter" 
-                    Drop="SourcePath_Drop">
-                    <TextBlock
-                        Text="{Binding SourcePath}"
-                        ToolTip="Source folder path"
-                        VerticalAlignment="Center"
-                        TextTrimming="CharacterEllipsis" />
-                </Border>
-
-                <!-- SyncOut picker and read-only path -->
-                <Button
-                    Grid.Column="3"
-                    MinWidth="32"
-                    Padding="2,2"
-                    Background="Transparent"
-                    BorderBrush="Transparent"
-                    BorderThickness="0"
-                    Command="{Binding SelectSyncOutPathCommand}"
-                    Focusable="False"
-                    ToolTip="Choose sync-out folder"
-                    Margin="8,0,4,0">
-                    <Grid>
-                        <!-- Base folder icon -->
-                        <TextBlock
-                            FontFamily="Segoe MDL2 Assets"
-                            FontSize="22"
-                            Text="&#xE838;"
-                            Foreground="#FFC107" />
-                        <!-- Modern red cross overlay with circular background -->
-                        <Border
-                            HorizontalAlignment="Right"
-                            VerticalAlignment="Bottom"
-                            Margin="0,0,0,0"
-                            Width="14"
-                            Height="14"
-                            Background="#FFE74C3C"
-                            CornerRadius="7">
-                            <TextBlock
-                                FontFamily="Segoe MDL2 Assets"
-                                FontSize="12"
-                                Text="&#xE711;"
-                                Foreground="White"
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Center" />
-                        </Border>
-                    </Grid>
-                </Button>
-
-                <Border
-                    Grid.Column="4"
-                    MinWidth="300"
-                    Margin="2,2,0,2"
-                    VerticalAlignment="Center"
-                    Padding="4,2"
-                    BorderThickness="1"
-                    BorderBrush="Gray"
-                    CornerRadius="2"
-                    Background="#08000000"
-                    AllowDrop="True" 
-                    DragEnter="Path_DragEnter" 
-                    Drop="SyncOutPath_Drop">
-                    <TextBlock
-                        Text="{Binding SyncOutPath}"
-                        ToolTip="Sync-out folder path"
-                        VerticalAlignment="Center"
-                        TextTrimming="CharacterEllipsis" />
-                </Border>
-            </Grid>
-
-            <!--  Main Content Area - the UserControl is responsible for its own ViewModel lifecycle  -->
-            <uc:ContainerConsole x:Name="ContainerConsoleControl" Grid.Row="1" />
-
-            <!-- Footer with Exit Button -->
-            <Grid Grid.Row="2" Margin="6">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <Button
-                    Grid.Column="1"
-                    Width="70"
-                    Height="28"
-                    Command="{Binding ExitCommand}"
-                    Content="Exit"
-                    ToolTip="Exit the application"
-                    Style="{StaticResource ExitButtonStyle}" />
-            </Grid>
     </Grid>
 </Window>
