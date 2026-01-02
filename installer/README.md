@@ -37,16 +37,16 @@ dotnet publish ..\src\DockerBuildBoxSystem.App -c Release -r win-x64 --self-cont
 
 ## Resulting installer flow (professional-grade)
 
-Welcome
-↓
-License Agreement
-↓
-IMPORTANT USAGE TERMS (custom page)
-   [✓ I understand containers may be stopped]
-   [View Privacy Policy]
-↓
-Choose Install Location
-↓
-Install
-↓
-Finish
+- Welcome
+- ↓
+- License Agreement
+- ↓
+- IMPORTANT USAGE TERMS (custom page)
+-   [✓ I understand containers may be stopped]
+-   [View Privacy Policy]
+- ↓
+- Choose Install Location
+- ↓ 
+- Install
+- ↓
+- Finish
