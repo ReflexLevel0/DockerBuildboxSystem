@@ -47,6 +47,13 @@
                         <materialDesign:PackIcon Kind="SyncAlert"/>
                     </MenuItem.Icon>
                 </MenuItem>
+                <MenuItem Header="_Sync Out"
+                  Command="{Binding ElementName=ContainerConsoleControl,
+                                    Path=DataContext.FileSync.StartSyncOutCommand}">
+                    <MenuItem.Icon>
+                        <materialDesign:PackIcon Kind="SyncAlert"/>
+                    </MenuItem.Icon>
+                </MenuItem>
             </MenuItem>
             <MenuItem Header="_Container"
               ToolTip="Container options">
