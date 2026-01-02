@@ -63,7 +63,7 @@ namespace DockerBuildBoxSystem.Domain
                 return false;
             }
         }
-        
+
         public async Task<bool> StartAsync(string containerId, CancellationToken ct = default)
         {
             // Stop all other running containers except the selected/target one
@@ -570,14 +570,20 @@ namespace DockerBuildBoxSystem.Domain
                 ct);
 
             //eensure the host directory exists
+            //ensure the host directory exists
             string? hostDir = Path.GetDirectoryName(hostPath);
             if (!string.IsNullOrEmpty(hostDir))
             {
                 Directory.CreateDirectory(hostDir);
             }
 
+            //copy the network stream to a memory stream for reliable tar reading
+            using var memoryStream = new MemoryStream();
+            await response.Stream.CopyToAsync(memoryStream, ct);
+            memoryStream.Position = 0;
+
             //extract the file from the tar archive
-            using var tarReader = new TarReader(response.Stream);
+            using var tarReader = new TarReader(memoryStream);
             TarEntry? entry = await tarReader.GetNextEntryAsync(cancellationToken: ct);
 
             if (entry is null)
@@ -603,10 +609,16 @@ namespace DockerBuildBoxSystem.Domain
                 ct);
 
             //eensure the host directory exists
+            //ensure the host directory exists
             Directory.CreateDirectory(hostPath);
 
+            //copy the network stream to a memory stream for reliable tar reading
+            using var memoryStream = new MemoryStream();
+            await response.Stream.CopyToAsync(memoryStream, ct);
+            memoryStream.Position = 0;
+
             //extract all entries from the tar archive
-            using var tarReader = new TarReader(response.Stream);
+            using var tarReader = new TarReader(memoryStream);
             while (await tarReader.GetNextEntryAsync(cancellationToken: ct) is { } entry)
             {
                 //skip the root directory entry (it matches the source directory name)

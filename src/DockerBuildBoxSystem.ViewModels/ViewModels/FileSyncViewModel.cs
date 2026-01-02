@@ -33,11 +33,13 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [ObservableProperty]
         [NotifyCanExecuteChangedFor(nameof(StartSyncCommand))]
         [NotifyCanExecuteChangedFor(nameof(StartForceSyncCommand))]
+        [NotifyCanExecuteChangedFor(nameof(StartSyncOutCommand))]
         private ContainerInfo? _selectedContainer;
 
         [ObservableProperty]
         [NotifyCanExecuteChangedFor(nameof(StartSyncCommand))]
         [NotifyCanExecuteChangedFor(nameof(StartForceSyncCommand))]
+        [NotifyCanExecuteChangedFor(nameof(StartSyncOutCommand))]
         private bool _isSwitching;
 
         [ObservableProperty]
@@ -189,6 +191,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         {
             await _settingsService.LoadSettingsAsync();
             HostSyncPath = _settingsService.SourceFolderPath;
+            SyncOutPath = _settingsService.SyncOutFolderPath;
         }
         private void OnSourcePathChanged(object? sender, string newPath)
         {
