@@ -59,6 +59,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         [ObservableProperty]
         private string _containerSyncPath = "/data/";
 
+        [ObservableProperty]
+        private string _containerSyncOutPath = "/data/build/";
+
         //synchronization semaphore and cancellation token source for sync operations
         private readonly object _autoSyncSemaphore = new();
         private CancellationTokenSource? _autoSyncCts;
@@ -294,7 +297,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
                 _logger.LogWithNewline("[sync-out] Starting sync from container to host...", false, false);
 
-                _fileSyncService.Configure(SyncOutPath, ContainerId, ContainerSyncPath);
+                _fileSyncService.Configure(SyncOutPath, ContainerId, ContainerSyncOutPath);
                 await _fileSyncService.ForceSyncFromContainerAsync();
 
                 _logger.LogWithNewline("[sync-out] Completed sync from container to host.", false, false);
