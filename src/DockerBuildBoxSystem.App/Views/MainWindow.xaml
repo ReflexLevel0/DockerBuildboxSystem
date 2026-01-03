@@ -168,5 +168,10 @@
             </StackPanel>
         </Grid>
 
+        <!-- Shutdown Overlay Component -->
+        <uc:ShutdownOverlay x:Name="ShutdownOverlayControl"
+                            Grid.RowSpan="3"
+                            Panel.ZIndex="100"
+                            Visibility="Collapsed"/>
     </Grid>
 </Window>
