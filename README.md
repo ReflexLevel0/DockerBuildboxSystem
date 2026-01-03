@@ -2,7 +2,8 @@
 ## container_creation_args.json
 File container_creation_args.json is used for specifying docker arguments which are used when a new container is being created. It is written in the JSON format and supports various arguments.
 
-Example file that will assign 8GB of memory and 4 CPU cores to the container and automatically delete it when it stops running. It also adds two mounts, first which is read-write and second is read-only:
+Example file that will assign 8GB of memory and 4 CPU cores to the container and automatically delete it when it stops running.
+It also adds a read-only mount from host to container and a volume mount:
 ```json
 {
 	"AutoRemove": true,
@@ -11,15 +12,16 @@ Example file that will assign 8GB of memory and 4 CPU cores to the container and
 	"Mounts": [
 		{
 			"Type": "bind",
-			"Source": "C:/Users/User/images",
-			"Target": "/images"
+			"Source": "C:/Users/User/videos",
+			"Target": "/server/videos",
+			"ReadOnly": true,
+			"BindOptions": { "CreateMountpoint": true }
 		},
 		{
-			"Type": "bind",
-			"Source": "C:/Users/User/videos",
-			"Target": "/videos",
-			"ReadOnly": true
-		},
+			"Type": "volume",
+			"Source": "gameVolume",
+			"Target": "/games"
+		}
 	]
 }
 ```
