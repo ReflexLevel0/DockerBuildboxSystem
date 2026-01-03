@@ -1,0 +1,23 @@
+Docker BuildBox System – Privacy Policy
+
+This application does NOT:
+- Collect personal data
+- Transmit data over the internet
+- Track user behavior
+- Use analytics or telemetry
+
+All operations are performed locally on your machine.
+
+Docker BuildBox System interacts with:
+- Local Docker Engine
+- Local Docker containers, images, and volumes
+- Local configuration files
+
+Any data processed remains on your system unless you explicitly
+configure Docker to use remote registries or services.
+
+If future versions introduce data collection, this policy will be
+updated accordingly.
+
+For questions or concerns, contact:
+FER & MDU team

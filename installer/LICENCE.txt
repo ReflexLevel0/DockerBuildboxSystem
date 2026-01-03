@@ -1,0 +1,38 @@
+Docker BuildBox System
+Version 1.0.0
+
+Copyright (c) 2026 FER & MDU team
+
+Authors: Dominik Dejanović, Mutondo Wa Kahembi, Nicholas Sjöqvist Obucina, Alberto Kerim, Ishara Madhavi Galbokka Hewage, Bartol Kosović
+
+Permission is hereby granted to any person obtaining a copy of this software
+and associated documentation files (the "Software"), to use the Software
+for internal, educational, or development purposes.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE
+OR OTHER DEALINGS IN THE SOFTWARE.
+
+Additional Terms and Conditions
+
+1. This software is provided "as is", without warranty of any kind.
+2. Redistribution without permission is prohibited.
+3. The authors are not responsible for data loss, container removal,
+   or system damage caused by misuse.
+4. You are using application that manipulates with Docker.
+
+IMPORTANT NOTICE
+
+This application can stop Docker containers and overwrite or delete
+files inside containers during synchronization operations.
+
+Ensure you understand which containers and directories are selected
+before performing sync or force-sync operations.
+
+By continuing with the installation, you acknowledge that you have read and
+understood this license.
