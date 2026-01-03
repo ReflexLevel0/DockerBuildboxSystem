@@ -23,7 +23,6 @@ public class ContainerConsoleViewModelTests
         ILogRunner? logRunner = null,
         ICommandRunner? commandRunner = null,
         IClipboardService? clipboard = null,
-        HostConfig? hostConfig = null,
         IExternalProcessService? externalProcessService = null
         )
     {
