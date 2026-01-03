@@ -60,14 +60,22 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private string _containerSyncPath = "/data/";
 
         [ObservableProperty]
-        private string _containerSyncOutPath = "/data/build/";
+        private string _containerSyncOutPath = "build";
 
         //synchronization semaphore and cancellation token source for sync operations
         private readonly object _autoSyncSemaphore = new();
         private CancellationTokenSource? _autoSyncCts;
+        private readonly AppConfig _appConfig;
 
-        public FileSyncViewModel(IFileSyncService fileSyncService, ISettingsService settingsService, IViewModelLogger logger)
+        public FileSyncViewModel(AppConfig config, IFileSyncService fileSyncService, ISettingsService settingsService, IViewModelLogger logger)
         {
+            // Loading build directory path
+            _appConfig = config;
+            if(!string.IsNullOrWhiteSpace(config.BuildDirectoryPath))
+            {
+                ContainerSyncOutPath = config.BuildDirectoryPath;
+            }
+
             _fileSyncService = fileSyncService ?? throw new ArgumentNullException(nameof(fileSyncService));
             _settingsService = settingsService ?? throw new ArgumentNullException(nameof(settingsService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -274,10 +282,10 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
             try
             {
-                string buildPath = $"{SyncOutPath}/build";
-                if (Directory.Exists(buildPath))
+                string buildSyncOutPath = Path.Combine(SyncOutPath, _appConfig.BuildDirectoryPath);
+                if (Directory.Exists(buildSyncOutPath))
                 {
-                    Directory.Delete(buildPath, true);
+                    Directory.Delete(buildSyncOutPath, true);
                 }
                 Directory.CreateDirectory(SyncOutPath);
             }
@@ -299,7 +307,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
                 _logger.LogWithNewline("[sync-out] Starting sync from container to host...", false, false);
 
-                _fileSyncService.Configure(SyncOutPath, ContainerId, ContainerSyncOutPath);
+                _fileSyncService.Configure(SyncOutPath, ContainerId, $"{ContainerSyncPath}/{ContainerSyncOutPath}");
                 await _fileSyncService.ForceSyncFromContainerAsync();
 
                 _logger.LogWithNewline("[sync-out] Completed sync from container to host.", false, false);
@@ -338,7 +346,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
                 _fileSyncService.Configure(HostSyncPath, ContainerId, ContainerSyncPath);
 
-                await _fileSyncService.CleanDirectoryAsync(["build"], ct);
+                await _fileSyncService.CleanDirectoryAsync([ContainerSyncOutPath], ct);
                 ct.ThrowIfCancellationRequested();
 
                 await _fileSyncService.ForceSyncAsync(ct);

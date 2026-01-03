@@ -13,6 +13,7 @@ public class ContainerConsoleViewModelTests
 {
     private static ContainerConsoleViewModel CreateViewModel(
         IServiceProvider? serviceProvider = null,
+        AppConfig? appConfig = null,
         IContainerService? service = null,
         IImageService? imageService = null,
         IDialogService? dialogService = null,
@@ -27,6 +28,7 @@ public class ContainerConsoleViewModelTests
         )
     {
         serviceProvider ??= Substitute.For<IServiceProvider>();
+        appConfig ??= Substitute.For<AppConfig>();
         service ??= Substitute.For<IContainerService>();
         imageService ??= Substitute.For<IImageService>();
         dialogService ??= Substitute.For<IDialogService>();
@@ -40,7 +42,7 @@ public class ContainerConsoleViewModelTests
         clipboard ??= Substitute.For<IClipboardService>();
         externalProcessService ??= Substitute.For<IExternalProcessService>();
 
-        return new ContainerConsoleViewModel(serviceProvider, imageService, service, dialogService, fileSyncService, configuration, settingsService, userControlService, logRunner, commandRunner, externalProcessService, clipboard);
+        return new ContainerConsoleViewModel(serviceProvider, appConfig, imageService, service, dialogService, fileSyncService, configuration, settingsService, userControlService, logRunner, commandRunner, externalProcessService, clipboard);
     }
 
     /// <summary>
