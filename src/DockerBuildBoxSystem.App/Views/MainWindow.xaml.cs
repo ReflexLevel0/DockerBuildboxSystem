@@ -64,14 +64,6 @@ public partial class MainWindow : Window
             if (ContainerConsoleControl != null)
                 await ContainerConsoleControl.CleanupAsync();
 
-            // ensure overlay is shown for at least 2 seconds (in case of fast shutdown)
-            var elapsed = DateTime.UtcNow - start;
-            var minDuration = TimeSpan.FromSeconds(2);
-            if (elapsed < minDuration)
-            {
-                await Task.Delay(minDuration - elapsed);
-            }
-
             await _viewModel.ShutdownCommand.ExecuteAsync(null);
         }
         finally
