@@ -226,7 +226,10 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 _logger.LogWithNewline($"[info] Selected image: {imageName}", false, false);
 
                 //try to find an existing container for this image.
-                var containers = await _containerService.ListContainersAsync(all: true, ct: ct);
+                var containers = await _containerService.ListContainersAsync(
+                    all: true,
+                    labelFilter: DockerConstants.ManagedContainerLabel,
+                    ct: ct);
 
                 var existingContainer = containers.FirstOrDefault(c =>
                     (!string.IsNullOrEmpty(primaryTag) && c.Image == primaryTag) || c.Image == newImage.Id);
