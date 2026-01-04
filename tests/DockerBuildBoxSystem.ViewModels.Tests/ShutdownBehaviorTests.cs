@@ -11,6 +11,7 @@ namespace DockerBuildBoxSystem.ViewModels.Tests
     public class ShutdownBehaviorTests
     {
         private static ContainerConsoleViewModel CreateViewModel(
+            AppConfig? appConfig = null,
             IContainerService? containerService = null,
             IImageService? imageService = null,
             IDialogService? dialogService = null,
@@ -23,6 +24,7 @@ namespace DockerBuildBoxSystem.ViewModels.Tests
             IClipboardService? clipboard = null,
             IExternalProcessService? externalProcessService = null)
         {
+            appConfig ??= Substitute.For<AppConfig>();
             containerService ??= Substitute.For<IContainerService>();
             imageService ??= Substitute.For<IImageService>();
             dialogService ??= Substitute.For<IDialogService>();
@@ -40,6 +42,7 @@ namespace DockerBuildBoxSystem.ViewModels.Tests
 
             return new ContainerConsoleViewModel(
                 Substitute.For<IServiceProvider>(),
+                appConfig,
                 imageService,
                 containerService,
                 dialogService,
