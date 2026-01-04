@@ -1,0 +1,7 @@
+﻿{
+    "BuildDirectoryPath": "buildDir",
+    "ContainerCreationParams": 
+    {
+        "AutoRemove": false
+    }    
+}

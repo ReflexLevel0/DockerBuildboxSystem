@@ -67,6 +67,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// <param name="clipboard">An optional clipboard service for copy and paste operations. May be <see langword="null"/> if clipboard functionality is not required.</param>
         public ContainerConsoleViewModel(
             IServiceProvider serviceProvider,
+            AppConfig appConfig,
             IImageService imageService,
             IContainerService containerService,
             IDialogService dialogService,
@@ -91,7 +92,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             //initialize sub-viewModels
             ContainerList = new ContainerListViewModel(serviceProvider, imageService, containerService, externalProcessService, logger);
             Logs = new LogStreamViewModel(logRunner, containerService, logger);
-            FileSync = new FileSyncViewModel(fileSyncService, settingsService, logger);
+            FileSync = new FileSyncViewModel(appConfig, fileSyncService, settingsService, logger);
             UserControls = new UserControlsViewModel(userControlService, logger);
             Commands = new CommandExecutionViewModel(cmdRunner, containerService, userControlService, logger, UserControls);
 

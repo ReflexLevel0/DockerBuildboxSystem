@@ -1,20 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<ItemGroup>
-	  <None Remove="Config\container_creation_args.json" />
-	  <None Remove="Config\controls.json" />
-	</ItemGroup>
-
-	<ItemGroup>
-	  <EmbeddedResource Include="Config\container_creation_args.json">
-	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-	  </EmbeddedResource>
-	  <EmbeddedResource Include="Config\controls.json">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-	  </EmbeddedResource>
-	</ItemGroup>
-
-	<ItemGroup>
 		<ProjectReference Include="..\DockerBuildBoxSystem.ViewModels\DockerBuildBoxSystem.ViewModels.csproj" />
 		<ProjectReference Include="..\DockerBuildBoxSystem.Contracts\DockerBuildBoxSystem.Contracts.csproj" />
 		<ProjectReference Include="..\DockerBuildBoxSystem.Domain\DockerBuildBoxSystem.Domain.csproj" />
@@ -40,6 +26,12 @@
 		</None>
 		<None Update="Config\appsettings.Development.json">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
+		<None Update="Config\config.json">
+		  <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Config\controls.json">
+		  <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 		</None>
 		<!--Copy user variables to the bin\Debug\net9.0 at build-->
 

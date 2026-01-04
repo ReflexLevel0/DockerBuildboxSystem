@@ -245,11 +245,12 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 {
                     _logger.LogWithNewline("[info] No existing container found for image. Creating a new one...", false, false);
 
+                    AppConfig appConfig = (_serviceProvider.GetService(typeof(AppConfig)) as AppConfig)!;
                     var newContainerId = await _containerService.CreateContainerAsync(
                         new ContainerCreationOptions
                         {
                             ImageName = imageName,
-                            Config = (HostConfig)_serviceProvider.GetService(typeof(HostConfig))!
+                            Config = appConfig.ContainerCreationParams
                         },
                         ct: ct);
                     container = await _containerService.InspectAsync(newContainerId, ct);
