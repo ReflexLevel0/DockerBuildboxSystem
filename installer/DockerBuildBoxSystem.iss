@@ -1,4 +1,3 @@
-; DockerBuildBoxSystem Inno Setup installer (wizard-style .exe)
 ; Build steps (quick):
 ;   1) dotnet publish ..\src\DockerBuildBoxSystem.App -c Release -r win-x64 --self-contained true -o ..\publish\win-x64
 ;   2) Compile this script with Inno Setup 6 (ISCC.exe)
@@ -16,7 +15,7 @@ AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 
-LicenseFile=LICENCE.txt
+LicenseFile= LICENCE.txt
 DisableWelcomePage=no
 
 ; Per-user install by default (no admin required)
@@ -44,6 +43,10 @@ Name: "desktopicon"; Description: "Create a &desktop icon"; GroupDescription: "A
 [Files]
 Source: "{#MySourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
+; --- Embed installer documents (baked into the installer EXE, not installed) ---
+Source: "EULA.txt";    DestDir: "{tmp}"; Flags: dontcopy
+Source: "PRIVACY.txt"; DestDir: "{tmp}"; Flags: dontcopy
+
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
@@ -55,9 +58,23 @@ Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: no
 [Code]
 var
   WarningPage: TWizardPage;
-  WarningText: TRichEditViewer;
+  WarningText: TNewMemo;
   AcknowledgeCheck: TNewCheckBox;
   PrivacyButton: TNewButton;
+  ResultCode: Integer;
+  
+procedure PrivacyButtonClick(Sender: TObject);
+begin
+  ShellExec(
+    'open',
+    ExpandConstant('{tmp}\PRIVACY.txt'),
+    '',
+    '',
+    SW_SHOWNORMAL,
+    ewNoWait,
+    ResultCode
+  );
+end;
   
 procedure CreateWarningPage;
 begin
@@ -68,16 +85,18 @@ begin
       'Please read and acknowledge before continuing'
     );
 
-  WarningText := TRichEditViewer.Create(WarningPage);
+  WarningText := TNewMemo.Create(WarningPage);
   WarningText.Parent := WarningPage.Surface;
   WarningText.Left := 0;
   WarningText.Top := 0;
   WarningText.Width := WarningPage.SurfaceWidth;
-  WarningText.Height := WarningPage.SurfaceHeight - 70;
+  WarningText.Height := WarningPage.SurfaceHeight - ScaleY(60);
   WarningText.ScrollBars := ssVertical;
   WarningText.ReadOnly := True;
-  WarningText.WantTabs := False;
-  WarningText.LoadFromFile(ExpandConstant('{src}\EULA.rtf'));
+  WarningText.WordWrap := True;
+
+  // Load text file (must be next to the .iss file)
+  WarningText.Lines.LoadFromFile(ExpandConstant('{tmp}\EULA.txt'));
 
   AcknowledgeCheck := TNewCheckBox.Create(WarningPage);
   AcknowledgeCheck.Parent := WarningPage.Surface;
@@ -86,6 +105,7 @@ begin
   AcknowledgeCheck.Left := 0;
   AcknowledgeCheck.Top := WarningText.Top + WarningText.Height + 8;
   AcknowledgeCheck.Width := WarningPage.SurfaceWidth;
+  AcknowledgeCheck.Height := ScaleY(13);
   AcknowledgeCheck.Checked := False;
 
   PrivacyButton := TNewButton.Create(WarningPage);
@@ -93,20 +113,9 @@ begin
   PrivacyButton.Caption := 'View Privacy Policy';
   PrivacyButton.Left := 0;
   PrivacyButton.Top := AcknowledgeCheck.Top + AcknowledgeCheck.Height + 8;
+  PrivacyButton.Height := ScaleY(19);
+  PrivacyButton.Width := WarningPage.SurfaceWidth/2;
   PrivacyButton.OnClick := @PrivacyButtonClick;
-end;
-
-procedure PrivacyButtonClick(Sender: TObject);
-begin
-  ShellExec(
-    'open',
-    'PRIVACY.txt',
-    '',
-    '',
-    SW_SHOWNORMAL,
-    ewNoWait,
-    ResultCode
-  );
 end;
 
 function DockerDesktopExeExists(): Boolean;
@@ -131,6 +140,8 @@ end;
 
 procedure InitializeWizard;
 begin
+  ExtractTemporaryFile('EULA.txt');
+  ExtractTemporaryFile('PRIVACY.txt');
   CreateWarningPage;
 end;
 
@@ -168,4 +179,3 @@ begin
     end;
   end;
 end;
-

@@ -20,4 +20,4 @@ If future versions introduce data collection, this policy will be
 updated accordingly.
 
 For questions or concerns, contact:
-FER & MDU team
+FER & MDU team & Authors: Dominik Dejanović, Mutondo Wa Kahembi, Nicholas Sjöqvist Obucina, Alberto Kerim, Ishara Madhavi Galbokka Hewage, Bartol Kosović
