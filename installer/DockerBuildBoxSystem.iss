@@ -23,7 +23,7 @@ DefaultDirName={localappdata}\Programs\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=no
 
-OutputDir=.\Output
+OutputDir=.
 OutputBaseFilename=DockerBuildBoxSystem_Setup_{#MyAppVersion}
 Compression=lzma2
 SolidCompression=yes
