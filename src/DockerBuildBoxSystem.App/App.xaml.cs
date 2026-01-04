@@ -149,8 +149,10 @@ public partial class App : Application
         services.AddSingleton<IEnvironmentService, EnvironmentService>();
 
         // reading app configuration
-        string configPath = File.ReadAllText(Path.Combine("Config", "config.json"));
-        AppConfig configObj = JsonConvert.DeserializeObject<AppConfig>(configPath)!;
-        services.AddTransient<AppConfig>(_ => configObj);
+        services.AddTransient<AppConfig>(_ =>
+        {
+            string configText = File.ReadAllText(Path.Combine("Config", "config.json"));
+            return JsonConvert.DeserializeObject<AppConfig>(configText)!;
+        });
     }
 }
