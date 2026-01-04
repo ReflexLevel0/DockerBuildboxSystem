@@ -4,6 +4,7 @@ using DockerBuildBoxSystem.Contracts;
 using System;
 using System.Buffers;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Formats.Tar;
 using System.Linq;
 using System.Text;
@@ -18,6 +19,8 @@ namespace DockerBuildBoxSystem.Domain
     public sealed class DockerContainerService : DockerServiceBase, IContainerService
     {
         private readonly IVolumeService _volumeService;
+
+        public event EventHandler<string>? ContainerStarted;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="DockerContainerService"/> class.
@@ -43,8 +46,68 @@ namespace DockerBuildBoxSystem.Domain
         }
 
         #region Container Lifecycle Logic
-        public async Task<bool> StartAsync(string containerId, CancellationToken ct = default) =>
-            await Client.Containers.StartContainerAsync(containerId, new ContainerStartParameters(), ct);
+        public async Task<bool> IsEngineAvailableAsync(CancellationToken ct = default)
+        {
+            try
+            {
+                // Use a short cancellation window to avoid long hangs when the engine
+                // is not running (the global client timeout is ~100s by default).
+                using var quickCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                quickCts.CancelAfter(TimeSpan.FromSeconds(5));
+
+                await Client.System.PingAsync(quickCts.Token).ConfigureAwait(false);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public async Task<bool> StartAsync(string containerId, CancellationToken ct = default)
+        {
+            // Stop all other managed running containers except the selected/target one
+            try
+            {
+                var filters = new Dictionary<string, IDictionary<string, bool>>
+                {
+                    ["label"] = new Dictionary<string, bool> { [DockerConstants.ManagedContainerLabel] = true }
+                };
+
+                var parameters = new ContainersListParameters
+                {
+                    All = false,
+                    Filters = filters
+                };
+
+                var running = await Client.Containers.ListContainersAsync(parameters, ct);
+
+                var othersToStop = running
+                    .Where(c => !string.Equals(c.ID, containerId, StringComparison.OrdinalIgnoreCase))
+                    .Select(c => c.ID)
+                    .ToArray();
+
+                if (othersToStop.Length > 0)
+                {
+                    // best-effort: ignore failures when stopping non-target containers
+                    try
+                    {
+                        await StopAsync(othersToStop, timeout: TimeSpan.FromSeconds(10), ct: ct);
+                    }
+                    catch { }
+                }
+            }
+            catch
+            {
+                // ignore list failures; proceed to start target container
+            }
+            var started = await Client.Containers.StartContainerAsync(containerId, new ContainerStartParameters(), ct);
+            if (started)
+            {
+                try { ContainerStarted?.Invoke(this, containerId); } catch { /* ignore listener errors */ }
+            }
+            return started;
+        }
 
         public async Task<string> CreateContainerAsync(ContainerCreationOptions options, CancellationToken ct = default)
         {
@@ -68,7 +131,11 @@ namespace DockerBuildBoxSystem.Domain
                 AttachStdin = true,
                 AttachStdout = true,
                 AttachStderr = true,
-                HostConfig = options.Config
+                HostConfig = options.Config,
+                Labels = new Dictionary<string, string>
+                {
+                    [DockerConstants.ManagedContainerLabel] = "true"
+                }
             }, ct);
 
             return response.ID;
@@ -76,6 +143,15 @@ namespace DockerBuildBoxSystem.Domain
         public async Task StopAsync(string containerId, TimeSpan timeout, CancellationToken ct = default) =>
             await Client.Containers.StopContainerAsync(containerId,
                 new ContainerStopParameters { WaitBeforeKillSeconds = (uint)timeout.TotalSeconds }, ct);
+
+        public async Task StopAsync(IEnumerable<string> containerIds, TimeSpan timeout, CancellationToken ct = default)
+        {
+            var stopParams = new ContainerStopParameters { WaitBeforeKillSeconds = (uint)timeout.TotalSeconds };
+            foreach (var id in containerIds)
+            {
+                await Client.Containers.StopContainerAsync(id, stopParams, ct);
+            }
+        }
         public async Task RemoveAsync(string containerId, bool force = false, CancellationToken ct = default) =>
             await Client.Containers.RemoveContainerAsync(containerId,
                 new ContainerRemoveParameters { Force = force }, ct);
@@ -98,19 +174,29 @@ namespace DockerBuildBoxSystem.Domain
                 Names = string.IsNullOrEmpty(inspect.Name) ? Array.Empty<string>() : [inspect.Name],
                 Status = inspect.State?.Status,
                 Tty = inspect.Config?.Tty ?? false,
-                LogDriver = inspect.HostConfig?.LogConfig?.Type
+                LogDriver = inspect.HostConfig?.LogConfig?.Type,
+                Labels = inspect.Config?.Labels?.AsReadOnly()
             };
         }
 
         public async Task<IList<ContainerInfo>> ListContainersAsync(
             bool all = false,
             string? nameFilter = null,
+            string? labelFilter = null,
             CancellationToken ct = default)
         {
-            var filters = nameFilter is null ? null : new Dictionary<string, IDictionary<string, bool>>
+            Dictionary<string, IDictionary<string, bool>>? filters = null;
+
+            if (nameFilter is not null || labelFilter is not null)
             {
-                ["name"] = new Dictionary<string, bool> { [nameFilter] = true }
-            };
+                filters = new Dictionary<string, IDictionary<string, bool>>();
+
+                if (nameFilter is not null)
+                    filters["name"] = new Dictionary<string, bool> { [nameFilter] = true };
+
+                if (labelFilter is not null)
+                    filters["label"] = new Dictionary<string, bool> { [labelFilter] = true };
+            }
 
             var parameters = new ContainersListParameters
             {
@@ -127,7 +213,8 @@ namespace DockerBuildBoxSystem.Domain
                 Names = c.Names.AsReadOnly(),
                 State = c.State,
                 Status = c.Status,
-                Image = c.Image
+                Image = c.Image,
+                Labels = c.Labels?.AsReadOnly()
             }).ToList();
         }
         #endregion
@@ -425,10 +512,10 @@ namespace DockerBuildBoxSystem.Domain
         #region File Operations
 
         public async Task CopyFileToContainerAsync(
-    string containerId,
-    string hostPath,
-    string containerPath,
-    CancellationToken ct = default)
+            string containerId,
+            string hostPath,
+            string containerPath,
+            CancellationToken ct = default)
         {
             if (!File.Exists(hostPath))
                 throw new FileNotFoundException("File not found", hostPath);
@@ -459,6 +546,8 @@ namespace DockerBuildBoxSystem.Domain
                 memoryStream,
                 ct);
         }
+
+
         public async Task CopyDirectoryToContainerAsync(
             string containerId,
             string hostPath,
@@ -490,6 +579,91 @@ namespace DockerBuildBoxSystem.Domain
                 if (File.Exists(tempTarPath))
                 {
                     try { File.Delete(tempTarPath); } catch { }
+                }
+            }
+        }
+
+        public async Task CopyFileFromContainerAsync(
+            string containerId,
+            string containerPath,
+            string hostPath,
+            CancellationToken ct = default)
+        {
+            //get the archive stream from the container
+            var response = await Client.Containers.GetArchiveFromContainerAsync(
+                containerId,
+                new GetArchiveFromContainerParameters { Path = containerPath },
+                statOnly: false,
+                ct);
+
+            //ensure the host directory exists
+            string? hostDir = Path.GetDirectoryName(hostPath);
+            if (!string.IsNullOrEmpty(hostDir))
+            {
+                Directory.CreateDirectory(hostDir);
+            }
+
+            //copy the network stream to a memory stream for reliable tar reading
+            using var memoryStream = new MemoryStream();
+            await response.Stream.CopyToAsync(memoryStream, ct);
+            memoryStream.Position = 0;
+
+            //extract the file from the tar archive
+            using var tarReader = new TarReader(memoryStream);
+            TarEntry? entry = await tarReader.GetNextEntryAsync(cancellationToken: ct);
+
+            if (entry is null)
+            {
+                throw new FileNotFoundException($"File not found in container: {containerPath}");
+            }
+
+            //extract to the host path
+            await entry.ExtractToFileAsync(hostPath, overwrite: true, ct);
+        }
+
+        public async Task CopyDirectoryFromContainerAsync(
+            string containerId,
+            string containerPath,
+            string hostPath,
+            CancellationToken ct = default)
+        {
+            //get the archive stream from the container
+            var response = await Client.Containers.GetArchiveFromContainerAsync(
+                containerId,
+                new GetArchiveFromContainerParameters { Path = containerPath },
+                statOnly: false,
+                ct);
+
+            //ensure the host directory exists
+            Directory.CreateDirectory(hostPath);
+
+            //copy the network stream to a memory stream for reliable tar reading
+            using var memoryStream = new MemoryStream();
+            await response.Stream.CopyToAsync(memoryStream, ct);
+            memoryStream.Position = 0;
+
+            //extract all entries from the tar archive
+            using var tarReader = new TarReader(memoryStream);
+            while (await tarReader.GetNextEntryAsync(cancellationToken: ct) is { } entry)
+            {
+                //skip the root directory entry (it matches the source directory name)
+                if (entry.EntryType == TarEntryType.Directory)
+                {
+                    string dirPath = Path.Combine(hostPath, entry.Name);
+                    Directory.CreateDirectory(dirPath);
+                    continue;
+                }
+
+                if (entry.EntryType == TarEntryType.RegularFile)
+                {
+                    string filePath = Path.Combine(hostPath, entry.Name);
+                    string? fileDir = Path.GetDirectoryName(filePath);
+                    if (!string.IsNullOrEmpty(fileDir))
+                    {
+                        Directory.CreateDirectory(fileDir);
+                    }
+
+                    await entry.ExtractToFileAsync(filePath, overwrite: true, ct);
                 }
             }
         }

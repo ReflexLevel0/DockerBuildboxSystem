@@ -9,7 +9,8 @@ namespace DockerBuildBoxSystem.Contracts
         string SyncOutFolderPath { get; set; }
         
         event EventHandler<string> SourcePathChanged;
-        
+        event EventHandler<string> SyncOutPathChanged;
+
         Task LoadSettingsAsync();
         Task SaveSettingsAsync();
     }

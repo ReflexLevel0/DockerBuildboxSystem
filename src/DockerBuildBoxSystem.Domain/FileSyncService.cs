@@ -91,8 +91,28 @@ namespace DockerBuildBoxSystem.Domain
             }
         }
 
-        public async Task CleanDirectoryAsync(IEnumerable<string>? excludedPaths)
+        public void PauseWatching()
         {
+            if (_watcher != null)
+            {
+                _watcher.EnableRaisingEvents = false;
+                Log("Paused watching.");
+            }
+        }
+
+        public void ResumeWatching()
+        {
+            if (_watcher != null)
+            {
+                _watcher.EnableRaisingEvents = true;
+                Log("Resumed watching.");
+            }
+        }
+
+        public async Task CleanDirectoryAsync(IEnumerable<string>? excludedPaths, CancellationToken ct = default)
+        {
+            ct.ThrowIfCancellationRequested();
+
             if (string.IsNullOrWhiteSpace(_containerId) || string.IsNullOrWhiteSpace(_containerRootPath))
             {
                 Log("Error: Container not configured.");
@@ -100,7 +120,8 @@ namespace DockerBuildBoxSystem.Domain
             }
 
             Log($"Cleaning container directory: {_containerRootPath} with {excludedPaths?.Count() ?? 0} exclusions.");
-            var (cleanSuccess, cleanError) = await _fileTransferService.EmptyDirectoryInContainerAsync(_containerId, _containerRootPath, excludedPaths);
+            var (cleanSuccess, cleanError) = await _fileTransferService.EmptyDirectoryInContainerAsync(_containerId, _containerRootPath, excludedPaths, ct);
+            ct.ThrowIfCancellationRequested();
             if (!cleanSuccess)
             {
                 Log($"Warning: Failed to clean container directory: {cleanError}.");
@@ -111,8 +132,10 @@ namespace DockerBuildBoxSystem.Domain
             }
         }
 
-        public async Task ForceSyncAsync()
+        public async Task ForceSyncAsync(CancellationToken ct = default)
         {
+            ct.ThrowIfCancellationRequested();
+
             if (string.IsNullOrWhiteSpace(_rootPath) || !Directory.Exists(_rootPath))
             {
                 Log("Error: Invalid directory path.");
@@ -139,15 +162,22 @@ namespace DockerBuildBoxSystem.Domain
                 Directory.CreateDirectory(tempRoot);
 
                 //copy only non-ignored files into temp folder
-                CopyToTempRecursive(_rootPath, tempRoot);
+                CopyToTempRecursive(_rootPath, tempRoot, ct);
 
                 //copy temp folder to Docker
-                var (success, error) = await _fileTransferService.CopyDirectoryToContainerAsync(_containerId, tempRoot, _containerRootPath);
-                
+                var (success, error) = await _fileTransferService.CopyDirectoryToContainerAsync(_containerId, tempRoot, _containerRootPath, ct);
+
+                ct.ThrowIfCancellationRequested();
+
                 if (success)
                     Log($"Full Folder Sync -> {_containerId}:{_containerRootPath} | Success");
                 else
                     Log($"Full Folder Sync Failed | {error}");
+            }
+            catch (OperationCanceledException)
+            {
+                Log("[force-sync] Cancelled.");
+                throw;
             }
             catch (Exception ex)
             {
@@ -167,10 +197,67 @@ namespace DockerBuildBoxSystem.Domain
             }
         }
 
-        private void CopyToTempRecursive(string sourceDir, string tempRoot)
+        public async Task ForceSyncFromContainerAsync(CancellationToken ct = default)
         {
+            ct.ThrowIfCancellationRequested();
+
+            if (string.IsNullOrWhiteSpace(_rootPath))
+            {
+                Log("Error: Host path is not set.");
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(_containerId))
+            {
+                Log("Error: Container ID is not set.");
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(_containerRootPath))
+            {
+                Log("Error: Container sync path is not set.");
+                return;
+            }
+
+            try
+            {
+                Log("Starting Force Sync from Container...");
+
+                // Ensure target directory exists
+                if (!Directory.Exists(_rootPath))
+                {
+                    Directory.CreateDirectory(_rootPath);
+                }
+
+                // Copy directly from container to host folder
+                var (success, error) = await _fileTransferService.CopyDirectoryFromContainerAsync(_containerId, _containerRootPath, _rootPath, ct);
+
+                ct.ThrowIfCancellationRequested();
+
+                if (success)
+                    Log($"Full Folder Sync <- {_containerId}:{_containerRootPath} | Success");
+                else
+                    Log($"Failed to copy from container: {error}");
+            }
+            catch (OperationCanceledException)
+            {
+                Log("[force-sync-from-container] Cancelled.");
+                throw;
+            }
+            catch (Exception ex)
+            {
+                Log("EXCEPTION during container-to-host sync: " + ex.Message);
+            }
+        }
+
+        private void CopyToTempRecursive(string sourceDir, string tempRoot, CancellationToken ct)
+        {
+            ct.ThrowIfCancellationRequested();
+
             foreach (string file in Directory.GetFiles(sourceDir))
             {
+                ct.ThrowIfCancellationRequested();
+
                 if (IsIgnored(file))
                     continue;
 
@@ -190,10 +277,12 @@ namespace DockerBuildBoxSystem.Domain
 
             foreach (string subDir in Directory.GetDirectories(sourceDir))
             {
+                ct.ThrowIfCancellationRequested();
+
                 if (IsIgnored(subDir))
                     continue;
 
-                CopyToTempRecursive(subDir, tempRoot);
+                CopyToTempRecursive(subDir, tempRoot, ct);
             }
         }
 

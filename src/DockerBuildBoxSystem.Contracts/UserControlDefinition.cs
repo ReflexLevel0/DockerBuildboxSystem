@@ -12,7 +12,6 @@
     {
         public string Control { get; set; } = string.Empty;
         public string? Tooltip { get; set; }
-
     }
 
     /// <summary>
