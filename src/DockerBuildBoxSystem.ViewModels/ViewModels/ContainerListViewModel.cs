@@ -226,7 +226,10 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 _logger.LogWithNewline($"[info] Selected image: {imageName}", false, false);
 
                 //try to find an existing container for this image.
-                var containers = await _containerService.ListContainersAsync(all: true, ct: ct);
+                var containers = await _containerService.ListContainersAsync(
+                    all: true,
+                    labelFilter: DockerConstants.ManagedContainerLabel,
+                    ct: ct);
 
                 var existingContainer = containers.FirstOrDefault(c =>
                     (!string.IsNullOrEmpty(primaryTag) && c.Image == primaryTag) || c.Image == newImage.Id);
@@ -245,11 +248,12 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 {
                     _logger.LogWithNewline("[info] No existing container found for image. Creating a new one...", false, false);
 
+                    AppConfig appConfig = (_serviceProvider.GetService(typeof(AppConfig)) as AppConfig)!;
                     var newContainerId = await _containerService.CreateContainerAsync(
                         new ContainerCreationOptions
                         {
                             ImageName = imageName,
-                            Config = (HostConfig)_serviceProvider.GetService(typeof(HostConfig))!
+                            Config = appConfig.ContainerCreationParams
                         },
                         ct: ct);
                     container = await _containerService.InspectAsync(newContainerId, ct);

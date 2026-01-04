@@ -6,93 +6,136 @@
         xmlns:local="clr-namespace:DockerBuildBoxSystem.App"
         xmlns:vm="clr-namespace:DockerBuildBoxSystem.ViewModels.Main;assembly=DockerBuildBoxSystem.ViewModels"
         xmlns:uc="clr-namespace:DockerBuildBoxSystem.App.UserControls"
+        xmlns:converters="clr-namespace:DockerBuildBoxSystem.App.Converters"
         xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:MainViewModel}"
         Title="{Binding Title}"
         WindowStartupLocation="CenterScreen">
+    <Window.Resources>
+        <converters:IntToBoolConverter x:Key="IntToBoolConverter" />
+    </Window.Resources>
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
+        <Grid Grid.Row="0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Menu Grid.Column="0">
+                <MenuItem Header="_Sync">
+                    <MenuItem Header="Select Sync _In folder"
+                                Command="{Binding SelectSourcePathCommand}">
+                        <MenuItem.Icon>
+                            <materialDesign:PackIcon Kind="ArrowDown"/>
+                        </MenuItem.Icon>
+                    </MenuItem>
 
-        <Menu Grid.Row="0">
-            <MenuItem Header="_Sync">
-                <MenuItem.Icon>
-                    <materialDesign:PackIcon Kind="Flash"
-                                             Foreground="{DynamicResource PrimaryHueMidBrush}"/>
-                </MenuItem.Icon>
+                    <MenuItem Header="Select Sync _Out folder"
+                                Command="{Binding SelectSyncOutPathCommand}">
+                        <MenuItem.Icon>
+                            <materialDesign:PackIcon Kind="ArrowUp"/>
+                        </MenuItem.Icon>
+                    </MenuItem>
 
-                <MenuItem Header="Sync _In..."
-                  Command="{Binding SelectSourcePathCommand}">
-                    <MenuItem.Icon>
-                        <materialDesign:PackIcon Kind="ArrowDown"/>
-                    </MenuItem.Icon>
+                    <Separator/>
+                    <MenuItem Header="_Force Sync"
+                               Command="{Binding ElementName=ContainerConsoleControl,
+                            Path=DataContext.FileSync.StartForceSyncCommand}">
+                        <MenuItem.Icon>
+                            <materialDesign:PackIcon Kind="SyncCircle"/>
+                        </MenuItem.Icon>
+                    </MenuItem>
+                    <MenuItem Header="_Sync Out"
+                            Command="{Binding ElementName=ContainerConsoleControl,
+                            Path=DataContext.FileSync.StartSyncOutCommand}">
+                        <MenuItem.Icon>
+                            <materialDesign:PackIcon Kind="Upload"/>
+                        </MenuItem.Icon>
+                    </MenuItem>
+                </MenuItem>
+                <MenuItem Header="_Container"
+                            ToolTip="Container options">
+
+                    <MenuItem Header="_Open Container in CMD"
+                            Command="{Binding ElementName=ContainerConsoleControl,
+                            Path=DataContext.ContainerList.OpenContainerInCmdCommand}">
+                        <MenuItem.Icon>
+                            <materialDesign:PackIcon Kind="Console"/>
+                        </MenuItem.Icon>
+                    </MenuItem>
                 </MenuItem>
 
-                <MenuItem Header="Sync _Out..."
-                  Command="{Binding SelectSyncOutPathCommand}">
-                    <MenuItem.Icon>
-                        <materialDesign:PackIcon Kind="ArrowUp"/>
-                    </MenuItem.Icon>
-                </MenuItem>
+                <MenuItem Header="_Settings"
+                    ToolTip="Settings options">
+                    <MenuItem Header="._env"
+                            Command="{Binding EnvironmentVM.OpenEnvFileCommand}"
+                            ToolTip="Edit .env file">
+                        <MenuItem.Icon>
+                            <materialDesign:PackIcon Kind="FileEdit"/>
+                        </MenuItem.Icon>
+                    </MenuItem>
 
-                <Separator/>
-                <MenuItem Header="_Force Sync"
-                  Command="{Binding ElementName=ContainerConsoleControl,
-                                    Path=DataContext.FileSync.StartForceSyncCommand}">
-                    <MenuItem.Icon>
-                        <materialDesign:PackIcon Kind="SyncAlert"/>
-                    </MenuItem.Icon>
+                    <MenuItem Header="syncIgnore"
+                            Command="{Binding OpenSyncIgnoreFileCommand}"
+                            ToolTip="Edit syncIgnore file">
+                        <MenuItem.Icon>
+                            <materialDesign:PackIcon Kind="FileCancel"/>
+                        </MenuItem.Icon>
+                    </MenuItem>
                 </MenuItem>
-                <MenuItem Header="_Sync Out"
-                  Command="{Binding ElementName=ContainerConsoleControl,
-                                    Path=DataContext.FileSync.StartSyncOutCommand}">
-                    <MenuItem.Icon>
-                        <materialDesign:PackIcon Kind="SyncAlert"/>
-                    </MenuItem.Icon>
-                </MenuItem>
-            </MenuItem>
-            <MenuItem Header="_Container"
-              ToolTip="Container options">
-                <MenuItem.Icon>
-                    <materialDesign:PackIcon Kind="Docker"/>
-                </MenuItem.Icon>
+            </Menu>
+            <Grid Grid.Column="2" Margin="6" DataContext="{Binding ContainerConsole}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" 
+                           Text="Image:" 
+                           FontWeight="SemiBold"
+                           VerticalAlignment="Center" 
+                           Margin="0,0,6,0"/>
 
-                <MenuItem Header="_Open Container in CMD"
-                  Command="{Binding ElementName=ContainerConsoleControl,
-                                    Path=DataContext.ContainerList.OpenContainerInCmdCommand}">
-                    <MenuItem.Icon>
-                        <materialDesign:PackIcon Kind="Console"/>
-                    </MenuItem.Icon>
-                </MenuItem>
-            </MenuItem>
+                <ComboBox Grid.Column="1" 
+                          Style="{DynamicResource MaterialDesignOutlinedComboBox}"
+                          ItemsSource="{Binding ElementName = ContainerConsoleControl, Path=DataContext.ContainerList.Images}"
+                          SelectedItem="{Binding ElementName = ContainerConsoleControl, Path=DataContext.ContainerList.SelectedImage}"
+                          IsEnabled="{Binding ElementName = ContainerConsoleControl, Path=DataContext.ContainerList.Images.Count, Converter={StaticResource IntToBoolConverter}}"
+                          ToolTip="Select a image to interact with"
+                          Width="150"
+                          Height="30"
+                          Padding="8,4"
+                          VerticalAlignment="Center"
+                          materialDesign:HintAssist.Hint="Select an image">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{Binding RepoTags[0]}" FontWeight="Bold" Margin="0,0,8,0"/>
+                                <!--<TextBlock Text="{Binding Id}" Foreground="DarkGray" FontStyle="Italic"/>-->
+                            </StackPanel>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
 
-            <MenuItem Header="_Settings"
-              ToolTip="Settings options">
-                <MenuItem.Icon>
-                    <materialDesign:PackIcon Kind="Cog"/>
-                </MenuItem.Icon>
-
-                <MenuItem Header="._env"
-                  Command="{Binding EnvironmentVM.OpenEnvFileCommand}"
-                  ToolTip="Edit .env file">
-                    <MenuItem.Icon>
-                        <materialDesign:PackIcon Kind="FileEdit"/>
-                    </MenuItem.Icon>
-                </MenuItem>
-
-                <MenuItem Header="syncIgnore"
-                  Command="{Binding OpenSyncIgnoreFileCommand}"
-                  ToolTip="Edit syncIgnore file">
-                    <MenuItem.Icon>
-                        <materialDesign:PackIcon Kind="FileCancel"/>
-                    </MenuItem.Icon>
-                </MenuItem>
-            </MenuItem>
-        </Menu>
+                <Button Grid.Column="2" 
+                        Style="{DynamicResource MaterialDesignFlatButton}"
+                        Command="{Binding ElementName = ContainerConsoleControl, Path=DataContext.ContainerList.RefreshImagesCommand}"
+                        ToolTip="Refresh the list of images"
+                        Margin="6,0,0,0"
+                        Width="30" Height="30"
+                        Padding="0">
+                    <Image Source="pack://application:,,,/Assets/icons/refresh.png"
+                           Width="20"
+                           Height="20"/>
+                </Button>
+            </Grid>
+        </Grid>
 
         <!--  Main Content Area - the UserControl is responsible for its own ViewModel lifecycle  -->
         <uc:ContainerConsole x:Name="ContainerConsoleControl" Grid.Row="1" />
@@ -125,5 +168,10 @@
             </StackPanel>
         </Grid>
 
+        <!-- Shutdown Overlay Component -->
+        <uc:ShutdownOverlay x:Name="ShutdownOverlayControl"
+                            Grid.RowSpan="3"
+                            Panel.ZIndex="100"
+                            Visibility="Collapsed"/>
     </Grid>
 </Window>

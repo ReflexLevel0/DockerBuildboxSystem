@@ -148,8 +148,9 @@ public partial class App : Application
         // register environment service abstraction
         services.AddSingleton<IEnvironmentService, EnvironmentService>();
 
-        // reading the container creation arguments from the file and creating a HostConfig from it
-        string hostConfigStr = File.ReadAllText(Path.Combine("Config", "container_creation_args.json"));
-        services.AddTransient<HostConfig>(_ => JsonConvert.DeserializeObject<HostConfig>(hostConfigStr)!);
+        // reading app configuration
+        string configPath = File.ReadAllText(Path.Combine("Config", "config.json"));
+        AppConfig configObj = JsonConvert.DeserializeObject<AppConfig>(configPath)!;
+        services.AddTransient<AppConfig>(_ => configObj);
     }
 }
