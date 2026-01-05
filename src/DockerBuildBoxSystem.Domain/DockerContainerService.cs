@@ -517,6 +517,15 @@ namespace DockerBuildBoxSystem.Domain
             string containerPath,
             CancellationToken ct = default)
         {
+            if (string.IsNullOrWhiteSpace(containerId))
+                throw new ArgumentException("Container ID cannot be empty", nameof(containerId));
+            
+            if (string.IsNullOrWhiteSpace(hostPath))
+                throw new ArgumentException("Host path cannot be empty", nameof(hostPath));
+            
+            if (string.IsNullOrWhiteSpace(containerPath))
+                throw new ArgumentException("Container path cannot be empty", nameof(containerPath));
+            
             if (!File.Exists(hostPath))
                 throw new FileNotFoundException("File not found", hostPath);
 
@@ -554,6 +563,15 @@ namespace DockerBuildBoxSystem.Domain
             string containerPath,
             CancellationToken ct = default)
         {
+            if (string.IsNullOrWhiteSpace(containerId))
+                throw new ArgumentException("Container ID cannot be empty", nameof(containerId));
+            
+            if (string.IsNullOrWhiteSpace(hostPath))
+                throw new ArgumentException("Host path cannot be empty", nameof(hostPath));
+            
+            if (string.IsNullOrWhiteSpace(containerPath))
+                throw new ArgumentException("Container path cannot be empty", nameof(containerPath));
+            
             if (!Directory.Exists(hostPath))
                 throw new DirectoryNotFoundException($"Directory not found: {hostPath}");
 
@@ -589,6 +607,15 @@ namespace DockerBuildBoxSystem.Domain
             string hostPath,
             CancellationToken ct = default)
         {
+            if (string.IsNullOrWhiteSpace(containerId))
+                throw new ArgumentException("Container ID cannot be empty", nameof(containerId));
+            
+            if (string.IsNullOrWhiteSpace(containerPath))
+                throw new ArgumentException("Container path cannot be empty", nameof(containerPath));
+            
+            if (string.IsNullOrWhiteSpace(hostPath))
+                throw new ArgumentException("Host path cannot be empty", nameof(hostPath));
+            
             //get the archive stream from the container
             var response = await Client.Containers.GetArchiveFromContainerAsync(
                 containerId,
@@ -627,6 +654,15 @@ namespace DockerBuildBoxSystem.Domain
             string hostPath,
             CancellationToken ct = default)
         {
+            if (string.IsNullOrWhiteSpace(containerId))
+                throw new ArgumentException("Container ID cannot be empty", nameof(containerId));
+            
+            if (string.IsNullOrWhiteSpace(containerPath))
+                throw new ArgumentException("Container path cannot be empty", nameof(containerPath));
+            
+            if (string.IsNullOrWhiteSpace(hostPath))
+                throw new ArgumentException("Host path cannot be empty", nameof(hostPath));
+            
             //get the archive stream from the container
             var response = await Client.Containers.GetArchiveFromContainerAsync(
                 containerId,
