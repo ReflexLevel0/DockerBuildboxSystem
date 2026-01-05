@@ -13,119 +13,155 @@ package "Contracts Layer" <<contracts>> #Honeydew {
 
     package "Tier 1: Docker Operations" #LightBlue {
         interface IContainerService {
+            --Engine Status--
+            + IsEngineAvailableAsync(ct)
+            --Events--
+            + ContainerStarted
             --Container Lifecycle--
-            + ListContainersAsync(all)
-            + CreateContainerAsync(options)
-            + StartAsync(containerId)
-            + StopAsync(containerId, timeout)
-            + RestartAsync(containerId, timeout)
-            + KillAsync(containerId)
-            + RemoveAsync(containerId)
-            + InspectAsync(containerId)
+            + ListContainersAsync(all, nameFilter, labelFilter, ct)
+            + CreateContainerAsync(options, ct)
+            + StartAsync(containerId, ct)
+            + StopAsync(containerId, timeout, ct)
+            + StopAsync(containerIds, timeout, ct)
+            + RestartAsync(containerId, timeout, ct)
+            + KillContainer(containerId, ct)
+            + RemoveAsync(containerId, force, ct)
+            + InspectAsync(containerId, ct)
             --Logs & Execution--
-            + StreamLogsAsync(containerId, params)
-            + CreateExecAsync(containerId, params)
-            + StartExecAsync(execId)
-            + StreamExecAsync(execId)
+            + StreamLogsAsync(containerId, follow, tail, tty, ct)
+            + ExecAsync(containerId, cmd, ct)
+            + StreamExecAsync(containerId, cmd, tty, ct)
+            --File Operations--
+            + CopyFileToContainerAsync(containerId, hostPath, containerPath, ct)
+            + CopyDirectoryToContainerAsync(containerId, hostPath, containerPath, ct)
+            + CopyFileFromContainerAsync(containerId, containerPath, hostPath, ct)
+            + CopyDirectoryFromContainerAsync(containerId, containerPath, hostPath, ct)
         }
 
         interface IImageService {
-            + ListImagesAsync()
-            + PullImageAsync(imageName, tag)
-            + RemoveImageAsync(imageId)
-            + InspectImageAsync(imageId)
-            + TagImageAsync(imageId, tag)
+            + ListImagesAsync(all, ct)
+            + PullImageAsync(imageName, tag, ct)
+            + RemoveImageAsync(imageId, force, prune, ct)
+            + InspectImageAsync(imageId, ct)
         }
 
         interface IVolumeService {
-            + ListVolumesAsync()
-            + CreateVolumeAsync(name, options)
-            + GetSharedVolumeAsync(createIfNotExists)
-            + RemoveVolumeAsync(name)
-            + InspectVolumeAsync(name)
+            + GetSharedVolumeAsync(createIfNotExists, ct)
+            + CreateVolumeAsync(parameters, ct)
         }
     }
 
     package "Tier 2: Business Logic" #LightGreen {
-        interface IContainerFileTransferService {
-            + CopyToContainerAsync(containerId, path, data)
-            + CopyDirectoryToContainerAsync(containerId, srcPath, destPath)
-            + DeleteInContainerAsync(containerId, path)
-            + RenameInContainerAsync(containerId, oldPath, newPath)
-            + CleanContainerDirectoryAsync(containerId, path, exclusions)
-        }
-
-        interface IFileSyncService {
-            + StartWatching(hostPath, containerId, containerPath)
-            + StopWatching()
-            + ForceSyncAsync()
-            --Events--
-            + FileChanged
-            + FileSyncError
-        }
-
-        interface ICommandRunner {
-            + RunAsync(containerId, command)
-            + ExecuteAndLog(containerId, args)
-            + StreamExecAsync(execId)
-            + InterruptAsync()
-            + StopAsync()
-            + TryWriteToInteractiveAsync(input)
-            --Properties--
-            + IsRunning
-            + ExitCode
-        }
-
-        interface ILogRunner {
-            + RunAsync(containerId)
-            + StopAsync()
+        interface IStreamReader {
             --Properties--
             + IsRunning
             --Events--
             + RunningChanged
-            + LogReceived
+            --Methods--
+            + RunAsync(svc, containerId, args, ct)
+            + StopAsync()
+        }
+
+        interface IContainerFileTransferService {
+            + CopyToContainerAsync(containerId, hostPath, containerPath, ct)
+            + CopyFromContainerAsync(containerId, containerPath, hostPath, ct)
+            + CopyDirectoryToContainerAsync(containerId, hostPath, containerPath, ct)
+            + CopyDirectoryFromContainerAsync(containerId, containerPath, hostPath, ct)
+            + DeleteInContainerAsync(containerId, containerPath, ct)
+            + RenameInContainerAsync(containerId, oldPath, newPath, ct)
+            + EmptyDirectoryInContainerAsync(containerId, containerPath, excludedPaths, ct)
+        }
+
+        interface IFileSyncService {
+            --Properties--
+            + Changes : ObservableCollection<string>
+            --Methods--
+            + Configure(path, containerId, containerRootPath)
+            + StartWatchingAsync(path, containerId, containerRootPath)
+            + StopWatching()
+            + PauseWatching()
+            + ResumeWatching()
+            + ForceSyncAsync(ct)
+            + ForceSyncFromContainerAsync(ct)
+            + CleanDirectoryAsync(excludedPaths, ct)
+            + UpdateIgnorePatterns(patterns)
+            + LoadIgnorePatternsAsync()
+        }
+
+        interface ICommandRunner {
+            --Properties--
+            + ExitCode : Task<long>
+            --Methods--
+            + TryWriteToInteractiveAsync(raw)
+            + InterruptAsync()
+        }
+
+        interface ILogRunner {
         }
     }
 
     package "Tier 3: Configuration & Utilities" #LightYellow {
         interface IEnvironmentService {
-            + GetEnvironmentVariables()
-            + SetEnvironmentVariable(name, value)
-            + RemoveEnvironmentVariable(name)
-            + ReloadEnvironmentVariables()
+            + LoadEnvAsync()
+            + SaveEnvAsync(envVariables)
+            + OpenEnvFile()
         }
 
         interface ISettingsService {
-            + LoadSettings()
-            + SaveSettings()
-            + GetSetting<T>(key, defaultValue)
-            + SetSetting<T>(key, value)
+            --Properties--
+            + SourceFolderPath
+            + SyncOutFolderPath
+            --Events--
+            + SourcePathChanged
+            + SyncOutPathChanged
+            --Methods--
+            + LoadSettingsAsync()
+            + SaveSettingsAsync()
         }
 
         interface ISyncIgnoreService {
-            + LoadIgnorePatterns(path)
-            + GetIgnorePatterns()
-            + AddIgnorePattern(pattern)
-            + RemoveIgnorePattern(pattern)
+            + LoadSyncIgnoreAsync()
+            + SaveSyncIgnoreAsync(syncIgnore)
+            + OpenSyncIgnore()
         }
 
         interface IExternalProcessService {
-            + RunProcess(filename, args)
-            + RunProcessAsync(filename, args)
-            + KillProcess(processId)
+            + StartProcess(command, arguments)
         }
 
         interface IUserControlService {
-            + GetUserControls()
-            + SaveUserControl(control)
-            + DeleteUserControl(id)
-            + ConvertToJson(control)
-            + ConvertFromJson(json)
+            + LoadUserControlsAsync()
+            + SaveUserControlAsync(userControls)
+            + AddUserControlValueAsync(id, value)
+            + RetrieveVariableAsync(command, variables)
+            + LoadUserVariables(controls)
         }
 
         interface IIgnorePatternMatcher {
-            + IsIgnored(path, patterns)
-            + LoadPatterns(path)
+            + LoadPatterns(patterns)
+            + AddPattern(pattern)
+            + IsIgnored(path)
+            + GetPatterns()
+        }
+    }
+
+    package "Presentation Layer Services" #LightCyan {
+        interface IDialogService {
+            + ShowInformation(message, title)
+            + ShowWarning(message, title)
+            + ShowError(message, title)
+            + ShowConfirmation(message, title)
+            + ShowFolderBrowser(description)
+        }
+
+        interface IClipboardService {
+            + SetTextAsync(text, ct)
+        }
+
+        interface IViewModelLogger {
+            + LogWithNewline(message, isError, isImportant)
+            + Log(message, isError, isImportant)
+            + DiscardPendingLogs()
         }
     }
 }
@@ -138,9 +174,12 @@ package "Contracts Layer" <<contracts>> #Honeydew {
 IContainerService -[hidden]down-> IImageService
 IImageService -[hidden]down-> IVolumeService
 
-ICommandRunner -[hidden]down-> ILogRunner
-ILogRunner -[hidden]down-> IFileSyncService
-IFileSyncService -[hidden]down-> IContainerFileTransferService
+IStreamReader -[hidden]down-> IContainerFileTransferService
+IContainerFileTransferService -[hidden]down-> IFileSyncService
+
+
+ICommandRunner -[hidden]right-> IStreamReader
+ILogRunner -[hidden]right-> IStreamReader
 
 IEnvironmentService -[hidden]down-> ISettingsService
 ISettingsService -[hidden]down-> ISyncIgnoreService
@@ -148,51 +187,26 @@ ISyncIgnoreService -[hidden]down-> IExternalProcessService
 IExternalProcessService -[hidden]down-> IUserControlService
 IUserControlService -[hidden]down-> IIgnorePatternMatcher
 
-' Tier relationships
-"Tier 1: Docker Operations" -[hidden]down-> "Tier 2: Business Logic"
-"Tier 2: Business Logic" -[hidden]down-> "Tier 3: Configuration & Utilities"
+IDialogService -[hidden]down-> IClipboardService
+IClipboardService -[hidden]down-> IViewModelLogger
+
+' Tier relationships - horizontal layout (left to right)
+"Tier 1: Docker Operations" -[hidden]right-> "Tier 2: Business Logic"
+"Tier 2: Business Logic" -[hidden]right-> "Tier 3: Configuration & Utilities"
+"Tier 3: Configuration & Utilities" -[hidden]down-> "Presentation Layer Services"
+
+' Inheritance relationships
+IStreamReader <|-- ICommandRunner : extends
+IStreamReader <|-- ILogRunner : extends
 
 ' Key cross-tier dependencies
 IFileSyncService ..> IContainerFileTransferService : uses
 IContainerFileTransferService ..> IContainerService : uses
 IFileSyncService ..> IIgnorePatternMatcher : uses
-ICommandRunner ..> IContainerService : uses
-ILogRunner ..> IContainerService : uses
+IStreamReader ..> IContainerService : uses
 IEnvironmentService ..> IExternalProcessService : uses
 ISyncIgnoreService ..> IExternalProcessService : uses
 
-' ====================================================================
-' NOTES
-' ====================================================================
-
-note top of "Contracts Layer"
-    <b>Purpose:</b>
-    Define service abstractions and contracts
-    Enable dependency injection and testability
-    Decouple presentation layer from infrastructure
-end note
-
-note right of "Tier 1: Docker Operations"
-    <b>Low-Level Docker API</b>
-    Direct wrappers around Docker.DotNet
-    Resource-specific operations
-    Minimal business logic
-end note
-
-note right of "Tier 2: Business Logic"
-    <b>High-Level Operations</b>
-    Compose Tier 1 services
-    Implement workflows
-    Manage external integrations
-end note
-
-note right of "Tier 3: Configuration & Utilities"
-    <b>Cross-Cutting Concerns</b>
-    Configuration management
-    Pattern matching
-    Process execution
-    User preferences
-end note
 
 ' ====================================================================
 ' LEGEND

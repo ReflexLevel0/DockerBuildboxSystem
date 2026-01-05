@@ -23,15 +23,22 @@ package "External Dependencies" <<external>> #F0F0F0 {
 ' ====================================================================
 package "Contracts Layer" <<contracts>> #Honeydew {
     interface IContainerService {
+        + IsEngineAvailableAsync()
         + ListContainersAsync()
         + CreateContainerAsync()
         + StartAsync()
-        + StopAsync()
+        + StopAsync() [2 overloads]
+        + RestartAsync()
+        + KillContainer()
         + InspectAsync()
         + RemoveAsync()
         + StreamLogsAsync()
-        + CreateExecAsync()
+        + ExecAsync()
         + StreamExecAsync()
+        + CopyFileToContainerAsync()
+        + CopyDirectoryToContainerAsync()
+        + CopyFileFromContainerAsync()
+        + CopyDirectoryFromContainerAsync()
     }
 
     interface IImageService {
@@ -42,11 +49,8 @@ package "Contracts Layer" <<contracts>> #Honeydew {
     }
 
     interface IVolumeService {
-        + ListVolumesAsync()
-        + CreateVolumeAsync()
         + GetSharedVolumeAsync()
-        + RemoveVolumeAsync()
-        + InspectVolumeAsync()
+        + CreateVolumeAsync()
     }
 }
 
@@ -60,39 +64,39 @@ package "Core Docker Services" <<infrastructure>> #AliceBlue {
         + {static} GetDefaultDockerUri()
     }
 
-    class DockerContainerService {
+    class DockerContainerService <<IContainerService>> {
         - IVolumeService _volumeService
         + DockerContainerService(client, volumeService)
+        + IsEngineAvailableAsync()
         + ListContainersAsync()
         + CreateContainerAsync()
         + StartAsync()
-        + StopAsync()
+        + StopAsync() [2 overloads]
         + RestartAsync()
-        + KillAsync()
+        + KillContainer()
         + InspectAsync()
         + RemoveAsync()
         + StreamLogsAsync()
-        + CreateExecAsync()
-        + StartExecAsync()
+        + ExecAsync()
         + StreamExecAsync()
+        + CopyFileToContainerAsync()
+        + CopyDirectoryToContainerAsync()
+        + CopyFileFromContainerAsync()
+        + CopyDirectoryFromContainerAsync()
     }
 
-    class DockerImageService {
+    class DockerImageService <<IImageService>> {
         + DockerImageService(client)
         + ListImagesAsync()
         + PullImageAsync()
         + RemoveImageAsync()
         + InspectImageAsync()
-        + TagImageAsync()
     }
 
-    class DockerVolumeService {
+    class DockerVolumeService <<IVolumeService>> {
         + DockerVolumeService(client)
-        + ListVolumesAsync()
-        + CreateVolumeAsync()
         + GetSharedVolumeAsync()
-        + RemoveVolumeAsync()
-        + InspectVolumeAsync()
+        + CreateVolumeAsync()
     }
 
     DockerServiceBase <|-- DockerContainerService
@@ -104,10 +108,6 @@ package "Core Docker Services" <<infrastructure>> #AliceBlue {
 ' RELATIONSHIPS
 ' ====================================================================
 DockerServiceBase --> IDockerClient : uses
-DockerContainerService ..|> IContainerService : implements
-DockerImageService ..|> IImageService : implements
-DockerVolumeService ..|> IVolumeService : implements
-
 DockerContainerService --> IVolumeService : uses\n(auto-mount shared volume)
 
 ' ====================================================================

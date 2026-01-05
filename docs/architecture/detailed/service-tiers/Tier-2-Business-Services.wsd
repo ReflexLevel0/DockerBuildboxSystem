@@ -28,132 +28,165 @@ package "External Dependencies" <<external>> #F0F0F0 {
 ' ====================================================================
 package "Contracts Layer" <<contracts>> #Honeydew {
     interface IContainerService {
-        + CreateExecAsync()
-        + StartExecAsync()
+        + ExecAsync()
         + StreamExecAsync()
         + StreamLogsAsync()
+        + CopyFileToContainerAsync()
+        + CopyDirectoryToContainerAsync()
+        + CopyFileFromContainerAsync()
+        + CopyDirectoryFromContainerAsync()
+    }
+
+    interface IStreamReader {
+        + RunAsync()
+        + StopAsync()
+        + IsRunning
+        + RunningChanged
     }
 
     interface IContainerFileTransferService {
         + CopyToContainerAsync()
+        + CopyFromContainerAsync()
         + CopyDirectoryToContainerAsync()
+        + CopyDirectoryFromContainerAsync()
         + DeleteInContainerAsync()
         + RenameInContainerAsync()
-        + CleanContainerDirectoryAsync()
+        + EmptyDirectoryInContainerAsync()
     }
 
     interface IFileSyncService {
-        + StartWatching()
+        + Configure()
+        + StartWatchingAsync()
         + StopWatching()
+        + PauseWatching()
+        + ResumeWatching()
         + ForceSyncAsync()
+        + ForceSyncFromContainerAsync()
+        + CleanDirectoryAsync()
+        + UpdateIgnorePatterns()
+        + LoadIgnorePatternsAsync()
+        + Changes
     }
 
     interface ICommandRunner {
-        + RunAsync()
-        + ExecuteAndLog()
-        + StreamExecAsync()
-        + InterruptAsync()
-        + StopAsync()
         + TryWriteToInteractiveAsync()
+        + InterruptAsync()
+        + ExitCode
     }
 
     interface ILogRunner {
-        + RunAsync()
-        + StopAsync()
-        + IsRunning
-        --Events--
-        + RunningChanged
     }
 
     interface IIgnorePatternMatcher {
-        + IsIgnored()
         + LoadPatterns()
+        + AddPattern()
+        + IsIgnored()
+        + GetPatterns()
     }
+
+    IStreamReader <|-- ICommandRunner : extends
+    IStreamReader <|-- ILogRunner : extends
+    
+    ' Layout hints within Contracts
+    IContainerService -[hidden]down-> IStreamReader
+    IStreamReader -[hidden]down-> IContainerFileTransferService
+    IContainerFileTransferService -[hidden]down-> IFileSyncService
+    IFileSyncService -[hidden]down-> ICommandRunner
+    ICommandRunner -[hidden]down-> ILogRunner
+    ILogRunner -[hidden]down-> IIgnorePatternMatcher
 }
 
 ' ====================================================================
 ' IMPLEMENTATIONS
 ' ====================================================================
 package "Business Services" <<infrastructure>> #MistyRose {
-    class ContainerFileTransferService {
+    abstract StreamReaderBase <<IStreamReader>> {
+        # IContainerService _containerService
+        # CancellationTokenSource _cts
+        # bool _isRunning
+        + RunAsync()
+        + StopAsync()
+        + IsRunning
+        + RunningChanged
+        --Protected--
+        # OnRunningChanged()
+    }
+
+    class ContainerFileTransferService <<IContainerFileTransferService>> {
         - IContainerService _containerService
         + CopyToContainerAsync()
+        + CopyFromContainerAsync()
         + CopyDirectoryToContainerAsync()
+        + CopyDirectoryFromContainerAsync()
         + DeleteInContainerAsync()
         + RenameInContainerAsync()
-        + CleanContainerDirectoryAsync()
+        + EmptyDirectoryInContainerAsync()
         --Private--
         - CreateTarArchive()
         - ExecuteCommandInContainer()
     }
 
-    class FileSyncService {
+    class FileSyncService <<IFileSyncService>> {
         - IContainerFileTransferService _transferService
         - IIgnorePatternMatcher _ignoreMatcher
         - FileSystemWatcher _watcher
         - Dictionary<string, DateTime> _eventHistory
-        + StartWatching()
+        + Configure()
+        + StartWatchingAsync()
         + StopWatching()
+        + PauseWatching()
+        + ResumeWatching()
         + ForceSyncAsync()
+        + ForceSyncFromContainerAsync()
+        + CleanDirectoryAsync()
+        + UpdateIgnorePatterns()
+        + LoadIgnorePatternsAsync()
         --Private--
         - OnFileChanged()
         - OnFileDeleted()
         - OnFileRenamed()
         - IsDuplicateEvent()
-        - IsIgnored()
     }
 
-    class CommandRunner {
-        - IContainerService _containerService
-        - CancellationTokenSource _cts
+    class CommandRunner <<ICommandRunner>> {
         - ChannelWriter _inputWriter
-        + RunAsync()
-        + ExecuteAndLog()
-        + StreamExecAsync()
-        + InterruptAsync()
-        + StopAsync()
         + TryWriteToInteractiveAsync()
+        + InterruptAsync()
+        + ExitCode
         --Private--
         - ReadOutputAsync()
         - WriteInputAsync()
         - NormalizeInput()
     }
 
-    class LogRunner {
-        - IContainerService _containerService
-        - CancellationTokenSource _cts
-        - bool _isRunning
-        + RunAsync()
-        + StopAsync()
-        + IsRunning
-        --Events--
-        + RunningChanged
+    class LogRunner <<ILogRunner>> {
         --Private--
         - ProcessLogStream()
     }
+
+    StreamReaderBase <|-- CommandRunner
+    StreamReaderBase <|-- LogRunner
+    
+    ' Layout hints within Business Services
+    StreamReaderBase -[hidden]down-> ContainerFileTransferService
+    ContainerFileTransferService -[hidden]down-> FileSyncService
+    CommandRunner -[hidden]right-> LogRunner
 }
 
 ' ====================================================================
 ' RELATIONSHIPS
 ' ====================================================================
 
-' Implementations
-ContainerFileTransferService .up.|> IContainerFileTransferService : implements
-FileSyncService .up.|> IFileSyncService : implements
-CommandRunner .up.|> ICommandRunner : implements
-LogRunner .up.|> ILogRunner : implements
-
-' Dependencies
+' Dependencies (only showing usage, implementations indicated by stereotypes)
+StreamReaderBase --> IContainerService : uses
 ContainerFileTransferService --> IContainerService : uses
 FileSyncService --> IContainerFileTransferService : uses
 FileSyncService --> IIgnorePatternMatcher : uses
-FileSyncService -up-> FileSystemWatcher : uses
-CommandRunner --> IContainerService : uses
-LogRunner --> IContainerService : uses
+FileSyncService --> FileSystemWatcher : uses
 
-' Layout control - place External Dependencies to the left
+' Layout control
 "External Dependencies" -[hidden]right-> "Contracts Layer"
-"Contracts Layer" -[hidden]down-> "Business Services"
+"Contracts Layer" -[hidden]right-> "Business Services"
 
 ' ====================================================================
 ' NOTES

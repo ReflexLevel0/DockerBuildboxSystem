@@ -17,6 +17,7 @@ package "Contracts Layer" <<contracts>> #Honeydew {
     }
 
     package "Tier 2: Business Logic" {
+        interface IStreamReader
         interface IContainerFileTransferService
         interface IFileSyncService
         interface ICommandRunner
@@ -27,6 +28,15 @@ package "Contracts Layer" <<contracts>> #Honeydew {
         interface ISettingsService
         interface IEnvironmentService
         interface ISyncIgnoreService
+        interface IExternalProcessService
+        interface IUserControlService
+        interface IIgnorePatternMatcher
+    }
+
+    package "Presentation Layer" {
+        interface IDialogService
+        interface IClipboardService
+        interface IViewModelLogger
     }
 }
 
@@ -36,14 +46,22 @@ package "Contracts Layer" <<contracts>> #Honeydew {
 package "Infrastructure Layer" <<infrastructure>> #LemonChiffon {
     package "Tier 1: Core Docker Services" #AliceBlue {
         class DockerContainerService {
+            + IsEngineAvailableAsync()
             + ListContainersAsync()
             + CreateContainerAsync()
             + StartAsync()
-            + StopAsync()
+            + StopAsync() [2 overloads]
+            + RestartAsync()
+            + KillContainer()
+            + RemoveAsync()
             + InspectAsync()
             + StreamLogsAsync()
-            + CreateExecAsync()
+            + ExecAsync()
             + StreamExecAsync()
+            + CopyFileToContainerAsync()
+            + CopyDirectoryToContainerAsync()
+            + CopyFileFromContainerAsync()
+            + CopyDirectoryFromContainerAsync()
         }
 
         class DockerImageService {
@@ -54,35 +72,48 @@ package "Infrastructure Layer" <<infrastructure>> #LemonChiffon {
         }
 
         class DockerVolumeService {
-            + ListVolumesAsync()
-            + CreateVolumeAsync()
             + GetSharedVolumeAsync()
-            + RemoveVolumeAsync()
+            + CreateVolumeAsync()
         }
     }
 
     package "Tier 2: Business Services" #MistyRose {
+        abstract StreamReaderBase {
+            + RunAsync()
+            + StopAsync()
+            + IsRunning
+            # OnRunningChanged()
+        }
+
         class ContainerFileTransferService {
             + CopyToContainerAsync()
+            + CopyFromContainerAsync()
             + CopyDirectoryToContainerAsync()
+            + CopyDirectoryFromContainerAsync()
             + DeleteInContainerAsync()
             + RenameInContainerAsync()
-            + CleanContainerDirectoryAsync()
+            + EmptyDirectoryInContainerAsync()
         }
 
         class FileSyncService {
-            + StartWatching()
+            + Configure()
+            + StartWatchingAsync()
             + StopWatching()
+            + PauseWatching()
+            + ResumeWatching()
             + ForceSyncAsync()
+            + ForceSyncFromContainerAsync()
+            + CleanDirectoryAsync()
+            + UpdateIgnorePatterns()
+            + LoadIgnorePatternsAsync()
         }
 
         class CommandRunner {
             + RunAsync()
-            + ExecuteAndLog()
-            + StreamExecAsync()
-            + InterruptAsync()
             + StopAsync()
+            + InterruptAsync()
             + TryWriteToInteractiveAsync()
+            + ExitCode
         }
 
         class LogRunner {
@@ -90,28 +121,68 @@ package "Infrastructure Layer" <<infrastructure>> #LemonChiffon {
             + StopAsync()
             + IsRunning
         }
+
+        StreamReaderBase <|-- CommandRunner
+        StreamReaderBase <|-- LogRunner
     }
 
     package "Tier 3: Supporting Services" #Lavender {
         class SettingsService {
-            + LoadSettings()
-            + SaveSettings()
-            + GetSetting<T>()
-            + SetSetting<T>()
+            + SourceFolderPath
+            + SyncOutFolderPath
+            + LoadSettingsAsync()
+            + SaveSettingsAsync()
         }
 
         class EnvironmentService {
-            + GetEnvironmentVariables()
-            + SetEnvironmentVariable()
-            + RemoveEnvironmentVariable()
-            + ReloadEnvironmentVariables()
+            + LoadEnvAsync()
+            + SaveEnvAsync()
+            + OpenEnvFile()
         }
 
         class SyncIgnoreService {
-            + LoadIgnorePatterns()
-            + GetIgnorePatterns()
-            + AddIgnorePattern()
-            + RemoveIgnorePattern()
+            + LoadSyncIgnoreAsync()
+            + SaveSyncIgnoreAsync()
+            + OpenSyncIgnore()
+        }
+
+        class ExternalProcessService {
+            + StartProcess()
+        }
+
+        class UserControlService {
+            + LoadUserControlsAsync()
+            + SaveUserControlAsync()
+            + AddUserControlValueAsync()
+            + RetrieveVariableAsync()
+            + LoadUserVariables()
+        }
+
+        class IgnorePatternMatcher {
+            + LoadPatterns()
+            + AddPattern()
+            + IsIgnored()
+            + GetPatterns()
+        }
+    }
+
+    package "Presentation Services" #PowderBlue {
+        class DialogService {
+            + ShowInformation()
+            + ShowWarning()
+            + ShowError()
+            + ShowConfirmation()
+            + ShowFolderBrowser()
+        }
+
+        class ClipboardService {
+            + SetTextAsync()
+        }
+
+        class ViewModelLogger {
+            + LogWithNewline()
+            + Log()
+            + DiscardPendingLogs()
         }
     }
 }
@@ -126,6 +197,7 @@ IImageService <|.. DockerImageService : implements
 IVolumeService <|.. DockerVolumeService : implements
 
 ' Tier 2 implementations
+IStreamReader <|.. StreamReaderBase : implements
 IContainerFileTransferService <|.. ContainerFileTransferService : implements
 IFileSyncService <|.. FileSyncService : implements
 ICommandRunner <|.. CommandRunner : implements
@@ -135,6 +207,14 @@ ILogRunner <|.. LogRunner : implements
 ISettingsService <|.. SettingsService : implements
 IEnvironmentService <|.. EnvironmentService : implements
 ISyncIgnoreService <|.. SyncIgnoreService : implements
+IExternalProcessService <|.. ExternalProcessService : implements
+IUserControlService <|.. UserControlService : implements
+IIgnorePatternMatcher <|.. IgnorePatternMatcher : implements
+
+' Presentation layer implementations
+IDialogService <|.. DialogService : implements
+IClipboardService <|.. ClipboardService : implements
+IViewModelLogger <|.. ViewModelLogger : implements
 
 ' ====================================================================
 ' NOTES

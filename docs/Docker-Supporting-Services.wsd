@@ -40,7 +40,7 @@ package "Contracts Layer" <<contracts>> #Honeydew {
 ' SUPPORTING SERVICES
 ' ====================================================================
 
-class EnvironmentService <<sealed>> {
+class EnvironmentService <<IEnvironmentService>> {
     - _processService: IExternalProcessService
     --
     + LoadEnvironmentAsync(path): Task<Dictionary<string, string>>
@@ -51,7 +51,7 @@ class EnvironmentService <<sealed>> {
     <i>container environment variables</i>
 }
 
-class SettingsService <<sealed>> {
+class SettingsService <<ISettingsService>> {
     --
     + LoadSettingsAsync<T>(path): Task<T?>
     + SaveSettingsAsync<T>(path, settings): Task
@@ -60,7 +60,7 @@ class SettingsService <<sealed>> {
     <i>using System.Text.Json</i>
 }
 
-class SyncIgnoreService <<sealed>> {
+class SyncIgnoreService <<ISyncIgnoreService>> {
     - _processService: IExternalProcessService
     --
     + LoadIgnorePatternsAsync(path): Task<IEnumerable<string>>
@@ -71,7 +71,7 @@ class SyncIgnoreService <<sealed>> {
     <i>(similar to .gitignore)</i>
 }
 
-class ExternalProcessService <<sealed>> {
+class ExternalProcessService <<IExternalProcessService>> {
     --
     + StartProcess(filename, args?): void
     --
@@ -79,7 +79,7 @@ class ExternalProcessService <<sealed>> {
     <i>(e.g., notepad for editing)</i>
 }
 
-class UserControlService <<sealed>> {
+class UserControlService <<IUserControlService>> {
     - _converter: UserControlConverter
     --
     + LoadUserControlsAsync(path): Task<ObservableCollection<UserControl>>
@@ -106,13 +106,6 @@ class InvalidJsonControlsException {
 ' ====================================================================
 ' RELATIONSHIPS
 ' ====================================================================
-
-' Implementations
-EnvironmentService ..|> IEnvironmentService
-SettingsService ..|> ISettingsService
-SyncIgnoreService ..|> ISyncIgnoreService
-ExternalProcessService ..|> IExternalProcessService
-UserControlService ..|> IUserControlService
 
 ' Dependencies
 EnvironmentService --> IExternalProcessService : opens editor

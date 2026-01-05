@@ -52,7 +52,7 @@ package "Contracts Layer" <<contracts>> #Honeydew {
 ' BUSINESS SERVICES
 ' ====================================================================
 
-class ContainerFileTransferService <<sealed>> {
+class ContainerFileTransferService <<IContainerFileTransferService>> {
     - _containerService: IContainerService
     --
     + CopyToContainerAsync(id, src, dst): Task<(bool, string?)>
@@ -64,7 +64,7 @@ class ContainerFileTransferService <<sealed>> {
     <i>error handling and success/error tuples</i>
 }
 
-class FileSyncService <<sealed>> {
+class FileSyncService <<IFileSyncService>> {
     - _fileTransferService: IContainerFileTransferService
     - _patternMatcher: IIgnorePatternMatcher
     - _watcher: FileSystemWatcher
@@ -86,7 +86,7 @@ class FileSyncService <<sealed>> {
     - OnFileRenamed(sender, args): void
 }
 
-class CommandRunner <<sealed>> {
+class CommandRunner <<ICommandRunner>> {
     - _containerService: IContainerService
     - _inputChannel: Channel<string>
     --
@@ -99,7 +99,7 @@ class CommandRunner <<sealed>> {
     <i>with stdin/stdout streaming via Channels</i>
 }
 
-class LogRunner <<sealed>> {
+class LogRunner <<ILogRunner>> {
     - _containerService: IContainerService
     --
     + RunAsync(id, follow?, timestamps?, cancellation?): Task<ChannelReader<(bool, string)>>
@@ -108,7 +108,7 @@ class LogRunner <<sealed>> {
     <i>stderr/stdout separation</i>
 }
 
-class IgnorePatternMatcher <<sealed>> {
+class IgnorePatternMatcher <<IIgnorePatternMatcher>> {
     - _regexPatterns: List<Regex>
     --
     + IsIgnored(path): bool
@@ -121,13 +121,6 @@ class IgnorePatternMatcher <<sealed>> {
 ' ====================================================================
 ' RELATIONSHIPS
 ' ====================================================================
-
-' Implementations
-ContainerFileTransferService ..|> IContainerFileTransferService
-FileSyncService ..|> IFileSyncService
-CommandRunner ..|> ICommandRunner
-LogRunner ..|> ILogRunner
-IgnorePatternMatcher ..|> IIgnorePatternMatcher
 
 ' Dependencies
 ContainerFileTransferService --> IContainerService : wraps

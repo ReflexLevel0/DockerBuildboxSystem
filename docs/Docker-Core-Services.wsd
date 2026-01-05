@@ -40,21 +40,21 @@ DockerServiceBase o--> IDockerClient : uses
 ' CORE SERVICES
 ' ====================================================================
 
-class DockerVolumeService <<sealed>> {
+class DockerVolumeService <<IVolumeService>> {
     + <<const>> SharedVolumeName = "BuildBoxShared"
     --
     + GetSharedVolumeAsync(): Task<VolumeResponse?>
     + CreateVolumeAsync(name, labels?): Task<VolumeResponse>
 }
 
-class DockerImageService <<sealed>> {
+class DockerImageService <<IImageService>> {
     + ListImagesAsync(all?): Task<IList<ImagesListResponse>>
     + InspectImageAsync(id): Task<ImageInspectResponse?>
     + PullImageAsync(name, tag, progress?): Task
     + RemoveImageAsync(id, force?, noPrune?): Task
 }
 
-class DockerContainerService <<sealed>> {
+class DockerContainerService <<IContainerService>> {
     - _volumeService: IVolumeService
     --
     <b>Lifecycle:</b>
@@ -98,9 +98,8 @@ package "Contracts Layer" <<contracts>> #Honeydew {
     interface IContainerService
 }
 
-DockerVolumeService ..|> IVolumeService : implements
-DockerImageService ..|> IImageService : implements
-DockerContainerService ..|> IContainerService : implements
+' Dependencies
+DockerContainerService --> DockerVolumeService : auto-mounts\nshared volume
 
 ' ====================================================================
 ' NOTES

@@ -20,43 +20,43 @@ package "External Dependencies" <<external>> as external  #F0F0F0 {
 ' ====================================================================
 package "Contracts Layer" <<contracts>> as contracts #Honeydew {
     interface IEnvironmentService {
-        + GetEnvironmentVariables()
-        + SetEnvironmentVariable()
-        + RemoveEnvironmentVariable()
-        + ReloadEnvironmentVariables()
+        + LoadEnvAsync()
+        + SaveEnvAsync()
+        + OpenEnvFile()
     }
 
     interface ISettingsService {
-        + LoadSettings()
-        + SaveSettings()
-        + GetSetting<T>()
-        + SetSetting<T>()
+        + SourceFolderPath
+        + SyncOutFolderPath
+        + SourcePathChanged
+        + SyncOutPathChanged
+        + LoadSettingsAsync()
+        + SaveSettingsAsync()
     }
 
     interface ISyncIgnoreService {
-        + LoadIgnorePatterns()
-        + GetIgnorePatterns()
-        + AddIgnorePattern()
-        + RemoveIgnorePattern()
+        + LoadSyncIgnoreAsync()
+        + SaveSyncIgnoreAsync()
+        + OpenSyncIgnore()
     }
 
     interface IExternalProcessService {
-        + RunProcess()
-        + RunProcessAsync()
-        + KillProcess()
+        + StartProcess()
     }
 
     interface IUserControlService {
-        + GetUserControls()
-        + SaveUserControl()
-        + DeleteUserControl()
-        + ConvertToJson()
-        + ConvertFromJson()
+        + LoadUserControlsAsync()
+        + SaveUserControlAsync()
+        + AddUserControlValueAsync()
+        + RetrieveVariableAsync()
+        + LoadUserVariables()
     }
 
     interface IIgnorePatternMatcher {
-        + IsIgnored(path, patterns)
-        + LoadPatterns(path)
+        + LoadPatterns()
+        + AddPattern()
+        + IsIgnored()
+        + GetPatterns()
     }
 }
 
@@ -64,75 +64,67 @@ package "Contracts Layer" <<contracts>> as contracts #Honeydew {
 ' IMPLEMENTATIONS
 ' ====================================================================
 package "Supporting Services" <<infrastructure>> as infrastructure #Lavender {
-    class EnvironmentService {
+    class EnvironmentService <<IEnvironmentService>> {
         - IExternalProcessService _processService
-        - Dictionary<string, string> _variables
-        + GetEnvironmentVariables()
-        + SetEnvironmentVariable()
-        + RemoveEnvironmentVariable()
-        + ReloadEnvironmentVariables()
+        - List<EnvVariable> _variables
+        + LoadEnvAsync()
+        + SaveEnvAsync()
+        + OpenEnvFile()
         --Private--
-        - LoadFromSystem()
         - LoadFromFile()
+        - SaveToFile()
     }
 
-    class SettingsService {
+    class SettingsService <<ISettingsService>> {
         - string _settingsPath
         - JsonSerializerOptions _options
-        - Dictionary<string, object> _settings
-        + LoadSettings()
-        + SaveSettings()
-        + GetSetting<T>()
-        + SetSetting<T>()
+        + SourceFolderPath
+        + SyncOutFolderPath
+        + SourcePathChanged
+        + SyncOutPathChanged
+        + LoadSettingsAsync()
+        + SaveSettingsAsync()
         --Private--
         - EnsureSettingsFileExists()
     }
 
-    class SyncIgnoreService {
+    class SyncIgnoreService <<ISyncIgnoreService>> {
         - IExternalProcessService _processService
-        - List<string> _patterns
-        + LoadIgnorePatterns()
-        + GetIgnorePatterns()
-        + AddIgnorePattern()
-        + RemoveIgnorePattern()
+        - string _syncIgnorePath
+        + LoadSyncIgnoreAsync()
+        + SaveSyncIgnoreAsync()
+        + OpenSyncIgnore()
         --Private--
         - ParseIgnoreFile()
     }
 
-    class ExternalProcessService {
-        + RunProcess(filename, args)
-        + RunProcessAsync(filename, args)
-        + KillProcess(processId)
+    class ExternalProcessService <<IExternalProcessService>> {
+        + StartProcess(command, arguments)
         --Private--
         - CreateProcessStartInfo()
-        - CaptureOutput()
     }
 
-    class UserControlService {
-        - UserControlConverter _converter
+    class UserControlService <<IUserControlService>> {
         - string _storagePath
-        + GetUserControls()
-        + SaveUserControl()
-        + DeleteUserControl()
-        + ConvertToJson()
-        + ConvertFromJson()
+        + LoadUserControlsAsync()
+        + SaveUserControlAsync()
+        + AddUserControlValueAsync()
+        + RetrieveVariableAsync()
+        + LoadUserVariables()
+        --Private--
+        - DeserializeControls()
+        - SerializeControls()
     }
 
-    class IgnorePatternMatcher {
-        + IsIgnored(path, patterns)
-        + LoadPatterns(path)
+    class IgnorePatternMatcher <<IIgnorePatternMatcher>> {
+        - List<string> _patterns
+        + LoadPatterns()
+        + AddPattern()
+        + IsIgnored()
+        + GetPatterns()
         --Private--
         - MatchWildcard()
         - NormalizePath()
-        - IsDirectory()
-    }
-
-    class UserControlConverter {
-        + ToJson(control)
-        + FromJson(json)
-        --Private--
-        - SerializeControl()
-        - DeserializeControl()
     }
 }
 
@@ -140,19 +132,10 @@ package "Supporting Services" <<infrastructure>> as infrastructure #Lavender {
 ' RELATIONSHIPS
 ' ====================================================================
 
-' Implementations
-EnvironmentService .up.|> IEnvironmentService : implements
-SettingsService .up.|> ISettingsService : implements
-SyncIgnoreService .up.|> ISyncIgnoreService : implements
-ExternalProcessService .up.|> IExternalProcessService : implements
-UserControlService .up.|> IUserControlService : implements
-IgnorePatternMatcher .up.|> IIgnorePatternMatcher : implements
-
 ' Dependencies
 EnvironmentService --> IExternalProcessService : uses
 SyncIgnoreService --> IExternalProcessService : uses
-UserControlService --> UserControlConverter : uses
-SettingsService -up-> SystemTextJson : uses
+SettingsService --> SystemTextJson : uses
 
 contracts -[hidden]down-> infrastructure
 
