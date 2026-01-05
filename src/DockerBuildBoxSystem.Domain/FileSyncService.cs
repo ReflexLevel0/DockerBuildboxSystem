@@ -12,6 +12,7 @@ namespace DockerBuildBoxSystem.Domain
     {
         private readonly IContainerFileTransferService _fileTransferService;
         private readonly IIgnorePatternMatcher _ignorePatternMatcher;
+        private readonly ISyncIgnoreService _syncIgnoreService;
         
         private FileSystemWatcher? _watcher;
         private string? _rootPath;
@@ -26,10 +27,12 @@ namespace DockerBuildBoxSystem.Domain
 
         public FileSyncService(
             IContainerFileTransferService fileTransferService,
-            IIgnorePatternMatcher ignorePatternMatcher)
+            IIgnorePatternMatcher ignorePatternMatcher,
+            ISyncIgnoreService syncIgnoreService)
         {
             _fileTransferService = fileTransferService ?? throw new ArgumentNullException(nameof(fileTransferService));
             _ignorePatternMatcher = ignorePatternMatcher ?? throw new ArgumentNullException(nameof(ignorePatternMatcher));
+            _syncIgnoreService = syncIgnoreService ?? throw new ArgumentNullException(nameof(syncIgnoreService));
         }
 
         public void Configure(string path, string containerId, string containerRootPath = "/data/")
@@ -41,8 +44,8 @@ namespace DockerBuildBoxSystem.Domain
             _containerId = containerId;
             _containerRootPath = containerRootPath;
         }
-        // Starts watching the specified directory for changes
-        public void StartWatching(string path, string containerId, string containerRootPath = "/data/")
+
+        public async Task StartWatchingAsync(string path, string containerId, string containerRootPath = "/data/")
         {
             Configure(path, containerId, containerRootPath);
 
@@ -54,6 +57,9 @@ namespace DockerBuildBoxSystem.Domain
 
             //Stop if already running
             StopWatching();
+
+            //Load ignore patterns before starting the watcher
+            await LoadIgnorePatternsAsync();
 
             _watcher = new FileSystemWatcher(_rootPath)
             {
@@ -293,7 +299,17 @@ namespace DockerBuildBoxSystem.Domain
             Log("Updated ignore patterns.");
         }
 
-        // Event Handlers
+        /// <summary>
+        /// Asynchronously loads ignore patterns from the configured source and updates the pattern matcher.
+        /// </summary>
+        public async Task LoadIgnorePatternsAsync()
+        {
+            var patterns = await _syncIgnoreService.LoadSyncIgnoreAsync();
+            var patternsString = string.Join(Environment.NewLine, patterns);
+            _ignorePatternMatcher.LoadPatterns(patternsString);
+            Log($"Sync Ignore file loaded with {patterns.Count()} exclusions.");
+        }
+
         private async void OnFileChanged(object sender, FileSystemEventArgs e)
         {
             if (IsIgnored(e.FullPath) || IsDuplicateEvent(e.FullPath, "Copy"))
@@ -325,17 +341,61 @@ namespace DockerBuildBoxSystem.Domain
 
         private async void OnFileRenamed(object sender, RenamedEventArgs e)
         {
-            if (IsIgnored(e.FullPath) || IsDuplicateEvent(e.FullPath, "Renamed"))
+            bool oldIgnored = IsIgnored(e.OldFullPath);
+            bool newIgnored = IsIgnored(e.FullPath);
+
+            //if both files are ignored then there is nothing to be done
+            if (oldIgnored && newIgnored)
+                return;
+
+            //if old name was ignored but new is not, treat as a new file creation on the container
+            //Why? well the old file was ignored and doesn't exist on the container (if I think of this correctly), so there are no file there with that name.
+            //This can use OnFileChanged logic, quick fix to get thingss working.
+            if (oldIgnored && !newIgnored)
+            {
+                if (IsDuplicateEvent(e.FullPath, "Copy"))
+                    return;
+
+                if (File.Exists(e.FullPath))
+                {
+                    string containerPath = ToContainerPath(e.FullPath);
+                    var (success, error) = await _fileTransferService.CopyToContainerAsync(_containerId!, e.FullPath, containerPath);
+                    if (success)
+                        Log($"Copy {e.FullPath} -> {containerPath}");
+                    else
+                        Log($"Copy Failed: {e.FullPath} -> {containerPath} | {error}");
+                }
+                return;
+            }
+
+            //if old name was not ignored but new is, treat as a deletion
+            //This can use OnFileDeleted logic, quick fix to get thingss working.
+            if (!oldIgnored && newIgnored)
+            {
+                if (IsDuplicateEvent(e.OldFullPath, "Deleted"))
+                    return;
+
+                string oldContainerPath = ToContainerPath(e.OldFullPath);
+                var (success, error) = await _fileTransferService.DeleteInContainerAsync(_containerId!, oldContainerPath);
+                if (success)
+                    Log($"Deleted {e.OldFullPath} (renamed to ignored path)");
+                else
+                    Log($"Delete Failed: {e.OldFullPath} | {error}");
+                return;
+            }
+
+            //both paths are not ignored, perform a rename (the intended way)
+            if (IsDuplicateEvent(e.FullPath, "Renamed"))
                 return;
 
             string oldPath = ToContainerPath(e.OldFullPath);
             string newPath = ToContainerPath(e.FullPath);
 
-            var (success, error) = await _fileTransferService.RenameInContainerAsync(_containerId!, oldPath, newPath);
-            if (success)
+            var (renameSuccess, renameError) = await _fileTransferService.RenameInContainerAsync(_containerId!, oldPath, newPath);
+            if (renameSuccess)
                 Log($"Renamed {e.OldFullPath} -> {e.FullPath}");
             else
-                Log($"Rename Failed: {e.OldFullPath} -> {e.FullPath} | {error}");
+                Log($"Rename Failed: {e.OldFullPath} -> {e.FullPath} | {renameError}");
         }
 
         private void OnError(object sender, ErrorEventArgs e)
