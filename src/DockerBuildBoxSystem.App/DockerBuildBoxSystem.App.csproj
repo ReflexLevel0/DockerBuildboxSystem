@@ -1,20 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<ItemGroup>
-	  <None Remove="Config\container_creation_args.json" />
-	  <None Remove="Config\controls.json" />
-	</ItemGroup>
-
-	<ItemGroup>
-	  <EmbeddedResource Include="Config\container_creation_args.json">
-	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-	  </EmbeddedResource>
-	  <EmbeddedResource Include="Config\controls.json">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-	  </EmbeddedResource>
-	</ItemGroup>
-
-	<ItemGroup>
 		<ProjectReference Include="..\DockerBuildBoxSystem.ViewModels\DockerBuildBoxSystem.ViewModels.csproj" />
 		<ProjectReference Include="..\DockerBuildBoxSystem.Contracts\DockerBuildBoxSystem.Contracts.csproj" />
 		<ProjectReference Include="..\DockerBuildBoxSystem.Domain\DockerBuildBoxSystem.Domain.csproj" />
@@ -37,9 +23,20 @@
 		<!-- Copying the configuration files to output directory -->
 		<None Update="Config\appsettings.json">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+			<CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
 		</None>
 		<None Update="Config\appsettings.Development.json">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+			<CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+		</None>
+		<None Update="Config\config.json">
+		  <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		  <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+		</None>
+		<None Update="Config\controls.json">
+		  <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		  <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+
 		</None>
 		<!--Copy user variables to the bin\Debug\net9.0 at build-->
 
@@ -49,6 +46,7 @@
 	<ItemGroup>
 		<None Update="Assets\icons\*.*">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+			<CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
 		</None>
 	</ItemGroup>
 	<!-- Also include them as resources for static buttons-->

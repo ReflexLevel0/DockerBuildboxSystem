@@ -28,6 +28,8 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
     public sealed partial class ContainerConsoleViewModel : ViewModelBase
     {
         private readonly IServiceProvider _serviceProvider;
+        private readonly IContainerService _containerService;
+        private readonly IDialogService _dialogService;
         private readonly IClipboardService? _clipboard;
         private readonly IViewModelLogger logger;
         private SynchronizationContext? _synchronizationContext;
@@ -65,8 +67,10 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// <param name="clipboard">An optional clipboard service for copy and paste operations. May be <see langword="null"/> if clipboard functionality is not required.</param>
         public ContainerConsoleViewModel(
             IServiceProvider serviceProvider,
+            AppConfig appConfig,
             IImageService imageService,
             IContainerService containerService,
+            IDialogService dialogService,
             IFileSyncService fileSyncService,
             IConfiguration configuration,
             ISettingsService settingsService,
@@ -77,6 +81,8 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             IClipboardService? clipboard = null) : base()
         {
             _serviceProvider = serviceProvider;
+            _containerService = containerService;
+            _dialogService = dialogService;
             _clipboard = clipboard;
 
             UIHandler = new UILineBuffer(Lines);
@@ -86,18 +92,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             //initialize sub-viewModels
             ContainerList = new ContainerListViewModel(serviceProvider, imageService, containerService, externalProcessService, logger);
             Logs = new LogStreamViewModel(logRunner, containerService, logger);
-            FileSync = new FileSyncViewModel(fileSyncService, settingsService, logger);
+            FileSync = new FileSyncViewModel(appConfig, fileSyncService, settingsService, logger);
             UserControls = new UserControlsViewModel(userControlService, logger);
             Commands = new CommandExecutionViewModel(cmdRunner, containerService, userControlService, logger, UserControls);
-
-
-            FileSync.PropertyChanged += (s, e) =>
-            {
-                if (e.PropertyName == nameof(FileSync.IsSyncRunning))
-                {
-                    Commands.IsSyncRunning = FileSync.IsSyncRunning;
-                }
-            };
 
             //send initial AutoStartLogs value to ensure the image list is synchronized
             WeakReferenceMessenger.Default.Send(new AutoStartLogsChangedMessage(Logs.AutoStartLogs));
@@ -132,11 +129,22 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             // Start the global UI update task
             UIHandler.Start();
 
-            // Load available images on initialization
-            await ContainerList.RefreshImagesCommand.ExecuteAsync(null);
-
             // Load user-defined controls
             await UserControls.LoadUserControlsAsync();
+
+            // Check Docker engine availability
+            var engineAvailable = await _containerService.IsEngineAvailableAsync();
+            if (!engineAvailable)
+            {
+                logger.LogWithNewline("[warning] Docker engine is not available or not running.", true, false);
+                // Show a modal warning to the user
+                _dialogService.ShowWarning("Docker engine is not available or not running. Please start Docker Desktop and try again.", "Docker Not Available");
+                // Skip image refresh and user control load until engine is available
+                return;
+            }
+
+            // Load available images on initialization
+            await ContainerList.RefreshImagesCommand.ExecuteAsync(null);
         }
 
 

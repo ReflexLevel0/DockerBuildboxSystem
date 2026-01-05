@@ -21,56 +21,12 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
-        <!-- Container Selector -->
-        <Grid Grid.Row="0" Margin="6">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-            <TextBlock Grid.Column="0" 
-                       Text="Image:" 
-                       FontWeight="SemiBold"
-                       VerticalAlignment="Center" 
-                       Margin="0,0,6,0"/>
-
-            <ComboBox Grid.Column="1" 
-                      Style="{DynamicResource MaterialDesignOutlinedComboBox}"
-                      ItemsSource="{Binding ContainerList.Images}"
-                      SelectedItem="{Binding ContainerList.SelectedImage}"
-                      IsEnabled="{Binding ContainerList.Images.Count, Converter={StaticResource IntToBoolConverter}}"
-                      ToolTip="Select a image to interact with"
-                      MinWidth="200"
-                      materialDesign:HintAssist.Hint="Select an image">
-                <ComboBox.ItemTemplate>
-                    <DataTemplate>
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="{Binding RepoTags[0]}" FontWeight="Bold" Margin="0,0,8,0"/>
-                            <TextBlock Text="{Binding Id}" Foreground="DarkGray" FontStyle="Italic"/>
-                        </StackPanel>
-                    </DataTemplate>
-                </ComboBox.ItemTemplate>
-            </ComboBox>
-
-            <Button Grid.Column="2" 
-                    Style="{DynamicResource MaterialDesignFlatButton}"
-                    Command="{Binding ContainerList.RefreshImagesCommand}"
-                    ToolTip="Refresh the list of images"
-                    Margin="6,0,0,0"
-                    Width="30" Height="30"
-                    Padding="0">
-                <Image Source="pack://application:,,,/Assets/icons/refresh.png"
-                       Width="20"
-                       Height="20"/>
-            </Button>
-        </Grid>
 
         <!-- User Controls -->
-        <ItemsControl Grid.Row="1"
+        <ItemsControl Grid.Row="0"
                       ItemsSource="{Binding UserControls.UserControls}"
                       Margin="0,0,0,6">
             <ItemsControl.ItemsPanel>
@@ -134,7 +90,7 @@
         </ItemsControl>
 
         <!-- Output TextBox -->
-        <Grid Grid.Row="2" ClipToBounds="True">
+        <Grid Grid.Row="1" ClipToBounds="True">
             <TextBox x:Name="TerminalOutput" 
                      Style="{StaticResource TerminalTextBoxStyle}" 
                      IsReadOnly="True" 
@@ -168,7 +124,7 @@
         </Grid>
 
         <!-- Input -->
-        <Grid Grid.Row="3" Margin="6">
+        <Grid Grid.Row="2" Margin="6">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />

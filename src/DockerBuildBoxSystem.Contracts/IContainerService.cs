@@ -9,6 +9,18 @@ using System.Threading.Tasks;
 namespace DockerBuildBoxSystem.Contracts
 {
     /// <summary>
+    /// Constants used for the Docker container management.
+    /// Don't know if there is a better way then having it defined here as a compile-time constant...
+    /// </summary>
+    public static class DockerConstants
+    {
+        /// <summary>
+        /// The label applied to containers managed by this application.
+        /// </summary>
+        public const string ManagedContainerLabel = "com.dockerbuildboxsystem.managed";
+    }
+
+    /// <summary>
     /// Strong typed representation of docker container states.
     /// https://www.baeldung.com/ops/docker-container-states#bd-possible-states-of-a-docker-container
     /// </summary>
@@ -61,6 +73,11 @@ namespace DockerBuildBoxSystem.Contracts
         public string? LogDriver { get; init; }
 
         /// <summary>
+        /// The container labels.
+        /// </summary>
+        public IReadOnlyDictionary<string, string>? Labels { get; init; }
+
+        /// <summary>
         /// Strong typed state derived from <see cref="State"/>.
         /// </summary>
         public ContainerState StateKind => ParseState(Status);
@@ -94,11 +111,17 @@ namespace DockerBuildBoxSystem.Contracts
     public interface IContainerService : IAsyncDisposable
     {
         /// <summary>
+        /// Checks whether the Docker engine is reachable and responding.
+        /// </summary>
+        /// <param name="ct">Cancellation token</param>
+        /// <returns>True if the engine is available; otherwise false.</returns>
+        Task<bool> IsEngineAvailableAsync(CancellationToken ct = default);
         /// Raised after a container has successfully started.
         /// </summary>
         event EventHandler<string>? ContainerStarted;
+        
         /// <summary>
-        /// Starts a stopped container.
+        /// Stops all currently running containers and starts the container with id <paramref name="containerId"/>.
         /// </summary>
         /// <param name="containerId">The id or name of the container to start</param>
         /// <param name="ct">Cancellation token</param>
@@ -122,6 +145,15 @@ namespace DockerBuildBoxSystem.Contracts
         /// <param name="ct">Cancellation token</param>
         /// <returns></returns>
         Task StopAsync(string containerId, TimeSpan timeout, CancellationToken ct = default);
+
+        /// <summary>
+        /// Stops multiple running containers.
+        /// </summary>
+        /// <param name="containerIds">Sequence of container IDs to stop.</param>
+        /// <param name="timeout">Time to wait before forcibly kill each container.</param>
+        /// <param name="ct">Cancellation token</param>
+        /// <returns>Task that completes when all stop requests finish.</returns>
+        Task StopAsync(IEnumerable<string> containerIds, TimeSpan timeout, CancellationToken ct = default);
 
         /// <summary>
         /// Removes a container for the Docker host
@@ -161,15 +193,17 @@ namespace DockerBuildBoxSystem.Contracts
         Task<ContainerInfo> InspectAsync(string containerId, CancellationToken ct = default);
 
         /// <summary>
-        /// Lists docker containers existing on the host, optionally filtered by name.
+        /// Lists docker containers existing on the host, optionally filtered by name and/or labels.
         /// </summary>
         /// <param name="all">If true, includes stopped containers</param>
         /// <param name="nameFilter">Optional container name to filter by</param>
+        /// <param name="labelFilter">Optional label key to filter by (e.g., "com.dockerbuildboxsystem.managed")</param>
         /// <param name="ct">Cancellation token</param>
         /// <returns>Returns a list of <see cref="ContainerInfo"/> objects.</returns>
         Task<IList<ContainerInfo>> ListContainersAsync(
             bool all = false,
             string? nameFilter = null,
+            string? labelFilter = null,
             CancellationToken ct = default);
 
         /// <summary>
@@ -241,6 +275,32 @@ namespace DockerBuildBoxSystem.Contracts
             string containerId,
             string hostPath,
             string containerPath,
+            CancellationToken ct = default);
+
+        /// <summary>
+        /// Copies a file from the container to the host.
+        /// </summary>
+        /// <param name="containerId">The id or name of the container</param>
+        /// <param name="containerPath">The absolute path to the file in the container</param>
+        /// <param name="hostPath">The absolute path to the destination on the host</param>
+        /// <param name="ct">Cancellation token</param>
+        Task CopyFileFromContainerAsync(
+            string containerId,
+            string containerPath,
+            string hostPath,
+            CancellationToken ct = default);
+
+        /// <summary>
+        /// Copies a directory from the container to the host.
+        /// </summary>
+        /// <param name="containerId">The id or name of the container</param>
+        /// <param name="containerPath">The absolute path to the directory in the container</param>
+        /// <param name="hostPath">The absolute path to the destination directory on the host</param>
+        /// <param name="ct">Cancellation token</param>
+        Task CopyDirectoryFromContainerAsync(
+            string containerId,
+            string containerPath,
+            string hostPath,
             CancellationToken ct = default);
     }
 }

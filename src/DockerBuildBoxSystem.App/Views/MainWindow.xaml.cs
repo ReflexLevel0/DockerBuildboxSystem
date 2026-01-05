@@ -49,6 +49,15 @@ public partial class MainWindow : Window
 
         try
         {
+            // show overlay and let UI render
+            if (ShutdownOverlayControl != null)
+            {
+                ShutdownOverlayControl.Visibility = Visibility.Visible;
+                await Task.Yield();
+            }
+
+            var start = DateTime.UtcNow;
+
             //cleanup child UserControls by calling their cleanup methods
             //Subscribing to Dispatcher.ShutdownStarted doesn't work sometimes and is really random from testing,
             //by manually calling it it consistently works atleast... dont know if there are a better way to solve this.

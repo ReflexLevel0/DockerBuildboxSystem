@@ -185,32 +185,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         }
 
         /// <summary>
-        /// Handles the SelectedContainerChangedMessage.
-        /// </summary>
-        public void Receive(SelectedContainerChangedMessage message)
-        {
-            SelectedContainer = message.Value;
-        }
-
-        /// <summary>
-        /// Handles the IsSyncRunningChangedMessage.
-        /// </summary>
-        public void Receive(IsSyncRunningChangedMessage message)
-        {
-            IsSyncRunning = message.Value;
-        }
-
-        /// <summary>
-        /// Handles the ContainerRunningMessage.
-        /// </summary>
-        public void Receive(ContainerRunningMessage message)
-        {
-            if(StartShellCommand.CanExecute(null))
-                StartShellCommand.Execute(null);
-        }
-
-
-        /// <summary>
         /// Executes a command inside the selected container and streams output to the console UI.
         /// </summary>
         /// <param name="args">The command and its arguments (argv form).</param>

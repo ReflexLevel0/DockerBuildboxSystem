@@ -211,27 +211,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
                 var newImage = value;
 
-                //fallback to current if previous not tracked yet
-                var oldContainerId = string.IsNullOrWhiteSpace(_previousContainerId) ? ContainerId : _previousContainerId;
-
-                _logger.DiscardPendingLogs();
-
-                if (!string.IsNullOrWhiteSpace(oldContainerId))
-                {
-                    try
-                    {
-                        var oldContainer = await _containerService.InspectAsync(oldContainerId, ct);
-                        if (oldContainer.IsRunning)
-                        {
-                            await StopContainerByIdAsync(oldContainer);
-                        }
-                    }
-                    catch
-                    {
-                        /* ignoring... */
-                    }
-                }
-
                 ct.ThrowIfCancellationRequested();
 
                 if (newImage is null)
@@ -247,7 +226,10 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 _logger.LogWithNewline($"[info] Selected image: {imageName}", false, false);
 
                 //try to find an existing container for this image.
-                var containers = await _containerService.ListContainersAsync(all: true, ct: ct);
+                var containers = await _containerService.ListContainersAsync(
+                    all: true,
+                    labelFilter: DockerConstants.ManagedContainerLabel,
+                    ct: ct);
 
                 var existingContainer = containers.FirstOrDefault(c =>
                     (!string.IsNullOrEmpty(primaryTag) && c.Image == primaryTag) || c.Image == newImage.Id);
@@ -266,11 +248,12 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 {
                     _logger.LogWithNewline("[info] No existing container found for image. Creating a new one...", false, false);
 
+                    AppConfig appConfig = (_serviceProvider.GetService(typeof(AppConfig)) as AppConfig)!;
                     var newContainerId = await _containerService.CreateContainerAsync(
                         new ContainerCreationOptions
                         {
                             ImageName = imageName,
-                            Config = (HostConfig)_serviceProvider.GetService(typeof(HostConfig))!
+                            Config = appConfig.ContainerCreationParams
                         },
                         ct: ct);
                     container = await _containerService.InspectAsync(newContainerId, ct);
@@ -283,11 +266,8 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
                 ct.ThrowIfCancellationRequested();
 
-                //start the container
-                if (!container.IsRunning)
-                {
-                    await StartContainerInternalAsync(ct);
-                }
+                // Delegate exclusive-run behavior to service-level StartAsync
+                await StartContainerInternalAsync(ct);
 
                 _previousContainerId = ContainerId;
 
@@ -317,37 +297,58 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// </summary> 
         public async Task RefreshSelectedContainerAsync()
         {
-            var id = ContainerId;
-            if (string.IsNullOrWhiteSpace(id))
+            try
+            {
+                if (!await _imageSwitchLock.WaitAsync(0))
+                    return;
+            }
+            catch (ObjectDisposedException)
+            {
                 return;
+            }
 
             try
             {
-                var refreshed = await _containerService.InspectAsync(id);
-
-                if (!string.Equals(id, ContainerId, StringComparison.OrdinalIgnoreCase))
+                var id = ContainerId;
+                if (string.IsNullOrWhiteSpace(id))
                     return;
 
-                // Still running or stop was requested by app
-                if (refreshed?.IsRunning == true || _stopRequestedByApp.Remove(id))
+                try
                 {
-                    SelectedContainer = refreshed;
-                    return;
-                }
+                    var refreshed = await _containerService.InspectAsync(id);
 
-                var name = refreshed?.Names?.FirstOrDefault() ?? id;
-                _logger.LogWithNewline($"[info] Container stopped externally: {name}", false, false);
-                SelectedContainer = null;
+                    if (!string.Equals(id, ContainerId, StringComparison.OrdinalIgnoreCase))
+                        return;
+
+                    // Still running or stop was requested by app
+                    if (refreshed?.IsRunning == true || _stopRequestedByApp.Remove(id))
+                    {
+                        SelectedContainer = refreshed;
+                        return;
+                    }
+
+                    var name = refreshed?.Names?.FirstOrDefault() ?? id;
+                    _logger.LogWithNewline($"[info] Container stopped externally: {name}", false, false);
+                    SelectedContainer = null;
+                }
+                catch (DockerApiException dae) when (dae.StatusCode == HttpStatusCode.NotFound)
+                {
+                    _stopRequestedByApp.Remove(id);
+                    _logger.LogWithNewline($"[info] Selected container was removed externally: {id}", false, false);
+                    SelectedContainer = null;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWithNewline($"[refresh-error] {ex.Message}", true, false);
+                }
             }
-            catch (DockerApiException dae) when (dae.StatusCode == HttpStatusCode.NotFound)
+            finally
             {
-                _stopRequestedByApp.Remove(id);
-                _logger.LogWithNewline($"[info] Selected container was removed externally: {id}", false, false);
-                SelectedContainer = null;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWithNewline($"[refresh-error] {ex.Message}", true, false);
+                try
+                {
+                    _imageSwitchLock.Release();
+                }
+                catch (ObjectDisposedException) { }
             }
         }
 
@@ -373,15 +374,19 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private async Task StartContainerInternalAsync(CancellationToken ct)
         {
             if (SelectedContainer is null) return;
+            var containerId = SelectedContainer.Id;
 
             if (ct.IsCancellationRequested) return;
 
-            var name = SelectedContainer.Names.FirstOrDefault() ?? SelectedContainer.Id;
+            var name = SelectedContainer.Names.FirstOrDefault() ?? containerId;
             try
             {
-                _logger.LogWithNewline($"[info] Starting container: {name}", false, false);
+                var alreadyRunning = SelectedContainer.IsRunning;
+                _logger.LogWithNewline(alreadyRunning
+                    ? $"[info] Already running container: {name}"
+                    : $"[info] Starting container: {name}", false, false);
 
-                var status = await _containerService.StartAsync(ContainerId, ct);
+                var status = await _containerService.StartAsync(containerId, ct);
 
                 if (ct.IsCancellationRequested)
                 {
@@ -391,10 +396,11 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
                 if (status)
                 {
-                    if (!string.IsNullOrWhiteSpace(SelectedContainer?.Id))
-                        _containersStartedByApp.Add(SelectedContainer.Id);
+                    if (!string.IsNullOrWhiteSpace(containerId))
+                        _containersStartedByApp.Add(containerId);
 
-                    _logger.LogWithNewline($"[info] Started container: {name}", false, false);
+                    if (!alreadyRunning)
+                        _logger.LogWithNewline($"[info] Started container: {name}", false, false);
 
                     // Re-inspect to get the updated running state
                     SelectedContainer = await _containerService.InspectAsync(ContainerId, ct);
@@ -404,7 +410,16 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 }
                 else
                 {
-                    _logger.LogWithNewline($"[start-container] Container did not start: {name}", true, false);
+                    // If start returned false, verify current state; if running, treat as benign and log accordingly
+                    var refreshed = await _containerService.InspectAsync(containerId, ct);
+                    if (refreshed.IsRunning)
+                    {
+                        SelectedContainer = refreshed;
+                    }
+                    else
+                    {
+                        _logger.LogWithNewline($"[start-container] Container did not start: {name}", true, false);
+                    }
                 }
             }
             catch (OperationCanceledException)
@@ -416,6 +431,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 _logger.LogWithNewline($"[start-container-error] {ex.Message}", true, false);
             }
         }
+
 
         private bool CanStopContainer() => !string.IsNullOrWhiteSpace(ContainerId) && IsContainerRunning;
 

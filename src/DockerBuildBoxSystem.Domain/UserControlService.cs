@@ -33,7 +33,7 @@ namespace DockerBuildBoxSystem.Domain
         /// <param name="filename">The name of the JSON file to use for storing user control definitions.</param>
         public UserControlService(string filename = "controls.json")
         {
-            _filePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config", filename);
+            _filePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Config", filename);
 
             // Ensure the Config directory exists
             Directory.CreateDirectory(Path.GetDirectoryName(_filePath)!);
