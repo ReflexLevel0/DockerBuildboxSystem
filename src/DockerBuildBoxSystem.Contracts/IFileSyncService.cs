@@ -11,7 +11,7 @@ namespace DockerBuildBoxSystem.Contracts
     {
         ObservableCollection<string> Changes { get; }
         void Configure(string path, string containerId, string containerRootPath = "/data/");
-        void StartWatching(string path, string containerId, string containerRootPath = "/data/");
+        Task StartWatchingAsync(string path, string containerId, string containerRootPath = "/data/");
         void StopWatching();
         void PauseWatching();
         void ResumeWatching();
@@ -19,6 +19,7 @@ namespace DockerBuildBoxSystem.Contracts
         Task ForceSyncFromContainerAsync(CancellationToken ct = default);
         Task CleanDirectoryAsync(IEnumerable<string>? excludedPaths, CancellationToken ct = default);
         void UpdateIgnorePatterns(string patterns);
+        Task LoadIgnorePatternsAsync();
     }
 }
 

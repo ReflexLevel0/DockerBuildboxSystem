@@ -247,8 +247,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             IsSyncRunning = true;
             try
             {
-                _fileSyncService.StartWatching(HostSyncPath, ContainerId, ContainerSyncPath);
-                await Task.CompletedTask;
+                await _fileSyncService.StartWatchingAsync(HostSyncPath, ContainerId, ContainerSyncPath);
             }
             catch (Exception ex)
             {
