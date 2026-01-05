@@ -31,6 +31,17 @@ namespace DockerBuildBoxSystem.Domain
 
         public event EventHandler<bool>? RunningChanged;
 
+        /// <summary>
+        /// Asynchronously streams log output lines from a running container.
+        /// </summary>
+        /// <param name="svc">The container service used to interact with the target container.</param>
+        /// <param name="containerId">The unique identifier of the container from which to stream logs. Cannot be null.</param>
+        /// <param name="args">Optional arguments to customize log streaming behavior. May be <see langword="null"/> to use default
+        /// settings.</param>
+        /// <param name="ct">A cancellation token that can be used to cancel the log streaming operation.</param>
+        /// <returns>An asynchronous stream of tuples, where each tuple contains a Boolean indicating whether the line is from
+        /// standard error (<see langword="true"/>) or standard output (<see langword="false"/>), and the log line as a
+        /// string.</returns>
         public async IAsyncEnumerable<(bool IsStdErr, string Line)> RunAsync(IContainerService svc, 
             string containerId,
             string[]? args = null,
@@ -68,6 +79,9 @@ namespace DockerBuildBoxSystem.Domain
             }
         }
 
+        /// <summary>
+        /// Initiates an asynchronous operation to stop the logging process.
+        /// </summary>
         public async Task StopAsync()
         {
             _logsCts?.Cancel();

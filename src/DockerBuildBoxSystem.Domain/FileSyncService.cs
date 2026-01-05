@@ -114,7 +114,7 @@ namespace DockerBuildBoxSystem.Domain
                 Log("Resumed watching.");
             }
         }
-
+        // Cleans the target directory in the container, excluding specified paths
         public async Task CleanDirectoryAsync(IEnumerable<string>? excludedPaths, CancellationToken ct = default)
         {
             ct.ThrowIfCancellationRequested();
@@ -137,7 +137,7 @@ namespace DockerBuildBoxSystem.Domain
                 Log("Container directory cleaned successfully!");
             }
         }
-
+        // Performs a full sync of the host directory to the container
         public async Task ForceSyncAsync(CancellationToken ct = default)
         {
             ct.ThrowIfCancellationRequested();
@@ -202,7 +202,7 @@ namespace DockerBuildBoxSystem.Domain
                 }
             }
         }
-
+        // Performs a full sync from the container to the host directory
         public async Task ForceSyncFromContainerAsync(CancellationToken ct = default)
         {
             ct.ThrowIfCancellationRequested();
@@ -255,7 +255,8 @@ namespace DockerBuildBoxSystem.Domain
                 Log("EXCEPTION during container-to-host sync: " + ex.Message);
             }
         }
-
+        // Recursively copies non-ignored files to a temporary directory
+        // Used for preparing files for ForceSync to container for performance reasons
         private void CopyToTempRecursive(string sourceDir, string tempRoot, CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
@@ -407,6 +408,7 @@ namespace DockerBuildBoxSystem.Domain
             return _ignorePatternMatcher.IsIgnored(path);
         }
 
+        // Checks if an event is a duplicate within a debounce interval
         private bool IsDuplicateEvent(string path, string changeType)
         {
             string key = $"{changeType}:{path}";
