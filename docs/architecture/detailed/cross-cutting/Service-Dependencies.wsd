@@ -144,36 +144,10 @@ note top of ViewModels
     • Testable with mocks
 end note
 
-'note bottom of "Tier 1: Core"
-'    <b>Core Services</b>
-'    • Direct Docker API access
-'    • Low-level operations
-'    • Stateless services
-'end note
-
-'note bottom of "Tier 2: Business"
-'    <b>Business Services</b>
-'    • Compose core services
-'    • Implement workflows
-'    • Handle external I/O
-'end note
-
-'note bottom of "Tier 3: Supporting"
-'    <b>Supporting Services</b>
-'    • Configuration
-'    • Utilities
-'    • Cross-cutting concerns
-'end note
-
 ' ====================================================================
 ' LEGEND
 ' ====================================================================
 legend bottom right
-    <b>Legend: Line Types</b>
-    <color:#000000>───></color>  <b>Dependency / Association</b> (Class uses Interface/Service)
-    <color:#000000>..|></color>  <b>Realization</b> (Class implements Interface)
-    <color:#000000>....></color>  <b>Usage</b> (Weak Dependency)
-
     <b>Architectural Principles:</b>
     • <b>Dependency Inversion:</b> High-level modules (ViewModels) depend on abstractions (Contracts), not details.
     • <b>Composition:</b> Services are injected via constructor.
