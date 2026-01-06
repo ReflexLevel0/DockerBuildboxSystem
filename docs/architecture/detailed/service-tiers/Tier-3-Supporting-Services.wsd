@@ -133,11 +133,11 @@ package "Supporting Services" <<infrastructure>> as infrastructure #Lavender {
 ' ====================================================================
 
 ' Dependencies
-EnvironmentService --> IExternalProcessService : uses
-SyncIgnoreService --> IExternalProcessService : uses
-SettingsService --> SystemTextJson : uses
+EnvironmentService -up-> IExternalProcessService : uses
+SyncIgnoreService -up-> IExternalProcessService : uses
+SettingsService -up-> SystemTextJson : uses
 
-contracts -[hidden]down-> infrastructure
+contracts -[hidden]up-> infrastructure
 
 ' ====================================================================
 ' NOTES
