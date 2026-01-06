@@ -5,7 +5,8 @@ using System.Threading.Tasks;
 namespace DockerBuildBoxSystem.Contracts
 {
     /// <summary>
-    /// Interface based on region in standalone application for filesync.
+    /// Defines a service for synchronizing files between a local directory and a containerized environment, providing
+    /// change tracking and control over synchronization operations.
     /// </summary>
     public interface IFileSyncService : IDisposable
     {

@@ -23,6 +23,9 @@ namespace DockerBuildBoxSystem.Domain
         private readonly TimeSpan _debounceInterval = TimeSpan.FromMilliseconds(500);
         private readonly object _changesLock = new object();
 
+        //captured UI synchronization context for thread-safe ObservableCollection updates
+        private SynchronizationContext? _uiContext;
+
         public ObservableCollection<string> Changes { get; } = new ObservableCollection<string>();
 
         public FileSyncService(
@@ -39,6 +42,7 @@ namespace DockerBuildBoxSystem.Domain
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Path cannot be empty", nameof(path));
             if (string.IsNullOrWhiteSpace(containerId)) throw new ArgumentException("ContainerId cannot be empty", nameof(containerId));
+            if (string.IsNullOrWhiteSpace(containerRootPath)) throw new ArgumentException("ContainerRootPath cannot be empty", nameof(containerRootPath));
 
             _rootPath = Path.GetFullPath(path);
             _containerId = containerId;
@@ -47,6 +51,8 @@ namespace DockerBuildBoxSystem.Domain
 
         public async Task StartWatchingAsync(string path, string containerId, string containerRootPath = "/data/")
         {
+            _uiContext = SynchronizationContext.Current;
+
             Configure(path, containerId, containerRootPath);
 
             if (!Directory.Exists(_rootPath))
@@ -114,7 +120,7 @@ namespace DockerBuildBoxSystem.Domain
                 Log("Resumed watching.");
             }
         }
-
+        // Cleans the target directory in the container, excluding specified paths
         public async Task CleanDirectoryAsync(IEnumerable<string>? excludedPaths, CancellationToken ct = default)
         {
             ct.ThrowIfCancellationRequested();
@@ -137,7 +143,7 @@ namespace DockerBuildBoxSystem.Domain
                 Log("Container directory cleaned successfully!");
             }
         }
-
+        // Performs a full sync of the host directory to the container
         public async Task ForceSyncAsync(CancellationToken ct = default)
         {
             ct.ThrowIfCancellationRequested();
@@ -170,15 +176,26 @@ namespace DockerBuildBoxSystem.Domain
                 //copy only non-ignored files into temp folder
                 CopyToTempRecursive(_rootPath, tempRoot, ct);
 
+                //verify we have a valid container path before syncing
+                if (string.IsNullOrWhiteSpace(_containerRootPath))
+                {
+                    throw new InvalidOperationException("Container root path is not configured.");
+                }
+
                 //copy temp folder to Docker
                 var (success, error) = await _fileTransferService.CopyDirectoryToContainerAsync(_containerId, tempRoot, _containerRootPath, ct);
 
                 ct.ThrowIfCancellationRequested();
 
                 if (success)
+                {
                     Log($"Full Folder Sync -> {_containerId}:{_containerRootPath} | Success");
+                }
                 else
+                {
                     Log($"Full Folder Sync Failed | {error}");
+                    throw new InvalidOperationException($"Full Folder Sync Failed: {error}");
+                }
             }
             catch (OperationCanceledException)
             {
@@ -188,21 +205,57 @@ namespace DockerBuildBoxSystem.Domain
             catch (Exception ex)
             {
                 Log("EXCEPTION during full folder copy: " + ex.Message);
+                throw;
             }
             finally
             {
-                try
-                {
-                    if(Directory.Exists(tempRoot))
-                        Directory.Delete(tempRoot, true);
-                }
-                catch (Exception ex)
-                {
-                    Log("Failed to delete temp folder: " + ex.Message);
-                }
+                //clean up temp folder with retry logic
+                await DeleteTempFolderWithRetryAsync(tempRoot);
             }
         }
 
+        /// <summary>
+        /// Attempts to delete the temp folder with retry logic to handle file locks.
+        /// </summary>
+        private async Task DeleteTempFolderWithRetryAsync(string tempRoot)
+        {
+            if (!Directory.Exists(tempRoot))
+                return;
+
+            const int maxRetries = 3;
+            const int delayMs = 500;
+
+            for (int i = 0; i < maxRetries; i++)
+            {
+                try
+                {
+                    //give time for file handles to release
+                    if (i > 0)
+                        await Task.Delay(delayMs);
+
+                    Directory.Delete(tempRoot, true);
+                    return;
+                }
+                catch (IOException) when (i < maxRetries - 1)
+                {
+                    //retry on IO exceptions (file in use, access denied)
+                    continue;
+                }
+                catch (UnauthorizedAccessException) when (i < maxRetries - 1)
+                {
+                    //retry on access denied
+                    continue;
+                }
+                catch (Exception ex)
+                {
+                    Log($"Failed to delete temp folder (attempt {i + 1}/{maxRetries}): {ex.Message}");
+                    if (i == maxRetries - 1)
+                        Log($"Warning: Temp folder may remain at: {tempRoot}");
+                    return;
+                }
+            }
+        }
+        // Performs a full sync from the container to the host directory
         public async Task ForceSyncFromContainerAsync(CancellationToken ct = default)
         {
             ct.ThrowIfCancellationRequested();
@@ -255,7 +308,8 @@ namespace DockerBuildBoxSystem.Domain
                 Log("EXCEPTION during container-to-host sync: " + ex.Message);
             }
         }
-
+        // Recursively copies non-ignored files to a temporary directory
+        // Used for preparing files for ForceSync to container for performance reasons
         private void CopyToTempRecursive(string sourceDir, string tempRoot, CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
@@ -407,6 +461,7 @@ namespace DockerBuildBoxSystem.Domain
             return _ignorePatternMatcher.IsIgnored(path);
         }
 
+        // Checks if an event is a duplicate within a debounce interval
         private bool IsDuplicateEvent(string path, string changeType)
         {
             string key = $"{changeType}:{path}";
@@ -431,9 +486,22 @@ namespace DockerBuildBoxSystem.Domain
 
         private void Log(string msg)
         {
-            lock (_changesLock)
+            void AddToChanges()
             {
-                Changes.Add($"{msg}");
+                lock (_changesLock)
+                {
+                    Changes.Add($"{msg}");
+                }
+            }
+
+            //f we have a UI context and we're not on the UI thread, dispatch to UI thread
+            if (_uiContext != null && SynchronizationContext.Current != _uiContext)
+            {
+                _uiContext.Post(_ => AddToChanges(), null);
+            }
+            else
+            {
+                AddToChanges();
             }
         }
 

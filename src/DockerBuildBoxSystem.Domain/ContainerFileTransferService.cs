@@ -83,13 +83,17 @@ namespace DockerBuildBoxSystem.Domain
                 {
                     foreach (var exclude in excludedPaths)
                     {
+                        // Skip empty or whitespace-only paths
+                        if (string.IsNullOrWhiteSpace(exclude))
+                            continue;
+
                         //ensue we scape single quotes in filename
                         string safeExclude = exclude.Replace("'", "'\\''");
                         excludes.Add($"! -name '{safeExclude}'");
                     }
                 }
                 
-                string excludeStr = string.Join(" ", excludes);
+                string excludeStr = excludes.Count > 0 ? string.Join(" ", excludes) : "";
                 string targetPath = containerPath.TrimEnd('/');
                 if (string.IsNullOrEmpty(targetPath)) targetPath = "/";
 

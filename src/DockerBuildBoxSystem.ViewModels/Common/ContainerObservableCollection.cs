@@ -16,6 +16,15 @@ namespace DockerBuildBoxSystem.ViewModels.Common
         public ContainerObservableCollection() : base() { }
         public ContainerObservableCollection(IEnumerable<T> collection) : base(collection) { }
 
+        /// <summary>
+        /// Adds the elements of the specified collection to the end of the current collection.
+        /// </summary>
+        /// <remarks>This method raises a collection changed event with the <see
+        /// cref="System.Collections.Specialized.NotifyCollectionChangedAction.Reset"/> action after the items are
+        /// added. Property change notifications for <c>Count</c> and the indexer are also raised. If <paramref
+        /// name="items"/> is <see langword="null"/> or contains no elements, the method performs no action.</remarks>
+        /// <param name="items">The collection whose elements should be added to the end of the collection. If <paramref name="items"/> is
+        /// <see langword="null"/> or empty, no elements are added.</param>
         public void AddRange(IEnumerable<T> items)
         {
             if (items is null) return;
@@ -37,6 +46,15 @@ namespace DockerBuildBoxSystem.ViewModels.Common
             OnCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
         }
 
+        /// <summary>
+        /// Removes all items from the collection and adds the elements of the specified sequence.
+        /// </summary>
+        /// <remarks>This method raises a single <see
+        /// cref="System.Collections.Specialized.NotifyCollectionChangedEventArgs"/> event with the <see
+        /// cref="System.Collections.Specialized.NotifyCollectionChangedAction.Reset"/> action after the operation
+        /// completes. Property change notifications for <c>Count</c> and the indexer are also raised.</remarks>
+        /// <param name="items">The sequence of items to add to the collection. If <paramref name="items"/> is <see langword="null"/>, the
+        /// collection is cleared and no items are added.</param>
         public void ClearAndAddRange(IEnumerable<T> items)
         {
             if (items is null)

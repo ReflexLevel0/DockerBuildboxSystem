@@ -28,7 +28,8 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <Menu Grid.Column="0">
-                <MenuItem Header="_Sync">
+                <MenuItem Header="_Sync"
+                          ToolTip="Sync options">
                     <MenuItem Header="Select Sync _In folder"
                                 Command="{Binding SelectSourcePathCommand}">
                         <MenuItem.Icon>

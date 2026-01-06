@@ -155,6 +155,10 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             }
         }
 
+        /// <summary>
+        /// Routes the specified raw input string to the appropriate command handler or interactive shell.
+        /// </summary>
+        /// <param name="raw">The raw input string to process. Cannot be null, empty, or consist only of white-space characters.</param>
         private async Task RouteInputAsync(string raw)
         {
             if (string.IsNullOrWhiteSpace(raw))
@@ -170,6 +174,13 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             await ExecuteAndLog(args);
         }
 
+        /// <summary>
+        /// Handles changes to the selected container and performs necessary actions when the selection changes.
+        /// </summary>
+        /// <param name="oldValue">The previously selected <see cref="ContainerInfo"/>, or <see langword="null"/> if there was no previous
+        /// selection.</param>
+        /// <param name="newValue">The newly selected <see cref="ContainerInfo"/>, or <see langword="null"/> if no container is currently
+        /// selected.</param>
         partial void OnSelectedContainerChanged(ContainerInfo? oldValue, ContainerInfo? newValue)
         {
             var switchedContainer = oldValue?.Id != newValue?.Id;
