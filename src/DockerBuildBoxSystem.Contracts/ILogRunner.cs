@@ -6,6 +6,9 @@ using System.Threading.Tasks;
 
 namespace DockerBuildBoxSystem.Contracts
 {
+    /// <summary>
+    /// Used for streaming log output lines from a running container
+    /// </summary>
     public interface ILogRunner : IStreamReader
     {
     }

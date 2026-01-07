@@ -120,7 +120,7 @@ namespace DockerBuildBoxSystem.Domain
                 Log("Resumed watching.");
             }
         }
-        // Cleans the target directory in the container, excluding specified paths
+
         public async Task CleanDirectoryAsync(IEnumerable<string>? excludedPaths, CancellationToken ct = default)
         {
             ct.ThrowIfCancellationRequested();
@@ -344,12 +344,6 @@ namespace DockerBuildBoxSystem.Domain
 
                 CopyToTempRecursive(subDir, tempRoot, ct);
             }
-        }
-
-        public void UpdateIgnorePatterns(string patterns)
-        {
-            _ignorePatternMatcher.LoadPatterns(patterns);
-            Log("Updated ignore patterns.");
         }
 
         /// <summary>
