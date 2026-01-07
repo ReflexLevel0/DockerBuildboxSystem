@@ -76,10 +76,10 @@ namespace DockerBuildBoxSystem.Domain
                                NotifyFilters.Size
             };
 
-            _watcher.Created += OnFileChanged;
-            _watcher.Changed += OnFileChanged;
-            _watcher.Deleted += OnFileDeleted;
-            _watcher.Renamed += OnFileRenamed;
+            _watcher.Created += OnCreated;
+            _watcher.Changed += OnChanged;
+            _watcher.Deleted += OnDeleted;
+            _watcher.Renamed += OnRenamed;
             _watcher.Error += OnError;
 
             _watcher.EnableRaisingEvents = true;
@@ -92,10 +92,10 @@ namespace DockerBuildBoxSystem.Domain
             if (_watcher != null)
             {
                 _watcher.EnableRaisingEvents = false;
-                _watcher.Created -= OnFileChanged;
-                _watcher.Changed -= OnFileChanged;
-                _watcher.Deleted -= OnFileDeleted;
-                _watcher.Renamed -= OnFileRenamed;
+                _watcher.Created -= OnCreated;
+                _watcher.Changed -= OnChanged;
+                _watcher.Deleted -= OnDeleted;
+                _watcher.Renamed -= OnRenamed;
                 _watcher.Error -= OnError;
                 _watcher.Dispose();
                 _watcher = null;
@@ -363,23 +363,54 @@ namespace DockerBuildBoxSystem.Domain
             Log($"Sync Ignore file loaded with {patterns.Count()} exclusions.");
         }
 
-        private async void OnFileChanged(object sender, FileSystemEventArgs e)
+        private async void OnCreated(object sender, FileSystemEventArgs e)
+        {
+            if (IsIgnored(e.FullPath) || IsDuplicateEvent(e.FullPath, "Created"))
+                return;
+
+            // Directory
+            if (Directory.Exists(e.FullPath))
+            {
+                string dir = ToContainerPath(e.FullPath);
+                var (success, error) = await _fileTransferService.CreateDirectoryInContainerAsync(_containerId!, dir);
+                if (success)
+                    Log($"Dir created {e.FullPath} → {dir} | {success}");
+                else
+                    Log($"Dir creation failed {e.FullPath} → {dir} | {error}");
+                return;
+            }
+
+            // File
+            if (File.Exists(e.FullPath))
+            {
+                string file = ToContainerPath(e.FullPath);
+                var (success, error) = await _fileTransferService.CopyToContainerAsync(_containerId!, e.FullPath, file);
+                if (success)
+                    Log($"File created {e.FullPath} → {file} | {success}");
+                else
+                    Log($"File Failed {e.FullPath} → {file} | {error}");
+            }
+        }
+
+
+        private async void OnChanged(object sender, FileSystemEventArgs e)
         {
             if (IsIgnored(e.FullPath) || IsDuplicateEvent(e.FullPath, "Copy"))
                 return;
 
-            if (File.Exists(e.FullPath))
-            {
-                string containerPath = ToContainerPath(e.FullPath);
-                var (success, error) = await _fileTransferService.CopyToContainerAsync(_containerId!, e.FullPath, containerPath);
-                if (success)
-                    Log($"Copy {e.FullPath} -> {containerPath}");
-                else
-                    Log($"Copy Failed: {e.FullPath} -> {containerPath} | {error}");
-            }
+            if (!File.Exists(e.FullPath))
+                return;
+            
+            string containerPath = ToContainerPath(e.FullPath);
+            var (success, error) = await _fileTransferService.CopyToContainerAsync(_containerId!, e.FullPath, containerPath);
+            if (success)
+                Log($"Copy {e.FullPath} -> {containerPath}");
+            else
+                Log($"Copy Failed: {e.FullPath} -> {containerPath} | {error}");
+            
         }
 
-        private async void OnFileDeleted(object sender, FileSystemEventArgs e)
+        private async void OnDeleted(object sender, FileSystemEventArgs e)
         {
             if (IsIgnored(e.FullPath) || IsDuplicateEvent(e.FullPath, "Deleted"))
                 return;
@@ -392,7 +423,7 @@ namespace DockerBuildBoxSystem.Domain
                 Log($"Delete Failed: {e.FullPath} | {error}");
         }
 
-        private async void OnFileRenamed(object sender, RenamedEventArgs e)
+        private async void OnRenamed(object sender, RenamedEventArgs e)
         {
             bool oldIgnored = IsIgnored(e.OldFullPath);
             bool newIgnored = IsIgnored(e.FullPath);
