@@ -398,7 +398,7 @@ namespace DockerBuildBoxSystem.Domain
             if (IsIgnored(e.FullPath) || IsDuplicateEvent(e.FullPath, "Copy"))
                 return;
 
-            if (File.Exists(e.FullPath))
+            if (!File.Exists(e.FullPath))
                 return;
             
             string containerPath = ToContainerPath(e.FullPath);
