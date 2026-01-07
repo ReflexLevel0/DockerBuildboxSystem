@@ -10,6 +10,7 @@ namespace DockerBuildBoxSystem.Domain
 {
     public class FileSyncService : IFileSyncService
     {
+        private readonly IContainerService _containerService;
         private readonly IContainerFileTransferService _fileTransferService;
         private readonly IIgnorePatternMatcher _ignorePatternMatcher;
         private readonly ISyncIgnoreService _syncIgnoreService;
@@ -29,10 +30,12 @@ namespace DockerBuildBoxSystem.Domain
         public ObservableCollection<string> Changes { get; } = new ObservableCollection<string>();
 
         public FileSyncService(
+            IContainerService containerService,
             IContainerFileTransferService fileTransferService,
             IIgnorePatternMatcher ignorePatternMatcher,
             ISyncIgnoreService syncIgnoreService)
         {
+            _containerService = containerService;
             _fileTransferService = fileTransferService ?? throw new ArgumentNullException(nameof(fileTransferService));
             _ignorePatternMatcher = ignorePatternMatcher ?? throw new ArgumentNullException(nameof(ignorePatternMatcher));
             _syncIgnoreService = syncIgnoreService ?? throw new ArgumentNullException(nameof(syncIgnoreService));
@@ -286,6 +289,14 @@ namespace DockerBuildBoxSystem.Domain
                 if (!Directory.Exists(_rootPath))
                 {
                     Directory.CreateDirectory(_rootPath);
+                }
+
+                // Ensure build directory exists in the container
+                var containerRootExists = await _containerService.ContainerDirectoryExists(_containerId, _containerRootPath);
+                if (containerRootExists == false)
+                {
+                    Log($"Failed to copy from container: build directory '{_containerRootPath}' does not exist. You should create the directory in the container.");
+                    return;
                 }
 
                 // Copy directly from container to host folder
