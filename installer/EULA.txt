@@ -1,0 +1,22 @@
+Docker BuildBox System - Important Usage Terms
+
+This application manages and orchestrates Docker containers on your system.
+
+
+WARNING:
+Using this software may result in:
+- Containers being stopped or restarted
+- Images and volumes being modified or deleted
+- Loss of container data if improperly configured
+
+You are solely responsible for:
+- Ensuring backups of critical data
+- Understanding Docker and container behaviour
+- Verifying configuration before execution
+
+The authors assume NO LIABILITY for data loss, system damage,
+or service interruption caused by use of this software.
+
+
+By checking the acknowledgment box and continuing installation,
+you confirm that you understand and accept these risks.

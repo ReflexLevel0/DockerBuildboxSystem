@@ -121,6 +121,13 @@ namespace DockerBuildBoxSystem.ViewModels.Common
             }, ct);
         }
 
+        /// <summary>
+        /// Asynchronously stops the background update process and releases associated resources.
+        /// </summary>
+        /// <remarks>This method cancels any ongoing UI update operations and waits for them to complete,
+        /// up to a short timeout. If the operation does not complete within the timeout, any remaining pending updates
+        /// are discarded. Calling this method when the update process is not running has no effect.</remarks>
+        /// <returns>A task that represents the asynchronous stop operation.</returns>
         public async Task StopAsync()
         {
             if (Interlocked.Exchange(ref _started, 0) == 0)
@@ -149,6 +156,12 @@ namespace DockerBuildBoxSystem.ViewModels.Common
             }
         }
 
+        /// <summary>
+        /// Removes up to the maximum allowed number of lines from the output queue and adds them to the specified
+        /// batches.
+        /// </summary>
+        /// <param name="batch">The list to which dequeued lines are added. The list is cleared before new items are added.</param>
+        /// <param name="important">The list to which important lines are added. The list is cleared before new items are added.</param>
         private void DrainOnce(List<ConsoleLine> batch, List<ConsoleLine> important)
         {
             batch.Clear();
@@ -270,6 +283,9 @@ namespace DockerBuildBoxSystem.ViewModels.Common
             Interlocked.Exchange(ref _queueCount, 0);
         }
 
+        /// <summary>
+        /// Removes all lines and clears the output buffer.
+        /// </summary>
         public void Clear()
         {
             void DoClear()
@@ -289,6 +305,12 @@ namespace DockerBuildBoxSystem.ViewModels.Common
                 _uiContext.Post(_ => DoClear(), null);
         }
 
+        /// <summary>
+        /// Asynchronously copies the current console output lines to the system clipboard.
+        /// </summary>
+        /// <param name="clipboard">The clipboard service used to set the copied text. Cannot be <c>null</c>.</param>
+        /// <returns>A task that represents the asynchronous copy operation.</returns>
+        /// <exception cref="ArgumentNullException">Thrown if <paramref name="clipboard"/> is <c>null</c>.</exception>
         public async Task CopyAsync(IClipboardService clipboard)
         {
             if (clipboard is null) throw new ArgumentNullException(nameof(clipboard));

@@ -371,6 +371,16 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             }
         }
 
+        /// <summary>
+        /// Attempts to start the currently selected container asynchronously, updating its state and notifying
+        /// listeners of the result.
+        /// </summary>
+        /// <remarks>If the selected container is already running, the method logs this information and
+        /// does not attempt to start it again. Upon successful start, the container's state is refreshed and a
+        /// notification is sent to interested components. If the operation is cancelled or fails, appropriate log
+        /// messages are generated. This method does not throw exceptions; errors are logged instead.</remarks>
+        /// <param name="ct">A <see cref="CancellationToken"/> that can be used to cancel the start operation.</param>
+        /// <returns></returns>
         private async Task StartContainerInternalAsync(CancellationToken ct)
         {
             if (SelectedContainer is null) return;
@@ -514,6 +524,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             }
         }
 
+        /// <summary>
+        /// Asynchronously releases all resources used by the instance and performs cleanup of managed containers.
+        /// </summary>
         public override async ValueTask DisposeAsync()
         {
             if (Interlocked.Exchange(ref _disposeOnce, 1) != 0)
