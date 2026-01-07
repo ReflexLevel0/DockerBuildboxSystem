@@ -351,12 +351,19 @@ namespace DockerBuildBoxSystem.Domain
             _ignorePatternMatcher.LoadPatterns(patterns);
             Log("Updated ignore patterns.");
         }
-        private string DockerCreateDirectory(string containerDir)
+
+        /// <summary>
+        /// Asynchronously loads ignore patterns from the configured source and updates the pattern matcher.
+        /// </summary>
+        public async Task LoadIgnorePatternsAsync()
         {
-            return RunDockerCommand($"exec TestContainer mkdir -p \"{containerDir}\"");
+            var patterns = await _syncIgnoreService.LoadSyncIgnoreAsync();
+            var patternsString = string.Join(Environment.NewLine, patterns);
+            _ignorePatternMatcher.LoadPatterns(patternsString);
+            Log($"Sync Ignore file loaded with {patterns.Count()} exclusions.");
         }
 
-        private void OnCreated(object sender, FileSystemEventArgs e)
+        private async void OnCreated(object sender, FileSystemEventArgs e)
         {
             if (IsIgnored(e.FullPath) || IsDuplicateEvent(e.FullPath, "Created"))
                 return;
@@ -365,8 +372,11 @@ namespace DockerBuildBoxSystem.Domain
             if (Directory.Exists(e.FullPath))
             {
                 string dir = ToContainerPath(e.FullPath);
-                string result = DockerCreateDirectory(dir);
-                Log($"Dir created {e.FullPath} → {dir} | {result}");
+                var (success, error) = await _fileTransferService.CreateDirectoryInContainerAsync(_containerId!, dir);
+                if (success)
+                    Log($"Dir created {e.FullPath} → {dir} | {success}");
+                else
+                    Log($"Dir creation failed {e.FullPath} → {dir} | {error}");
                 return;
             }
 
@@ -374,8 +384,11 @@ namespace DockerBuildBoxSystem.Domain
             if (File.Exists(e.FullPath))
             {
                 string file = ToContainerPath(e.FullPath);
-                string result = DockerCopy(e.FullPath, file);
-                Log($"File created {e.FullPath} → {file} | {result}");
+                var (success, error) = await _fileTransferService.CopyToContainerAsync(_containerId!, e.FullPath, file);
+                if (success)
+                    Log($"File created {e.FullPath} → {file} | {success}");
+                else
+                    Log($"File Failed {e.FullPath} → {file} | {error}");
             }
         }
 
