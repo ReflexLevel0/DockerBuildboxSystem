@@ -14,8 +14,13 @@
              Unloaded="OnUnloaded">
 
     <UserControl.Resources>
-        <converters:StateToColorConverter x:Key="StateToColorConverter" />
-        <converters:IntToBoolConverter x:Key="IntToBoolConverter" />
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/Resources/Colors.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+            <converters:StateToBrushConverter x:Key="StateToBrushConverter" />
+            <converters:IntToBoolConverter x:Key="IntToBoolConverter" />
+        </ResourceDictionary>
     </UserControl.Resources>
 
     <Grid>
@@ -174,7 +179,8 @@
                          HorizontalAlignment="Center"
                          VerticalAlignment="Center"
                          Fill="{Binding ContainerList.SelectedContainer.StateKind,
-                                Converter={StaticResource StateToColorConverter}}"/>
+                                Converter={StaticResource StateToBrushConverter}, 
+                                FallbackValue={StaticResource ErrorBrush}}"/>
             </Grid>
         </Grid>
     </Grid>
