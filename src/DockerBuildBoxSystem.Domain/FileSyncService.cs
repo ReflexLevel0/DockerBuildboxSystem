@@ -64,10 +64,10 @@ namespace DockerBuildBoxSystem.Domain
                                NotifyFilters.Size
             };
 
-            _watcher.Created += OnFileChanged;
-            _watcher.Changed += OnFileChanged;
-            _watcher.Deleted += OnFileDeleted;
-            _watcher.Renamed += OnFileRenamed;
+            _watcher.Created += OnCreated;
+            _watcher.Changed += OnChanged;
+            _watcher.Deleted += OnDeleted;
+            _watcher.Renamed += OnRenamed;
             _watcher.Error += OnError;
 
             _watcher.EnableRaisingEvents = true;
@@ -80,10 +80,10 @@ namespace DockerBuildBoxSystem.Domain
             if (_watcher != null)
             {
                 _watcher.EnableRaisingEvents = false;
-                _watcher.Created -= OnFileChanged;
-                _watcher.Changed -= OnFileChanged;
-                _watcher.Deleted -= OnFileDeleted;
-                _watcher.Renamed -= OnFileRenamed;
+                _watcher.Created -= OnCreated;
+                _watcher.Changed -= OnChanged;
+                _watcher.Deleted -= OnDeleted;
+                _watcher.Renamed -= OnRenamed;
                 _watcher.Error -= OnError;
                 _watcher.Dispose();
                 _watcher = null;
@@ -291,24 +291,53 @@ namespace DockerBuildBoxSystem.Domain
             _ignorePatternMatcher.LoadPatterns(patterns);
             Log("Updated ignore patterns.");
         }
+        private string DockerCreateDirectory(string containerDir)
+        {
+            return RunDockerCommand($"exec TestContainer mkdir -p \"{containerDir}\"");
+        }
 
-        private async void OnFileChanged(object sender, FileSystemEventArgs e)
+        private void OnCreated(object sender, FileSystemEventArgs e)
+        {
+            if (IsIgnored(e.FullPath) || IsDuplicateEvent(e.FullPath, "Created"))
+                return;
+
+            // Directory
+            if (Directory.Exists(e.FullPath))
+            {
+                string dir = ToContainerPath(e.FullPath);
+                string result = DockerCreateDirectory(dir);
+                Log($"Dir created {e.FullPath} → {dir} | {result}");
+                return;
+            }
+
+            // File
+            if (File.Exists(e.FullPath))
+            {
+                string file = ToContainerPath(e.FullPath);
+                string result = DockerCopy(e.FullPath, file);
+                Log($"File created {e.FullPath} → {file} | {result}");
+            }
+        }
+
+
+        private async void OnChanged(object sender, FileSystemEventArgs e)
         {
             if (IsIgnored(e.FullPath) || IsDuplicateEvent(e.FullPath, "Copy"))
                 return;
 
             if (File.Exists(e.FullPath))
-            {
-                string containerPath = ToContainerPath(e.FullPath);
-                var (success, error) = await _fileTransferService.CopyToContainerAsync(_containerId!, e.FullPath, containerPath);
-                if (success)
-                    Log($"Copy {e.FullPath} -> {containerPath}");
-                else
-                    Log($"Copy Failed: {e.FullPath} -> {containerPath} | {error}");
-            }
+                return;
+            
+            string containerPath = ToContainerPath(e.FullPath);
+            var (success, error) = await _fileTransferService.CopyToContainerAsync(_containerId!, e.FullPath, containerPath);
+            if (success)
+                Log($"Copy {e.FullPath} -> {containerPath}");
+            else
+                Log($"Copy Failed: {e.FullPath} -> {containerPath} | {error}");
+            
         }
 
-        private async void OnFileDeleted(object sender, FileSystemEventArgs e)
+        private async void OnDeleted(object sender, FileSystemEventArgs e)
         {
             if (IsIgnored(e.FullPath) || IsDuplicateEvent(e.FullPath, "Deleted"))
                 return;
@@ -321,7 +350,7 @@ namespace DockerBuildBoxSystem.Domain
                 Log($"Delete Failed: {e.FullPath} | {error}");
         }
 
-        private async void OnFileRenamed(object sender, RenamedEventArgs e)
+        private async void OnRenamed(object sender, RenamedEventArgs e)
         {
             if (IsIgnored(e.FullPath) || IsDuplicateEvent(e.FullPath, "Renamed"))
                 return;

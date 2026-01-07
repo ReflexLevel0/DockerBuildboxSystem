@@ -107,10 +107,10 @@ namespace FileWatcherApp
                                NotifyFilters.Size
             };
 
-            _watcher.Created += OnFileChanged;
-            _watcher.Changed += OnFileChanged;
-            _watcher.Deleted += OnFileDeleted;
-            _watcher.Renamed += OnFileRenamed;
+            _watcher.Created += OnCreated;
+            _watcher.Changed += OnChanged;
+            _watcher.Deleted += OnDeleted;
+            _watcher.Renamed += OnRenamed;
             _watcher.EnableRaisingEvents = true;
         }
 
@@ -165,6 +165,11 @@ namespace FileWatcherApp
             }
         }
 
+        private string DockerCreateDirectory(string containerDir)
+        {
+            return RunDockerCommand($"exec TestContainer mkdir -p \"{containerDir}\"");
+        }
+
         private string DockerCopy(string hostPath, string containerPath)
         {
             return RunDockerCommand($"cp \"{hostPath}\" TestContainer:\"{containerPath}\"");
@@ -172,7 +177,7 @@ namespace FileWatcherApp
 
         private string DockerDelete(string containerPath)
         {
-            return RunDockerCommand($"exec TestContainer rm -f \"{containerPath}\"");
+            return RunDockerCommand($"exec TestContainer rm -rf \"{containerPath}\"");
         }
 
         private string DockerRename(string oldPath, string newPath)
@@ -192,20 +197,44 @@ namespace FileWatcherApp
         // ============================================================
         // FILE EVENTS (with auto Docker syncing)
         // ============================================================
-        private void OnFileChanged(object sender, FileSystemEventArgs e)
+        private void OnCreated(object sender, FileSystemEventArgs e)
+    {
+        if (IsIgnored(e.FullPath) || IsDuplicateEvent(e.FullPath, "Created"))
+            return;
+
+        // Directory
+        if (Directory.Exists(e.FullPath))
+        {
+            string dir = ToContainerPath(e.FullPath);
+            string result = DockerCreateDirectory(dir);
+            Log($"Dir created {e.FullPath} → {dir} | {result}");
+            return;
+        }
+
+        // File
+        if (File.Exists(e.FullPath))
+        {
+            string file = ToContainerPath(e.FullPath);
+            string result = DockerCopy(e.FullPath, file);
+            Log($"File created {e.FullPath} → {file} | {result}");
+        }
+    }
+
+        private void OnChanged(object sender, FileSystemEventArgs e)
         {
             if (IsIgnored(e.FullPath) || IsDuplicateEvent(e.FullPath, "Copy"))
                 return;
 
-            if (File.Exists(e.FullPath))
-            {
-                string containerPath = ToContainerPath(e.FullPath);
-                string result = DockerCopy(e.FullPath, containerPath);
-                Log($"Copy {e.FullPath} → {containerPath} | {result}");
-            }
+            if (!File.Exists(e.FullPath))
+                return;
+            
+            string containerPath = ToContainerPath(e.FullPath);
+            string result = DockerCopy(e.FullPath, containerPath);
+            Log($"Copy {e.FullPath} → {containerPath} | {result}");
+            
         }
 
-        private void OnFileDeleted(object sender, FileSystemEventArgs e)
+        private void OnDeleted(object sender, FileSystemEventArgs e)
         {
             if (IsIgnored(e.FullPath) || IsDuplicateEvent(e.FullPath, "Deleted"))
                 return;
@@ -215,7 +244,7 @@ namespace FileWatcherApp
             Log($"Deleted {e.FullPath} | {result}");
         }
 
-        private void OnFileRenamed(object sender, RenamedEventArgs e)
+        private void OnRenamed(object sender, RenamedEventArgs e)
         {
             if (IsIgnored(e.FullPath) || IsDuplicateEvent(e.FullPath, "Renamed"))
                 return;
