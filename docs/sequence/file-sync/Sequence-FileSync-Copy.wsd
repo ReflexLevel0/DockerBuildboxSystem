@@ -1,0 +1,90 @@
+@startuml File Sync - Copy File
+!theme plain
+skinparam sequenceMessageAlign center
+
+title File Sync - Copy File to Container
+
+actor Developer
+participant "FileSystemWatcher" as FSW
+participant "FileSyncService" as SyncSvc
+participant "IIgnorePatternMatcher" as IgnoreMatcher
+participant "IContainerFileTransferService" as TransferSvc
+participant "Docker Engine" as Docker
+participant "Container" as Container
+
+== File Change Detection ==
+
+Developer -> Developer: Edit file in host directory
+
+FSW -> SyncSvc: OnFileChanged Event\n(path: /src/app.js)
+activate SyncSvc
+
+SyncSvc -> SyncSvc: Debounce Check (500ms window)
+
+alt Duplicate Event (< 500ms)
+    SyncSvc -> SyncSvc: Skip duplicate
+    note right
+        Prevents processing
+        multiple rapid changes
+        to same file
+    end note
+else New/Debounced Event
+    SyncSvc -> IgnoreMatcher: IsIgnored(path, patterns)
+    activate IgnoreMatcher
+
+    IgnoreMatcher -> IgnoreMatcher: Check against .gitignore patterns
+
+    alt File is Ignored
+        IgnoreMatcher --> SyncSvc: true (ignored)
+        deactivate IgnoreMatcher
+        SyncSvc -> SyncSvc: Skip ignored file
+        note right
+            Examples:
+            • *.tmp
+            • .git/
+            • node_modules/
+            • build/
+        end note
+    else File Not Ignored
+        IgnoreMatcher --> SyncSvc: false (process)
+        deactivate IgnoreMatcher
+
+        SyncSvc -> TransferSvc: CopyToContainerAsync(containerId, path, data)
+        activate TransferSvc
+
+        TransferSvc -> TransferSvc: Read file content
+        TransferSvc -> TransferSvc: Create in-memory TAR archive
+        note right
+            TAR format includes:
+            • File path
+            • File content
+            • Permissions
+            • Timestamps
+        end note
+
+        TransferSvc -> Docker: PUT /containers/{id}/archive\nExtractToPath: /data/src/
+        activate Docker
+
+        Docker -> Container: Extract TAR to filesystem
+        activate Container
+        Container -> Container: Write file to /data/src/app.js
+        Container --> Docker: File written
+        deactivate Container
+
+        Docker --> TransferSvc: OK
+        deactivate Docker
+
+        TransferSvc --> SyncSvc: Success
+        deactivate TransferSvc
+
+        SyncSvc -> SyncSvc: Add to Changes Log\n"Copied: app.js"
+        note right of SyncSvc
+            Log displayed in UI
+            for user visibility
+        end note
+    end
+end
+
+deactivate SyncSvc
+
+@enduml

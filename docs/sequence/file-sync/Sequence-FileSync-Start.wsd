@@ -1,0 +1,48 @@
+@startuml File Sync Initialization
+!theme plain
+skinparam sequenceMessageAlign center
+
+title File Sync - Start Watching
+
+actor Developer
+participant "FileSyncViewModel" as VM
+participant "FileSyncService" as SyncSvc
+participant "FileSystemWatcher" as FSW
+
+== Sync Initialization ==
+
+Developer -> VM: Configure Paths\n(Host Path, Container Path)
+activate VM
+
+Developer -> VM: Click "Start Sync"
+
+VM -> SyncSvc: StartWatching(hostPath, containerId, containerPath)
+activate SyncSvc
+
+SyncSvc -> FSW: Create FileSystemWatcher
+activate FSW
+note right
+    Filters:
+    • FileName
+    • DirectoryName
+    • LastWrite
+    • Size
+    IncludeSubdirectories: true
+end note
+
+SyncSvc -> FSW: EnableRaisingEvents = true
+
+FSW --> SyncSvc: Watching...
+SyncSvc --> VM: Started
+deactivate SyncSvc
+
+VM --> Developer: Sync Active
+deactivate VM
+
+note over FSW
+    FileSystemWatcher is now
+    monitoring the directory
+    for any changes
+end note
+
+@enduml

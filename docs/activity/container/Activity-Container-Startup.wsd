@@ -1,0 +1,99 @@
+@startuml Container Startup Activity
+!theme plain
+skinparam activityDiamondBackgroundColor LightGray
+skinparam activityStartColor Green
+skinparam activityEndColor Red
+
+title Container Startup Activity Flow
+
+start
+
+:User selects image from list;
+
+:Query Docker for running containers;
+:Build list = running containers\nexcluding selected/target container;
+
+while (List not empty?) is (yes)
+  :Get next container from list;
+  :Stop container;
+  :Wait for stop completion\n(timeout: 10s);
+  :Remove container from list;
+endwhile (no)
+
+:Query Docker for containers;
+:Filter by selected image name;
+
+if (Container exists?) then (yes)
+    :Retrieve container ID;
+    :Inspect container details;
+
+    if (Container state?) then (Running)
+        :Update UI with running state;
+        stop
+    else (Exited/Created)
+        :Prepare to start existing container;
+    endif
+
+else (no)
+    #LightYellow:Execute Container Creation Flow;
+    note right
+        See: [[Activity-Container-Creation.wsd]]
+        Creates container with volume setup,
+        configuration, and returns container ID
+    end note
+
+    if (Creation successful?) then (yes)
+        :Retrieve container ID;
+    else (no)
+        #Pink:Creation failed;
+        stop
+    endif
+endif
+
+partition "Start Container" {
+    :Track container in\n_containersStartedByApp;
+
+    :Call Docker API:\nPOST /containers/{id}/start;
+
+    if (Start successful?) then (yes)
+        :Wait for state transition;
+
+        :Re-inspect container to\nget updated state;
+
+        if (Container running?) then (yes)
+            :Update SelectedContainer property;
+            :Trigger PropertyChanged events;
+
+            fork
+                :UI updates container status;
+            fork again
+                :Enable container-dependent features;
+                note right
+                    • File sync
+                    • Command execution
+                    • Log streaming
+                end note
+            fork again
+                :Start background refresh loop;
+                note right
+                    Periodic inspection to
+                    detect external changes
+                end note
+            end fork
+
+            :Notify user:\n"Container started successfully";
+            #LightGreen:Container ready for use;
+
+        else (no)
+            #Pink:Display warning:\n"Container created but not running";
+        endif
+
+    else (no)
+        #Pink:Display error message;
+        :Log failure details;
+    endif
+}
+
+stop
+
+@enduml

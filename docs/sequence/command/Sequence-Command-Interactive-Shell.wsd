@@ -1,0 +1,113 @@
+@startuml Interactive Shell Session
+!theme plain
+skinparam sequenceMessageAlign center
+
+title Interactive Shell Session - Start and I/O
+
+actor User
+participant "CommandExecutionViewModel" as VM
+participant "CommandRunner" as Runner
+participant "IContainerService" as ContainerSvc
+participant "Docker Engine" as Docker
+participant "Container" as Container
+
+== Start Interactive Shell ==
+
+User -> VM: Click "Start Shell"
+activate VM
+
+VM -> Runner: RunAsync(containerId, ["/bin/bash", "-i"])
+activate Runner
+
+Runner -> ContainerSvc: CreateExecAsync(id, params)
+activate ContainerSvc
+note right
+    Exec Parameters:
+    • Cmd: ["/bin/bash", "-i"]
+    • AttachStdin: true
+    • AttachStdout: true
+    • AttachStderr: true
+    • Tty: true
+end note
+
+ContainerSvc -> Docker: POST /containers/{id}/exec
+Docker --> ContainerSvc: Exec ID
+deactivate ContainerSvc
+
+Runner -> ContainerSvc: StreamExecAsync(execId)
+activate ContainerSvc
+
+ContainerSvc -> Docker: POST /exec/{id}/start\nDetach: false
+activate Docker
+
+Docker -> Container: Spawn /bin/bash -i
+activate Container
+
+Docker --> ContainerSvc: Multiplexed Stream + Channels
+note right
+    Returns:
+    • ChannelReader<output>
+    • ChannelWriter<input>
+    • Task<exitCode>
+end note
+
+deactivate Docker
+ContainerSvc --> Runner: Stream Channels
+deactivate ContainerSvc
+
+Runner -> Runner: Start Output Reader Task
+Runner -> Runner: Start Input Writer Task
+
+Runner --> VM: Session Active
+deactivate Runner
+
+Container --> Docker: Shell prompt
+Docker --> Runner: Prompt text
+activate Runner
+Runner --> VM: Prompt
+deactivate Runner
+
+VM --> User: Shell Ready
+deactivate VM
+
+== User Types Command ==
+
+User -> VM: Type "ls -la"
+activate VM
+
+VM -> Runner: TryWriteToInteractiveAsync("ls -la\\n")
+activate Runner
+
+Runner -> Runner: Normalize input (\\r\\n → \\r for TTY)
+Runner -> Docker: Write to stdin stream
+Docker -> Container: ls -la
+
+Container -> Container: Execute ls command
+
+Container --> Docker: stdout data (file listing)
+Docker --> Runner: Read from Output Channel
+
+Runner -> Runner: Process output (TTY: raw chunks)
+note right
+    For TTY mode:
+    • No line buffering
+    • Send chunks immediately
+    • Preserve ANSI codes
+end note
+
+Runner --> VM: Output lines
+deactivate Runner
+
+VM --> User: Display output in console
+deactivate VM
+
+Container --> Docker: Shell prompt
+Docker --> Runner: Prompt text
+activate Runner
+Runner --> VM: Prompt
+deactivate Runner
+VM --> User: Show prompt
+
+deactivate Container
+
+@enduml

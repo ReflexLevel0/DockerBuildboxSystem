@@ -1,0 +1,266 @@
+@startuml Business Services
+!theme plain
+skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+
+title Business Services - Tier 2 (High-Level Operations & Orchestration)
+
+' ====================================================================
+' EXTERNAL DEPENDENCIES
+' ====================================================================
+package "External Dependencies" <<external>> #F0F0F0 {
+    class FileSystemWatcher <<.NET>> {
+        + Path
+        + Filter
+        + IncludeSubdirectories
+        + NotifyFilter
+        + EnableRaisingEvents
+        --Events--
+        + Changed
+        + Created
+        + Deleted
+        + Renamed
+    }
+}
+
+' ====================================================================
+' CONTRACTS
+' ====================================================================
+package "Contracts Layer" <<contracts>> #Honeydew {
+    interface IContainerService {
+        + ExecAsync()
+        + StreamExecAsync()
+        + StreamLogsAsync()
+        + CopyFileToContainerAsync()
+        + CopyDirectoryToContainerAsync()
+        + CopyFileFromContainerAsync()
+        + CopyDirectoryFromContainerAsync()
+    }
+
+    interface IStreamReader {
+        + RunAsync()
+        + StopAsync()
+        + IsRunning
+        + RunningChanged
+    }
+
+    interface IContainerFileTransferService {
+        + CopyToContainerAsync()
+        + CopyFromContainerAsync()
+        + CopyDirectoryToContainerAsync()
+        + CopyDirectoryFromContainerAsync()
+        + DeleteInContainerAsync()
+        + RenameInContainerAsync()
+        + EmptyDirectoryInContainerAsync()
+    }
+
+    interface IFileSyncService {
+        + Configure()
+        + StartWatchingAsync()
+        + StopWatching()
+        + PauseWatching()
+        + ResumeWatching()
+        + ForceSyncAsync()
+        + ForceSyncFromContainerAsync()
+        + CleanDirectoryAsync()
+        + UpdateIgnorePatterns()
+        + LoadIgnorePatternsAsync()
+        + Changes
+    }
+
+    interface ICommandRunner {
+        + TryWriteToInteractiveAsync()
+        + InterruptAsync()
+        + ExitCode
+    }
+
+    interface ILogRunner {
+    }
+
+    interface IIgnorePatternMatcher {
+        + LoadPatterns()
+        + AddPattern()
+        + IsIgnored()
+        + GetPatterns()
+    }
+
+    IStreamReader <|-- ICommandRunner : extends
+    IStreamReader <|-- ILogRunner : extends
+    
+    ' Layout hints within Contracts
+    IContainerService -[hidden]down-> IStreamReader
+    IStreamReader -[hidden]down-> IContainerFileTransferService
+    IContainerFileTransferService -[hidden]down-> IFileSyncService
+    IFileSyncService -[hidden]down-> ICommandRunner
+    ICommandRunner -[hidden]down-> ILogRunner
+    ILogRunner -[hidden]down-> IIgnorePatternMatcher
+}
+
+' ====================================================================
+' IMPLEMENTATIONS
+' ====================================================================
+package "Business Services" <<infrastructure>> #MistyRose {
+    abstract StreamReaderBase <<IStreamReader>> {
+        # IContainerService _containerService
+        # CancellationTokenSource _cts
+        # bool _isRunning
+        + RunAsync()
+        + StopAsync()
+        + IsRunning
+        + RunningChanged
+        --Protected--
+        # OnRunningChanged()
+    }
+
+    class ContainerFileTransferService <<IContainerFileTransferService>> {
+        - IContainerService _containerService
+        + CopyToContainerAsync()
+        + CopyFromContainerAsync()
+        + CopyDirectoryToContainerAsync()
+        + CopyDirectoryFromContainerAsync()
+        + DeleteInContainerAsync()
+        + RenameInContainerAsync()
+        + EmptyDirectoryInContainerAsync()
+        --Private--
+        - CreateTarArchive()
+        - ExecuteCommandInContainer()
+    }
+
+    class FileSyncService <<IFileSyncService>> {
+        - IContainerFileTransferService _transferService
+        - IIgnorePatternMatcher _ignoreMatcher
+        - FileSystemWatcher _watcher
+        - Dictionary<string, DateTime> _eventHistory
+        + Configure()
+        + StartWatchingAsync()
+        + StopWatching()
+        + PauseWatching()
+        + ResumeWatching()
+        + ForceSyncAsync()
+        + ForceSyncFromContainerAsync()
+        + CleanDirectoryAsync()
+        + UpdateIgnorePatterns()
+        + LoadIgnorePatternsAsync()
+        --Private--
+        - OnFileChanged()
+        - OnFileDeleted()
+        - OnFileRenamed()
+        - IsDuplicateEvent()
+    }
+
+    class CommandRunner <<ICommandRunner>> {
+        - ChannelWriter _inputWriter
+        + TryWriteToInteractiveAsync()
+        + InterruptAsync()
+        + ExitCode
+        --Private--
+        - ReadOutputAsync()
+        - WriteInputAsync()
+        - NormalizeInput()
+    }
+
+    class LogRunner <<ILogRunner>> {
+        --Private--
+        - ProcessLogStream()
+    }
+
+    StreamReaderBase <|-- CommandRunner
+    StreamReaderBase <|-- LogRunner
+    
+    ' Layout hints within Business Services
+    StreamReaderBase -[hidden]down-> ContainerFileTransferService
+    ContainerFileTransferService -[hidden]down-> FileSyncService
+    CommandRunner -[hidden]right-> LogRunner
+}
+
+' ====================================================================
+' RELATIONSHIPS
+' ====================================================================
+
+' Dependencies (only showing usage, implementations indicated by stereotypes)
+StreamReaderBase --> IContainerService : uses
+ContainerFileTransferService --> IContainerService : uses
+FileSyncService --> IContainerFileTransferService : uses
+FileSyncService --> IIgnorePatternMatcher : uses
+FileSyncService --> FileSystemWatcher : uses
+
+' Layout control
+"External Dependencies" -[hidden]right-> "Contracts Layer"
+"Contracts Layer" -[hidden]right-> "Business Services"
+
+' ====================================================================
+' NOTES
+' ====================================================================
+
+' note right of ContainerFileTransferService
+'     <b>Purpose:</b>
+'     Simplifies file transfer operations
+'     between host and container
+
+'     <b>Key Features:</b>
+'     • TAR archive creation
+'     • Batch file operations
+'     • Error wrapping
+'     • Directory synchronization
+' end note
+
+' note right of FileSyncService
+'     <b>Purpose:</b>
+'     Real-time file synchronization
+'     from host to container
+
+'     <b>Key Features:</b>
+'     • Debouncing (500ms)
+'     • .gitignore pattern support
+'     • Change event tracking
+'     • Force full sync option
+' end note
+
+' note right of CommandRunner
+'     <b>Purpose:</b>
+'     Execute commands in containers
+'     with interactive support
+
+'     <b>Key Features:</b>
+'     • Interactive shell sessions
+'     • Non-interactive single commands
+'     • Bidirectional I/O streaming
+'     • TTY support
+'     • Ctrl+C interrupt handling
+' end note
+
+' note right of LogRunner
+'     <b>Purpose:</b>
+'     Stream container logs in real-time
+
+'     <b>Key Features:</b>
+'     • Follow mode (tail -f)
+'     • Multiplexed stdout/stderr
+'     • Graceful cancellation
+'     • State management
+' end note
+
+' ====================================================================
+' LEGEND
+' ====================================================================
+legend bottom left
+    <b>Tier 2: Business Services</b>
+
+    <b>Purpose:</b>
+    High-level operations and workflow orchestration
+
+    <b>Responsibilities:</b>
+    • Compose Core Services for complex operations
+    • Implement business logic
+    • Manage external integrations (FileSystemWatcher)
+    • Handle async streaming (Channels)
+
+    <b>Design Patterns:</b>
+    • Facade: Simplify complex Docker operations
+    • Adapter: ContainerFileTransferService wraps Docker API
+    • Observer: FileSystemWatcher for file changes
+    • Channel: Async streaming for logs and exec I/O
+    • Decorator: Add debouncing and filtering to file events
+end legend
+
+@enduml

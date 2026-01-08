@@ -1,0 +1,90 @@
+@startuml File Sync - Force Sync
+!theme plain
+skinparam sequenceMessageAlign center
+
+title File Sync - Force Full Synchronization
+
+actor Developer
+participant "FileSyncViewModel" as VM
+participant "FileSyncService" as SyncSvc
+participant "IContainerFileTransferService" as TransferSvc
+participant "Docker Engine" as Docker
+participant "Container" as Container
+
+== Force Sync (Full Resynchronization) ==
+
+Developer -> VM: Click "Force Sync"
+activate VM
+
+VM -> SyncSvc: ForceSyncAsync()
+activate SyncSvc
+
+SyncSvc -> SyncSvc: Create temp directory
+SyncSvc -> SyncSvc: Copy all non-ignored files\nrecursively
+
+note right of SyncSvc
+    Builds complete directory
+    structure in temp location,
+    excluding ignored patterns
+end note
+
+SyncSvc -> TransferSvc: CleanContainerDirectoryAsync(containerId, path, exclusions)
+activate TransferSvc
+
+note right
+    Exclusions:
+    • build/
+    • node_modules/
+    • .git/
+    (configurable)
+end note
+
+TransferSvc -> Docker: POST /containers/{id}/exec\nCommand: rm -rf with exclusions
+activate Docker
+
+Docker -> Container: Execute rm command
+activate Container
+Container -> Container: Clean directory
+Container --> Docker: Cleaned
+deactivate Container
+
+Docker --> TransferSvc: OK
+deactivate Docker
+deactivate TransferSvc
+
+SyncSvc -> TransferSvc: CopyDirectoryToContainerAsync(containerId, tempDir, containerPath)
+activate TransferSvc
+
+TransferSvc -> TransferSvc: Create TAR of entire directory
+note right
+    Large TAR archive containing
+    complete directory structure
+end note
+
+TransferSvc -> Docker: PUT /containers/{id}/archive\n(Full directory TAR)
+activate Docker
+
+Docker -> Container: Extract complete directory
+activate Container
+Container -> Container: Extract all files
+Container --> Docker: Complete
+deactivate Container
+
+Docker --> TransferSvc: Success
+deactivate Docker
+deactivate TransferSvc
+
+SyncSvc -> SyncSvc: Delete temp directory
+SyncSvc --> VM: Force Sync Complete
+deactivate SyncSvc
+
+VM -> VM: Add to Changes Log\n"Full sync completed"
+VM --> Developer: "Full synchronization complete"
+deactivate VM
+
+note over Container
+    Container now has exact
+    copy of host directory
+end note
+
+@enduml

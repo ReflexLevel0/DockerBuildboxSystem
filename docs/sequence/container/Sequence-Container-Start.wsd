@@ -1,0 +1,68 @@
+@startuml Container Start
+!theme plain
+skinparam sequenceMessageAlign center
+
+title Container Start and Monitoring
+
+actor User
+participant "ContainerListViewModel" as VM
+participant "IContainerService" as ContainerSvc
+participant "Docker Engine" as Docker
+
+note over User,Docker
+    Container has been created
+    and is in "Created" or "Exited" state
+end note
+
+== Container Start ==
+
+VM -> VM: StartContainerInternalAsync()
+activate VM
+
+VM -> ContainerSvc: StartAsync(containerId)
+activate ContainerSvc
+ContainerSvc -> Docker: POST /containers/{id}/start
+Docker --> ContainerSvc: Started
+deactivate ContainerSvc
+
+VM -> ContainerSvc: InspectAsync(containerId)
+activate ContainerSvc
+ContainerSvc -> Docker: GET /containers/{id}/json
+Docker --> ContainerSvc: Updated State (Running)
+deactivate ContainerSvc
+
+VM -> VM: Update SelectedContainer property
+VM -> VM: Track in _containersStartedByApp
+
+VM --> User: Container Running
+deactivate VM
+
+== Background Monitoring ==
+
+loop Periodic Refresh (every few seconds)
+    VM -> VM: RefreshSelectedContainerAsync()
+    activate VM
+
+    VM -> ContainerSvc: InspectAsync(containerId)
+    activate ContainerSvc
+    ContainerSvc -> Docker: GET /containers/{id}/json
+
+    alt Container Stopped Externally
+        Docker --> ContainerSvc: State: Exited
+        ContainerSvc --> VM: Not Running
+
+        VM -> VM: Clear SelectedContainer
+        VM -> VM: Log: "Container stopped externally"
+        VM --> User: Update UI (no container selected)
+
+    else Container Still Running
+        Docker --> ContainerSvc: State: Running
+        ContainerSvc --> VM: Running
+        VM -> VM: Update UI state
+    end
+
+    deactivate ContainerSvc
+    deactivate VM
+end
+
+@enduml

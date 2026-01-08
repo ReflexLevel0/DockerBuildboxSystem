@@ -1,0 +1,94 @@
+@startuml Architecture
+!theme plain
+top to bottom direction
+skinparam packageStyle rectangle
+skinparam componentStyle rectangle
+
+' Define colors for layers
+skinparam package {
+    BackgroundColor<<presentation>> LightBlue
+    BackgroundColor<<core>> LightGreen
+    BackgroundColor<<infrastructure>> LightYellow
+    BorderColor Black
+}
+
+' ====================================================================
+' PRESENTATION LAYER
+' ====================================================================
+package "Presentation Layer" <<presentation>> {
+    component [DockerBuildBoxSystem.App] as App #AliceBlue
+    component [DockerBuildBoxSystem.ViewModels] as ViewModels #AliceBlue
+
+    note right of App
+        <b>Main Entry Point</b>
+        • WPF Views
+        • Dependency Injection Setup
+        • User Interface
+    end note
+
+    note right of ViewModels
+        <b>Presentation Logic</b>
+        • State Management
+        • UI Bindings
+        • Commands
+    end note
+}
+
+' ====================================================================
+' CORE LAYER
+' ====================================================================
+package "Core Layer" <<core>> {
+    component [DockerBuildBoxSystem.Contracts] as Contracts #Honeydew
+
+    note right of Contracts
+        <b>Service Interfaces</b>
+        • Shared Types
+        • Abstractions
+        • Data Transfer Objects
+    end note
+}
+
+' ====================================================================
+' INFRASTRUCTURE LAYER
+' ====================================================================
+package "Infrastructure Layer" <<infrastructure>> {
+    component [DockerBuildBoxSystem.Domain] as Domain #LemonChiffon
+
+    note right of Domain
+        <b>Service Implementations</b>
+        • Docker Client Wrapper
+        • Business Logic
+        • External Integrations
+    end note
+}
+
+' ====================================================================
+' RELATIONSHIPS
+' ====================================================================
+
+' Force vertical layout
+"Presentation Layer" -[hidden]down-> "Core Layer"
+"Core Layer" -[hidden]down-> "Infrastructure Layer"
+
+' Presentation Layer Dependencies
+App -down-> ViewModels : Uses
+App -down-> Contracts : Depends on
+App -down-> Domain : <i>DI Registration</i>
+
+ViewModels -down-> Contracts : Depends on
+
+' Infrastructure Layer Dependencies
+Domain -up-> Contracts : <b>Implements</b>
+
+' ====================================================================
+' LEGEND
+' ====================================================================
+legend bottom
+    <b>Dependency Flow</b>
+    • Arrows point in direction of dependency
+    • Infrastructure implements Core interfaces
+    • Presentation depends on Core abstractions
+    • DI wires everything together at runtime
+end legend
+
+@enduml

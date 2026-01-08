@@ -1,0 +1,68 @@
+@startuml Single Command Flow
+!theme plain
+skinparam activityDiamondBackgroundColor LightGray
+skinparam activityStartColor Green
+skinparam activityEndColor Red
+
+title Single Command Execution Flow
+
+start
+
+:Hardcoded fixed command is\nto be executed;
+
+partition "Input Processing" {
+    :Receive user input;
+
+    if (Contains variables?) then (yes)
+        :Resolve variables;
+        note right
+            ${SOURCE_PATH} → /workspace/src
+            ${CONTAINER_PATH} → /data/
+        end note
+    endif
+
+    :Parse command string;
+    note right
+        Shell-like parsing:
+        • Handle quoted strings
+        • Escape sequences
+        • Split into argv array
+    end note
+}
+
+partition "Execution" {
+    :Create exec instance;
+    note right
+        Tty: false
+        AttachStdin: false
+        AttachStdout: true
+        AttachStderr: true
+    end note
+
+    :Start exec (non-streaming);
+
+    :Container executes command;
+
+    fork
+        :Read stdout stream;
+        :Display output lines;
+    fork again
+        :Read stderr stream;
+        :Display error lines in red;
+    end fork
+
+    :Wait for completion;
+    :Get exit code;
+}
+
+if (Exit code == 0?) then (yes)
+    #LightGreen:Display success message;
+    :Log command success;
+else (non-zero)
+    #Pink:Display failure message;
+    :Log command failure;
+endif
+
+stop
+
+@enduml

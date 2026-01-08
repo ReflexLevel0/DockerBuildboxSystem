@@ -1,0 +1,77 @@
+@startuml Container Stop
+!theme plain
+skinparam sequenceMessageAlign center
+
+title Container Stop and Cleanup
+
+actor User
+participant "ContainerListViewModel" as VM
+participant "IContainerService" as ContainerSvc
+participant "Docker Engine" as Docker
+
+== Stop Container ==
+
+User -> VM: Select Different Image\n(or click Stop)
+activate VM
+
+alt Previous Container Running
+    VM -> VM: Mark in _stopRequestedByApp
+    note right
+        Track intentional stops
+        vs external stops
+    end note
+
+    VM -> ContainerSvc: StopContainerByIdAsync(containerId)
+    activate ContainerSvc
+
+    ContainerSvc -> Docker: POST /containers/{id}/stop\nTimeout: 10s
+    note right
+        Sends SIGTERM first,
+        waits for graceful shutdown,
+        then SIGKILL if needed
+    end note
+
+    Docker --> ContainerSvc: Stopped
+    deactivate ContainerSvc
+
+    VM -> VM: Update UI state
+end
+
+VM --> User: Container Stopped
+deactivate VM
+
+== Application Exit Cleanup ==
+
+User -> VM: Close Application
+activate VM
+
+VM -> VM: Dispose()
+
+loop For Each Started Container
+    VM -> VM: Check _containersStartedByApp
+
+    VM -> ContainerSvc: StopContainerByIdAsync(id)
+    activate ContainerSvc
+
+    ContainerSvc -> Docker: POST /containers/{id}/stop
+    note right
+        Clean shutdown of all
+        containers started by
+        this app instance
+    end note
+
+    Docker --> ContainerSvc: Stopped
+    deactivate ContainerSvc
+end
+
+VM -> VM: Clear tracking collections
+VM -> VM: Dispose services
+
+deactivate VM
+
+note over User
+    Application closed cleanly,
+    all tracked containers stopped
+end note
+
+@enduml
