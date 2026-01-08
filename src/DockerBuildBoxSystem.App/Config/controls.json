@@ -1,14 +1,21 @@
 ﻿[
   {
+    "_comment1": "Control types:",
+    "_comment2": "  - textbox: Id, Label, Value, Tooltip",
+    "_comment3": "  - dropdown: Id, Label, Values[], Value, Tooltip",
+    "_comment4": "  - button: Command[], IconPath, Tooltip",
+    "_comment5": "Note: Value property is REQUIRED for textbox/dropdown persistence",
     "Control": "textbox",
     "Id": "gcc_input_file",
     "Label": "gcc input:",
+    "Value": "",
     "Tooltip": "Enter gcc input file path"
   },
   {
     "Control": "textbox",
     "Id": "gcc_output_file",
     "Label": "gcc output:",
+    "Value": "",
     "Tooltip": "Enter gcc output file name"
   },
   {
@@ -16,6 +23,7 @@
     "Id": "make_arg",
     "Label": "make arg:",
     "Values": [ "all", "hello.exe", "hello.o", "clean" ],
+    "Value": "",
     "Tooltip": "Choose make argument"
   },
   {

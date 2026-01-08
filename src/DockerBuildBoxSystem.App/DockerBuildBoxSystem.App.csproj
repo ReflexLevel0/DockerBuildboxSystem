@@ -34,9 +34,7 @@
 		  <CopyToPublishDirectory>Always</CopyToPublishDirectory>
 		</None>
 		<None Update="Config\controls.json">
-		  <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-		  <CopyToPublishDirectory>Always</CopyToPublishDirectory>
-
+		  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
 		<!--Copy user variables to the bin\Debug\net9.0 at build-->
 
