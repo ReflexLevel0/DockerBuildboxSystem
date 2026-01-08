@@ -50,7 +50,6 @@ namespace DockerBuildBoxSystem.Domain
             pattern = pattern.Trim();
             if (pattern.Length == 0) return;
 
-            //in the rare case the user would ever want DOUBLE_STAR_PLACEHOLDER as a name for something...
             const string ds = "__IGNOREPATTERNMATCHER__";
 
             string regexPattern = Regex.Escape(pattern)
