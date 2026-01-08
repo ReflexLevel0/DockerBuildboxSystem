@@ -1,1 +1,1 @@
-find . -name "*.wsd" -print0 | xargs -0 plantuml -tpng -o out
+find . -name "*.wsd" -print0 | xargs -0 plantuml -tpng -o plantumlimages

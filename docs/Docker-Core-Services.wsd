@@ -98,9 +98,6 @@ package "Contracts Layer" <<contracts>> #Honeydew {
     interface IContainerService
 }
 
-' Dependencies
-DockerContainerService --> DockerVolumeService : auto-mounts\nshared volume
-
 ' ====================================================================
 ' NOTES
 ' ====================================================================
