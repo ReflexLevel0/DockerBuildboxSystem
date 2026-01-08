@@ -59,7 +59,7 @@ namespace DockerBuildBoxSystem.Contracts
         /// <summary>
         /// The container status description.
         /// </summary>
-        public string? Status { get; init; }
+        public string? Status { get; set; }
 
         /// <summary>
         /// The image name used by the container.
