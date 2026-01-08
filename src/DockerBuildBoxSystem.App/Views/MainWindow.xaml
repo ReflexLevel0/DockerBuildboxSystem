@@ -170,9 +170,15 @@
         </Grid>
 
         <!-- Shutdown Overlay Component -->
-        <uc:ShutdownOverlay x:Name="ShutdownOverlayControl"
-                            Grid.RowSpan="3"
-                            Panel.ZIndex="100"
-                            Visibility="Collapsed"/>
+        <uc:SpinnerOverlayControl x:Name="ShutdownOverlayControl"
+                    Grid.RowSpan="3"
+                    Panel.ZIndex="100"
+                    Visibility="Collapsed"/>
+
+        <!-- Syncing Overlay Component -->
+        <uc:SpinnerOverlayControl x:Name="SyncingOverlayControl"
+                    Grid.RowSpan="3"
+                    Panel.ZIndex="100"
+                    Visibility="Collapsed"/>
     </Grid>
 </Window>

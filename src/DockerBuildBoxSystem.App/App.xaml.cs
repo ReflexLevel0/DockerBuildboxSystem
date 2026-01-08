@@ -124,7 +124,7 @@ public partial class App : Application
         services.AddSingleton<IImageService, DockerImageService>();
         services.AddSingleton<IContainerFileTransferService, ContainerFileTransferService>();
         services.AddTransient<IIgnorePatternMatcher, IgnorePatternMatcher>();
-        services.AddTransient<IFileSyncService, FileSyncService>();
+        services.AddSingleton<IFileSyncService, FileSyncService>();
 
         //register user control service
         services.AddSingleton<IUserControlService, UserControlService>();
