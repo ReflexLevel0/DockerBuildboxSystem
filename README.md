@@ -8,15 +8,15 @@ DockerBuildBoxSystem is a Windows desktop application (WPF, .NET) that helps you
 
 
 **Contents**
-- Introduction
-- Architecture Overview
-- Installation
-- Configuration
-- User Controls
-- Commands & Arguments
-- Quick Start
-- Testing
-- Troubleshooting
+- [Introduction](#-introduction)
+- [Architecture Overview](#-architecture-overview)
+- [Installation](#-installation)
+- [Configuration](#-configuration)
+- [User Controls](#-user-controls)
+- [Commands & Arguments](#-commands---arguments)
+- [Quick Start](#-quick-start)
+- [Testing](#-testing)
+- [Troubleshooting](#-troubleshooting)
 
 ## 📖 Introduction
 DockerBuildBoxSystem centralizes common Docker developer workflows:
