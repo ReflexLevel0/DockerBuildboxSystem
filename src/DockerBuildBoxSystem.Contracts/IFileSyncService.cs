@@ -12,14 +12,57 @@ namespace DockerBuildBoxSystem.Contracts
     {
         ObservableCollection<string> Changes { get; }
         void Configure(string path, string containerId, string containerRootPath = "/data/");
+
+        /// <summary>
+        /// Starts watching the host directory for changes
+        /// </summary>
+        /// <param name="path">Path to the host directory</param>
+        /// <param name="containerId">Container to which the directory is copied to</param>
+        /// <param name="containerRootPath">Path in the containers to which the directory is copied to</param>
+        /// <returns></returns>
         Task StartWatchingAsync(string path, string containerId, string containerRootPath = "/data/");
+        
+        /// <summary>
+        /// Stops watching the host directory for changes
+        /// </summary>
         void StopWatching();
+
+        /// <summary>
+        /// Temporarily pauses watching the host directory for changes
+        /// </summary>
         void PauseWatching();
+
+        /// <summary>
+        /// Resumes watching the host directory for changes
+        /// </summary>
         void ResumeWatching();
+
+        /// <summary>
+        /// Deletes directory in the container and copies the whole directory from the host to the container
+        /// </summary>
+        /// <param name="ct"></param>
+        /// <returns></returns>
         Task ForceSyncAsync(CancellationToken ct = default);
+
+        /// <summary>
+        /// Copies the build directory from the container to the host
+        /// </summary>
+        /// <param name="ct"></param>
+        /// <returns></returns>
         Task ForceSyncFromContainerAsync(CancellationToken ct = default);
+
+        /// <summary>
+        /// Cleans the target directory in the container, excluding specified paths
+        /// </summary>
+        /// <param name="excludedPaths">Paths in the directory which will not be deleted</param>
+        /// <param name="ct"></param>
+        /// <returns></returns>
         Task CleanDirectoryAsync(IEnumerable<string>? excludedPaths, CancellationToken ct = default);
-        void UpdateIgnorePatterns(string patterns);
+
+        /// <summary>
+        /// Loads ignore patterns from the .syncIgnore file
+        /// </summary>
+        /// <returns></returns>
         Task LoadIgnorePatternsAsync();
     }
 }

@@ -10,11 +10,13 @@ namespace DockerBuildBoxSystem.Domain
 {
     public class FileSyncService : IFileSyncService
     {
+        private readonly IContainerService _containerService;
         private readonly IContainerFileTransferService _fileTransferService;
         private readonly IIgnorePatternMatcher _ignorePatternMatcher;
         private readonly ISyncIgnoreService _syncIgnoreService;
         
         private FileSystemWatcher? _watcher;
+        private FileSystemWatcher? _syncIgnoreWatcher;
         private string? _rootPath;
         private string? _containerId;
         private string? _containerRootPath;
@@ -29,10 +31,12 @@ namespace DockerBuildBoxSystem.Domain
         public ObservableCollection<string> Changes { get; } = new ObservableCollection<string>();
 
         public FileSyncService(
+            IContainerService containerService,
             IContainerFileTransferService fileTransferService,
             IIgnorePatternMatcher ignorePatternMatcher,
             ISyncIgnoreService syncIgnoreService)
         {
+            _containerService = containerService;
             _fileTransferService = fileTransferService ?? throw new ArgumentNullException(nameof(fileTransferService));
             _ignorePatternMatcher = ignorePatternMatcher ?? throw new ArgumentNullException(nameof(ignorePatternMatcher));
             _syncIgnoreService = syncIgnoreService ?? throw new ArgumentNullException(nameof(syncIgnoreService));
@@ -67,6 +71,9 @@ namespace DockerBuildBoxSystem.Domain
             //Load ignore patterns before starting the watcher
             await LoadIgnorePatternsAsync();
 
+            //Start watching the syncignore file for changes
+            StartSyncIgnoreWatcher();
+
             _watcher = new FileSystemWatcher(_rootPath)
             {
                 IncludeSubdirectories = true,
@@ -76,10 +83,10 @@ namespace DockerBuildBoxSystem.Domain
                                NotifyFilters.Size
             };
 
-            _watcher.Created += OnFileChanged;
-            _watcher.Changed += OnFileChanged;
-            _watcher.Deleted += OnFileDeleted;
-            _watcher.Renamed += OnFileRenamed;
+            _watcher.Created += OnCreated;
+            _watcher.Changed += OnChanged;
+            _watcher.Deleted += OnDeleted;
+            _watcher.Renamed += OnRenamed;
             _watcher.Error += OnError;
 
             _watcher.EnableRaisingEvents = true;
@@ -92,15 +99,17 @@ namespace DockerBuildBoxSystem.Domain
             if (_watcher != null)
             {
                 _watcher.EnableRaisingEvents = false;
-                _watcher.Created -= OnFileChanged;
-                _watcher.Changed -= OnFileChanged;
-                _watcher.Deleted -= OnFileDeleted;
-                _watcher.Renamed -= OnFileRenamed;
+                _watcher.Created -= OnCreated;
+                _watcher.Changed -= OnChanged;
+                _watcher.Deleted -= OnDeleted;
+                _watcher.Renamed -= OnRenamed;
                 _watcher.Error -= OnError;
                 _watcher.Dispose();
                 _watcher = null;
                 Log("Stopped watching.");
             }
+
+            StopSyncIgnoreWatcher();
         }
 
         public void PauseWatching()
@@ -120,7 +129,7 @@ namespace DockerBuildBoxSystem.Domain
                 Log("Resumed watching.");
             }
         }
-        // Cleans the target directory in the container, excluding specified paths
+
         public async Task CleanDirectoryAsync(IEnumerable<string>? excludedPaths, CancellationToken ct = default)
         {
             ct.ThrowIfCancellationRequested();
@@ -131,7 +140,6 @@ namespace DockerBuildBoxSystem.Domain
                 return;
             }
 
-            Log($"Cleaning container directory: {_containerRootPath} with {excludedPaths?.Count() ?? 0} exclusions.");
             var (cleanSuccess, cleanError) = await _fileTransferService.EmptyDirectoryInContainerAsync(_containerId, _containerRootPath, excludedPaths, ct);
             ct.ThrowIfCancellationRequested();
             if (!cleanSuccess)
@@ -147,6 +155,9 @@ namespace DockerBuildBoxSystem.Domain
         public async Task ForceSyncAsync(CancellationToken ct = default)
         {
             ct.ThrowIfCancellationRequested();
+
+            //Reload ignore patterns before syncing
+            await LoadIgnorePatternsAsync();
 
             if (string.IsNullOrWhiteSpace(_rootPath) || !Directory.Exists(_rootPath))
             {
@@ -260,6 +271,9 @@ namespace DockerBuildBoxSystem.Domain
         {
             ct.ThrowIfCancellationRequested();
 
+            //Reload ignore patterns before syncing
+            await LoadIgnorePatternsAsync();
+
             if (string.IsNullOrWhiteSpace(_rootPath))
             {
                 Log("Error: Host path is not set.");
@@ -286,6 +300,14 @@ namespace DockerBuildBoxSystem.Domain
                 if (!Directory.Exists(_rootPath))
                 {
                     Directory.CreateDirectory(_rootPath);
+                }
+
+                // Ensure build directory exists in the container
+                var containerRootExists = await _containerService.ContainerDirectoryExists(_containerId, _containerRootPath);
+                if (containerRootExists == false)
+                {
+                    Log($"Failed to copy from container: build directory '{_containerRootPath}' does not exist. You should create the directory in the container.");
+                    return;
                 }
 
                 // Copy directly from container to host folder
@@ -342,14 +364,12 @@ namespace DockerBuildBoxSystem.Domain
                 if (IsIgnored(subDir))
                     continue;
 
+                string relative = Path.GetRelativePath(_rootPath!, subDir);
+                string targetDir = Path.Combine(tempRoot, relative);
+                Directory.CreateDirectory(targetDir);
+
                 CopyToTempRecursive(subDir, tempRoot, ct);
             }
-        }
-
-        public void UpdateIgnorePatterns(string patterns)
-        {
-            _ignorePatternMatcher.LoadPatterns(patterns);
-            Log("Updated ignore patterns.");
         }
 
         /// <summary>
@@ -363,23 +383,147 @@ namespace DockerBuildBoxSystem.Domain
             Log($"Sync Ignore file loaded with {patterns.Count()} exclusions.");
         }
 
-        private async void OnFileChanged(object sender, FileSystemEventArgs e)
+        /// <summary>
+        /// Starts watching the syncignore file for changes and automatically reloads patterns when modified.
+        /// </summary>
+        private void StartSyncIgnoreWatcher()
+        {
+            try
+            {
+                var syncIgnorePath = _syncIgnoreService.FilePath;
+                if (string.IsNullOrWhiteSpace(syncIgnorePath))
+                    return;
+
+                var directory = Path.GetDirectoryName(syncIgnorePath);
+                var fileName = Path.GetFileName(syncIgnorePath);
+
+                if (string.IsNullOrWhiteSpace(directory) || string.IsNullOrWhiteSpace(fileName))
+                    return;
+
+                //Ensure directory exists before watching
+                if (!Directory.Exists(directory))
+                    return;
+
+                StopSyncIgnoreWatcher();
+
+                _syncIgnoreWatcher = new FileSystemWatcher(directory)
+                {
+                    Filter = fileName,
+                    NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName
+                };
+
+                _syncIgnoreWatcher.Changed += OnSyncIgnoreChanged;
+                _syncIgnoreWatcher.Created += OnSyncIgnoreChanged;
+                _syncIgnoreWatcher.Deleted += OnSyncIgnoreDeleted;
+                _syncIgnoreWatcher.Error += OnSyncIgnoreError;
+
+                _syncIgnoreWatcher.EnableRaisingEvents = true;
+                Log("Started watching .syncignore file for changes.");
+            }
+            catch (Exception ex)
+            {
+                Log($"Warning: Could not start watching .syncignore file: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Stops watching the syncignore file.
+        /// </summary>
+        private void StopSyncIgnoreWatcher()
+        {
+            if (_syncIgnoreWatcher != null)
+            {
+                _syncIgnoreWatcher.EnableRaisingEvents = false;
+                _syncIgnoreWatcher.Changed -= OnSyncIgnoreChanged;
+                _syncIgnoreWatcher.Created -= OnSyncIgnoreChanged;
+                _syncIgnoreWatcher.Deleted -= OnSyncIgnoreDeleted;
+                _syncIgnoreWatcher.Error -= OnSyncIgnoreError;
+                _syncIgnoreWatcher.Dispose();
+                _syncIgnoreWatcher = null;
+            }
+        }
+
+        private async void OnSyncIgnoreChanged(object sender, FileSystemEventArgs e)
+        {
+            try
+            {
+                //Debounce to avoid multiple rapid reloads
+                await Task.Delay(300);
+                await LoadIgnorePatternsAsync();
+            }
+            catch (Exception ex)
+            {
+                Log($"Warning: Failed to reload .syncignore file: {ex.Message}");
+            }
+        }
+
+        private void OnSyncIgnoreDeleted(object sender, FileSystemEventArgs e)
+        {
+            try
+            {
+                //Clear all patterns when syncignore is deleted
+                _ignorePatternMatcher.LoadPatterns(string.Empty);
+                Log(".syncignore file deleted - all patterns cleared.");
+            }
+            catch (Exception ex)
+            {
+                Log($"Warning: Error handling .syncignore deletion: {ex.Message}");
+            }
+        }
+
+        private void OnSyncIgnoreError(object sender, ErrorEventArgs e)
+        {
+            Log($".syncignore watcher error: {e.GetException()?.Message ?? "Unknown error"}");
+        }
+
+        private async void OnCreated(object sender, FileSystemEventArgs e)
+        {
+            if (IsIgnored(e.FullPath) || IsDuplicateEvent(e.FullPath, "Created"))
+                return;
+
+            // Directory
+            if (Directory.Exists(e.FullPath))
+            {
+                string dir = ToContainerPath(e.FullPath);
+                var (success, error) = await _fileTransferService.CreateDirectoryInContainerAsync(_containerId!, dir);
+                if (success)
+                    Log($"Dir created {e.FullPath} → {dir} | {success}");
+                else
+                    Log($"Dir creation failed {e.FullPath} → {dir} | {error}");
+                return;
+            }
+
+            // File
+            if (File.Exists(e.FullPath))
+            {
+                string file = ToContainerPath(e.FullPath);
+                var (success, error) = await _fileTransferService.CopyToContainerAsync(_containerId!, e.FullPath, file);
+                if (success)
+                    Log($"File created {e.FullPath} → {file} | {success}");
+                else
+                    Log($"File Failed {e.FullPath} → {file} | {error}");
+            }
+        }
+
+
+        private async void OnChanged(object sender, FileSystemEventArgs e)
         {
             if (IsIgnored(e.FullPath) || IsDuplicateEvent(e.FullPath, "Copy"))
                 return;
 
-            if (File.Exists(e.FullPath))
-            {
-                string containerPath = ToContainerPath(e.FullPath);
-                var (success, error) = await _fileTransferService.CopyToContainerAsync(_containerId!, e.FullPath, containerPath);
-                if (success)
-                    Log($"Copy {e.FullPath} -> {containerPath}");
-                else
-                    Log($"Copy Failed: {e.FullPath} -> {containerPath} | {error}");
-            }
+            if (!File.Exists(e.FullPath))
+                return;
+            
+            string containerPath = ToContainerPath(e.FullPath);
+            var (success, error) = await _fileTransferService.CopyToContainerAsync(_containerId!, e.FullPath, containerPath);
+            if (success)
+                Log($"Copy {e.FullPath} -> {containerPath}");
+            else
+                Log($"Copy Failed: {e.FullPath} -> {containerPath} | {error}");
+            
         }
 
-        private async void OnFileDeleted(object sender, FileSystemEventArgs e)
+        private async void OnDeleted(object sender, FileSystemEventArgs e)
         {
             if (IsIgnored(e.FullPath) || IsDuplicateEvent(e.FullPath, "Deleted"))
                 return;
@@ -392,7 +536,7 @@ namespace DockerBuildBoxSystem.Domain
                 Log($"Delete Failed: {e.FullPath} | {error}");
         }
 
-        private async void OnFileRenamed(object sender, RenamedEventArgs e)
+        private async void OnRenamed(object sender, RenamedEventArgs e)
         {
             bool oldIgnored = IsIgnored(e.OldFullPath);
             bool newIgnored = IsIgnored(e.FullPath);

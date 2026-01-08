@@ -55,6 +55,9 @@ public class ContainerConsoleViewModelTests
     {
         //Arrange
         var imageService = Substitute.For<IImageService>();
+        var containerService = Substitute.For<IContainerService>();
+
+        containerService.IsEngineAvailableAsync().Returns(Task.FromResult(true));
 
         //The ListImagesAsync method is subbed to return a list with one image
         imageService
@@ -64,7 +67,7 @@ public class ContainerConsoleViewModelTests
                 new ImageInfo { Id = "1", RepoTags = new []{"n1"} }
             }));
 
-        var vm = CreateViewModel(imageService: imageService);
+        var vm = CreateViewModel(service: containerService, imageService: imageService);
 
         //Act
         await vm.InitializeCommand.ExecuteAsync(null);

@@ -1,0 +1,128 @@
+@startuml Docker Core Services
+!theme plain
+skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+
+title Docker Core Services - Low-Level Docker Operations
+
+' ====================================================================
+' EXTERNAL DEPENDENCY
+' ====================================================================
+package "Docker.DotNet (NuGet)" <<external>> #LightGray {
+    interface IDockerClient {
+        + Containers
+        + Images
+        + Volumes
+        + System
+    }
+}
+
+' ====================================================================
+' BASE ABSTRACTION
+' ====================================================================
+abstract class DockerServiceBase {
+    # DockerClient: IDockerClient
+    # TimeoutSeconds: int = 100
+    --
+    + <<constructor>> DockerServiceBase(timeout?)
+    # GetDefaultDockerUri(): Uri
+    + DisposeAsync(): ValueTask
+    + Dispose(): void
+    --
+    <i>Platform Detection:</i>
+    Windows: npipe://./pipe/docker_engine
+    Linux: unix:///var/run/docker.sock
+}
+
+DockerServiceBase o--> IDockerClient : uses
+
+' ====================================================================
+' CORE SERVICES
+' ====================================================================
+
+class DockerVolumeService <<IVolumeService>> {
+    + <<const>> SharedVolumeName = "BuildBoxShared"
+    --
+    + GetSharedVolumeAsync(): Task<VolumeResponse?>
+    + CreateVolumeAsync(name, labels?): Task<VolumeResponse>
+}
+
+class DockerImageService <<IImageService>> {
+    + ListImagesAsync(all?): Task<IList<ImagesListResponse>>
+    + InspectImageAsync(id): Task<ImageInspectResponse?>
+    + PullImageAsync(name, tag, progress?): Task
+    + RemoveImageAsync(id, force?, noPrune?): Task
+}
+
+class DockerContainerService <<IContainerService>> {
+    - _volumeService: IVolumeService
+    --
+    <b>Lifecycle:</b>
+    + StartAsync(id): Task<bool>
+    + StopAsync(id, timeout?): Task<bool>
+    + RestartAsync(id, timeout?): Task
+    + KillContainer(id): Task
+    + RemoveAsync(id, force?): Task
+    --
+    <b>Creation & Inspection:</b>
+    + CreateContainerAsync(config): Task<CreateContainerResponse>
+    + InspectAsync(id): Task<ContainerInspectResponse?>
+    + ListContainersAsync(name?, all?): Task<IList<ContainerListResponse>>
+    --
+    <b>Execution:</b>
+    + ExecAsync(id, command, workdir?): Task<(int, string)>
+    + StreamExecAsync(...): Task<ExecResult>
+    --
+    <b>Logging:</b>
+    + StreamLogsAsync(id, follow?, timestamps?): Task<ChannelReader>
+    --
+    <b>File Operations:</b>
+    + CopyFileToContainerAsync(id, src, dst): Task
+    + CopyDirectoryToContainerAsync(id, src, dst): Task
+}
+
+' Inheritance
+DockerServiceBase <|-- DockerVolumeService
+DockerServiceBase <|-- DockerImageService
+DockerServiceBase <|-- DockerContainerService
+
+' Dependencies
+DockerContainerService --> DockerVolumeService : auto-mounts\nshared volume
+
+' ====================================================================
+' INTERFACE CONTRACTS
+' ====================================================================
+package "Contracts Layer" <<contracts>> #Honeydew {
+    interface IVolumeService
+    interface IImageService
+    interface IContainerService
+}
+
+' ====================================================================
+' NOTES
+' ====================================================================
+note right of DockerServiceBase
+    <b>Base Responsibilities:</b>
+    • Platform-aware Docker endpoint
+    • Client lifecycle management
+    • Configurable timeout handling
+    • IDisposable/IAsyncDisposable
+end note
+
+note bottom of DockerContainerService
+    <b>Advanced Features:</b>
+    • Multiplexed stream handling
+    • TTY mode support
+    • Automatic shared volume mounting
+    • Interactive command execution
+    • Real-time log streaming via Channels
+end note
+
+note bottom of DockerVolumeService
+    <b>Shared Volume:</b>
+    All containers automatically get
+    "BuildBoxShared" volume mounted
+    for file sync and persistence
+end note
+
+@enduml

@@ -1,0 +1,200 @@
+@startuml Command Execution Activity
+!theme plain
+skinparam activityDiamondBackgroundColor LightGray
+skinparam activityStartColor Green
+skinparam activityEndColor Red
+
+title Command Execution Activity Flow
+
+start
+
+:User enters command or\nclicks command button;
+
+partition "Input Processing" {
+    :Receive user input;
+
+    if (Contains variables?) then (yes)
+        :Resolve variables;
+        note right
+            Examples:
+            ${SOURCE_PATH} → /workspace/src
+            ${CONTAINER_PATH} → /data/
+        end note
+    else (no)
+    endif
+
+    :Parse command string;
+    note right
+        Shell-like parsing:
+        • Handle quoted strings
+        • Escape sequences
+        • Split into argv array
+
+        Example:
+        gcc "my_file.c" -o app
+        → ["gcc", "my_file.c", "-o", "app"]
+    end note
+
+    :Determine execution mode;
+}
+
+if (Interactive shell?) then (yes)
+    partition "Interactive Mode" {
+        if (Session already active?) then (yes)
+            :Route to existing session;
+            :Write to input channel;
+            #LightBlue:Input sent to running shell;
+            stop
+        else (no)
+            :Start new interactive session;
+        endif
+
+        :Create exec instance in container;
+        note right
+            Parameters:
+            • Cmd: ["/bin/bash", "-i"]
+            • AttachStdin: true
+            • AttachStdout: true
+            • AttachStderr: true
+            • Tty: true (required for interactive)
+        end note
+
+        :Call Docker API:\nPOST /containers/{id}/exec;
+        :Receive exec ID;
+
+        :Start exec with streaming;
+        :Call Docker API:\nPOST /exec/{id}/start?Detach=false;
+
+        :Create bidirectional channels;
+        note right
+            • ChannelReader<output>
+            • ChannelWriter<input>
+            • Task<exitCode>
+        end note
+
+        fork
+            partition "Output Reader Task" {
+                repeat
+                    :Read from multiplexed stream;
+
+                    if (Read bytes > 0?) then (yes)
+                        :Decode UTF-8;
+
+                        if (TTY mode?) then (yes)
+                            :Send raw chunks immediately;
+                            note right
+                                No line buffering for TTY
+                                Preserves prompts and
+                                interactive behavior
+                            end note
+                        else (no)
+                            :Split by newlines;
+                            :Buffer incomplete lines;
+                        endif
+
+                        if (Stream type?) then (stdout)
+                            :Display in normal color;
+                        else (stderr)
+                            :Display in error color;
+                        endif
+
+                        :Write to output channel;
+                    else (EOF - 0 bytes)
+                        :Exit read loop;
+                        stop
+                    endif
+
+                repeat while (Channel open and not cancelled?)
+            }
+
+        fork again
+            partition "Input Writer Task" {
+                repeat
+                    :Wait for input from channel;
+
+                    :Normalize line endings;
+                    note right
+                        \r\n → \r (TTY expects CR)
+                        Add trailing \n if missing
+                    end note
+
+                    :Encode to UTF-8;
+                    :Write to stdin stream;
+                    :Flush stream;
+
+                repeat while (Channel open and not cancelled?)
+            }
+
+        fork again
+            partition "Interactive Loop" {
+                if (User action?) then (Ctrl+C)
+                    :Write ETX character (0x03);
+                    :Send to stdin;
+                    :Container sends SIGINT;
+                elseif (Type command) then
+                    :Add to input queue;
+                    :Input writer sends to container;
+                elseif (Stop/Exit) then
+                    :Cancel all tokens;
+                    :Close input channel;
+                    :Dispose streams;
+                    :Wait for exit code;
+                    #LightGreen:Display exit code;
+                    stop
+                endif
+            }
+        end fork
+    }
+
+else (Single command)
+    partition "Non-Interactive Mode" {
+        :Create exec instance in container;
+        note right
+            Parameters:
+            • Cmd: parsed argv array
+            • AttachStdout: true
+            • AttachStderr: true
+            • AttachStdin: false
+            • Tty: false
+        end note
+
+        :Call Docker API:\nPOST /containers/{id}/exec;
+        :Receive exec ID;
+
+        :Start exec (non-streaming);
+        :Call Docker API:\nPOST /exec/{id}/start?Detach=false;
+
+        :Wait for completion;
+
+        fork
+            :Read stdout stream;
+            repeat
+                :Read output lines;
+                :Display in console;
+            repeat while (More data?)
+        fork again
+            :Read stderr stream;
+            repeat
+                :Read error lines;
+                :Display in red;
+            repeat while (More data?)
+        end fork
+
+        :Get exit code from exec inspect;
+
+        if (Exit code == 0?) then (yes)
+            #LightGreen:Display success message;
+            :Log command success;
+        else (non-zero)
+            #Pink:Display failure message;
+            :Log command failure;
+            :Show exit code to user;
+        endif
+    }
+endif
+
+:Command execution complete;
+
+stop
+
+@enduml

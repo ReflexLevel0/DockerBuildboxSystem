@@ -1,0 +1,74 @@
+@startuml Container Creation Flow
+!theme plain
+skinparam activityDiamondBackgroundColor LightGray
+skinparam activityStartColor Green
+skinparam activityEndColor Red
+
+title Container Creation with Volume
+
+start
+
+note right
+    Previous: Container discovery
+    determined no container exists
+end note
+
+partition "Volume Setup" {
+    :Get or create shared volume;
+
+    :Query Docker for volume "buildbox-shared";
+
+    if (Volume exists?) then (yes)
+        :Retrieve volume details;
+    else (no)
+        :Create volume "buildbox-shared";
+    endif
+}
+
+partition "Build Configuration" {
+    :Build container configuration;
+    note right
+        <b>Configuration:</b>
+        • Image: selected image
+        • HostConfig.Binds:
+          "buildbox-shared:/data/"
+        • Tty: true
+        • AttachStdin: true
+        • AttachStdout: true
+        • AttachStderr: true
+        • WorkingDir: /data/
+    end note
+}
+
+partition "Create Container" {
+    :Call Docker API:\nPOST /containers/create;
+
+    if (Create successful?) then (yes)
+        :Receive container ID;
+
+        :Inspect newly created container;
+
+        :Store container details;
+
+        #LightGreen:Container created successfully;
+
+    else (no)
+        #Pink:Creation failed;
+        :Display error message;
+        note right
+            Common errors:
+            • Image not found
+            • Invalid configuration
+            • Docker daemon issue
+        end note
+    endif
+}
+
+note right
+    Container now in "Created" state,
+    ready to be started
+end note
+
+stop
+
+@enduml

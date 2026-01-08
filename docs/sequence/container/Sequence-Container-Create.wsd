@@ -1,0 +1,90 @@
+@startuml Container Creation
+!theme plain
+skinparam sequenceMessageAlign center
+
+title Container Creation Flow
+
+actor User
+participant "ContainerListViewModel" as VM
+participant "IContainerService" as ContainerSvc
+participant "IVolumeService" as VolumeSvc
+participant "Docker Engine" as Docker
+
+== Container Discovery ==
+
+User -> VM: Select Image
+activate VM
+
+VM -> ContainerSvc: ListContainersAsync(all: true)
+activate ContainerSvc
+ContainerSvc -> Docker: GET /containers/json?all=1
+Docker --> ContainerSvc: Container List
+deactivate ContainerSvc
+
+alt Container Exists for Image
+    VM -> VM: Found existing container
+    VM -> ContainerSvc: InspectAsync(containerId)
+    activate ContainerSvc
+    ContainerSvc -> Docker: GET /containers/{id}/json
+    Docker --> ContainerSvc: Container Details
+    deactivate ContainerSvc
+    note right of VM
+        Container exists,
+        skip creation
+    end note
+
+else No Container Found
+    VM -> VM: Need to create new container
+
+    == Volume Setup ==
+
+    VM -> VolumeSvc: GetSharedVolumeAsync(createIfNotExists: true)
+    activate VolumeSvc
+
+    VolumeSvc -> Docker: GET /volumes/buildbox-shared
+
+    alt Volume Doesn't Exist
+        Docker --> VolumeSvc: 404 Not Found
+        VolumeSvc -> Docker: POST /volumes/create\nName: buildbox-shared
+        note right
+            Volume persists data
+            across container restarts
+        end note
+        Docker --> VolumeSvc: Volume Created
+    else Volume Exists
+        Docker --> VolumeSvc: Volume Info
+    end
+
+    deactivate VolumeSvc
+
+    == Container Creation ==
+
+    VM -> ContainerSvc: CreateContainerAsync(options)
+    activate ContainerSvc
+
+    note right
+        Options include:
+        • Image: selected image name
+        • HostConfig.Binds:
+          "buildbox-shared:/data/"
+        • Tty: true
+        • AttachStdin: true
+        • AttachStdout: true
+        • AttachStderr: true
+    end note
+
+    ContainerSvc -> Docker: POST /containers/create
+    Docker --> ContainerSvc: Container ID
+    deactivate ContainerSvc
+
+    VM -> ContainerSvc: InspectAsync(containerId)
+    activate ContainerSvc
+    ContainerSvc -> Docker: GET /containers/{id}/json
+    Docker --> ContainerSvc: Container Details
+    deactivate ContainerSvc
+end
+
+VM --> User: Container Ready (Created state)
+deactivate VM
+
+@enduml

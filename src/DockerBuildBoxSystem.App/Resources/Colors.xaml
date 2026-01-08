@@ -16,6 +16,8 @@
     <!-- Brushes -->
     <SolidColorBrush x:Key="PrimaryBrush" Color="{StaticResource PrimaryColor}"/>
     <SolidColorBrush x:Key="TitleTextBrush" Color="{StaticResource TitleTextColor}"/>
+    <SolidColorBrush x:Key="ErrorBrush" Color="{StaticResource ErrorColor}"/>
+    <SolidColorBrush x:Key="SuccessBrush" Color="{StaticResource SuccessColor}"/>
 
     <!-- Container Terminal Brushes -->
     <SolidColorBrush x:Key="ContainerBackgroundBrush" Color="{StaticResource ContainerBackgroundColor}"/>

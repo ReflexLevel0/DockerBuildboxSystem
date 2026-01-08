@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Formats.Tar;
 using System.Linq;
+using System.Reflection.Metadata.Ecma335;
 using System.Text;
 using System.Threading.Channels;
 using System.Threading.Tasks;
@@ -703,6 +704,13 @@ namespace DockerBuildBoxSystem.Domain
                 }
             }
         }
+
+        public async Task<bool> ContainerDirectoryExists(string containerId, string containerPath, CancellationToken ct = default)
+        {
+            var result = await ExecAsync(containerId, ["ls", containerPath], ct);
+            return result.ExitCode == 0 || !result.Error.Contains("No such file or directory");
+        }
+
         #endregion
 
         #region Helpers

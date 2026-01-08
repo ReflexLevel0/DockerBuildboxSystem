@@ -15,6 +15,7 @@ namespace DockerBuildBoxSystem.Contracts
     /// as a method to open the configuration for manual editing.</remarks>
     public interface ISyncIgnoreService
     {
+        string FilePath { get; }
         Task <List<string>> LoadSyncIgnoreAsync();
         Task SaveSyncIgnoreAsync(List<string> syncIgnore);
         void OpenSyncIgnore();

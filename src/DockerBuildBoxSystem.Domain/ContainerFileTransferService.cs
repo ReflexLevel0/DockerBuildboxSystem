@@ -169,5 +169,25 @@ namespace DockerBuildBoxSystem.Domain
                 return (false, "ERROR: " + ex.Message);
             }
         }
+
+        public async Task<(bool Success, string Error)> CreateDirectoryInContainerAsync(string containerId, string containerPath, CancellationToken ct = default)
+        {
+            try
+            {
+                ct.ThrowIfCancellationRequested();
+                var (exitCode, output, error) = await _containerService.ExecAsync(containerId, new[] { "mkdir", "-p", containerPath }, ct);
+                if (exitCode != 0)
+                    return (false, $"ERROR (ExitCode {exitCode}): {error}");
+                return (true, output);
+            }
+            catch (OperationCanceledException)
+            {
+                return (false, "Cancelled");
+            }
+            catch (Exception ex)
+            {
+                return (false, "EXCEPTION: " + ex.Message);
+            }
+        }
     }
 }

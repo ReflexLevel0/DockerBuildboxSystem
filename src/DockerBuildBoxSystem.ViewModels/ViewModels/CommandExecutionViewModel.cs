@@ -75,6 +75,14 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 });
             };
 
+            // Refreshing container info every couple of seconds
+            new System.Threading.Timer(async _ =>
+            {
+                if (SelectedContainer == null) return;
+                var container = await _service.InspectAsync(SelectedContainer.Id);
+                SelectedContainer.Status = container.Status;
+            }, null, 0, 5000);
+
             //register to receive messages
             WeakReferenceMessenger.Default.RegisterAll(this);
         }

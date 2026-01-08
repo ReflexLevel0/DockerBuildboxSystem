@@ -43,15 +43,37 @@ namespace DockerBuildBoxSystem.Domain
             if (pattern.StartsWith("./"))
                 pattern = pattern[2..];
 
+            bool isDirectoryPattern = pattern.EndsWith("/");
+            if (isDirectoryPattern)
+                pattern = pattern[..^1];
+
+            pattern = pattern.Trim();
+            if (pattern.Length == 0) return;
+
+            const string ds = "__IGNOREPATTERNMATCHER__";
+
             string regexPattern = Regex.Escape(pattern)
-                .Replace(@"\*\*", ".*")
+                .Replace(@"\*\*", ds)
                 .Replace(@"\*", "[^/\\\\]*")
-                .Replace(@"\?", ".");
+                .Replace(@"\?", "[^/\\\\]")
+                .Replace(ds, ".*");
 
-            if (pattern.EndsWith("/"))
-                regexPattern = $"{regexPattern}.*";
+            bool startsWithSlash = pattern.StartsWith("/");
 
-            regexPattern = ".*" + regexPattern + ".*";
+            if (startsWithSlash)
+            {
+                regexPattern = "^" + regexPattern.Substring(1);
+            }
+            else
+            {
+                regexPattern = "(^|[/\\\\])" + regexPattern;
+            }
+
+            if (isDirectoryPattern)
+                regexPattern = regexPattern + "[/\\\\]";
+            else
+                regexPattern = regexPattern + "([/\\\\]|$)";
+
             _ignorePatterns.Add(new Regex(regexPattern, RegexOptions.IgnoreCase));
         }
 
