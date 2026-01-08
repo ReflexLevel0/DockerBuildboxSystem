@@ -16,6 +16,7 @@ namespace DockerBuildBoxSystem.Domain
         private readonly ISyncIgnoreService _syncIgnoreService;
         
         private FileSystemWatcher? _watcher;
+        private FileSystemWatcher? _syncIgnoreWatcher;
         private string? _rootPath;
         private string? _containerId;
         private string? _containerRootPath;
@@ -70,6 +71,9 @@ namespace DockerBuildBoxSystem.Domain
             //Load ignore patterns before starting the watcher
             await LoadIgnorePatternsAsync();
 
+            //Start watching the syncignore file for changes
+            StartSyncIgnoreWatcher();
+
             _watcher = new FileSystemWatcher(_rootPath)
             {
                 IncludeSubdirectories = true,
@@ -104,6 +108,8 @@ namespace DockerBuildBoxSystem.Domain
                 _watcher = null;
                 Log("Stopped watching.");
             }
+
+            StopSyncIgnoreWatcher();
         }
 
         public void PauseWatching()
@@ -134,7 +140,6 @@ namespace DockerBuildBoxSystem.Domain
                 return;
             }
 
-            Log($"Cleaning container directory: {_containerRootPath} with {excludedPaths?.Count() ?? 0} exclusions.");
             var (cleanSuccess, cleanError) = await _fileTransferService.EmptyDirectoryInContainerAsync(_containerId, _containerRootPath, excludedPaths, ct);
             ct.ThrowIfCancellationRequested();
             if (!cleanSuccess)
@@ -150,6 +155,9 @@ namespace DockerBuildBoxSystem.Domain
         public async Task ForceSyncAsync(CancellationToken ct = default)
         {
             ct.ThrowIfCancellationRequested();
+
+            //Reload ignore patterns before syncing
+            await LoadIgnorePatternsAsync();
 
             if (string.IsNullOrWhiteSpace(_rootPath) || !Directory.Exists(_rootPath))
             {
@@ -263,6 +271,9 @@ namespace DockerBuildBoxSystem.Domain
         {
             ct.ThrowIfCancellationRequested();
 
+            //Reload ignore patterns before syncing
+            await LoadIgnorePatternsAsync();
+
             if (string.IsNullOrWhiteSpace(_rootPath))
             {
                 Log("Error: Host path is not set.");
@@ -370,6 +381,99 @@ namespace DockerBuildBoxSystem.Domain
             var patternsString = string.Join(Environment.NewLine, patterns);
             _ignorePatternMatcher.LoadPatterns(patternsString);
             Log($"Sync Ignore file loaded with {patterns.Count()} exclusions.");
+        }
+
+        /// <summary>
+        /// Starts watching the syncignore file for changes and automatically reloads patterns when modified.
+        /// </summary>
+        private void StartSyncIgnoreWatcher()
+        {
+            try
+            {
+                var syncIgnorePath = _syncIgnoreService.FilePath;
+                if (string.IsNullOrWhiteSpace(syncIgnorePath))
+                    return;
+
+                var directory = Path.GetDirectoryName(syncIgnorePath);
+                var fileName = Path.GetFileName(syncIgnorePath);
+
+                if (string.IsNullOrWhiteSpace(directory) || string.IsNullOrWhiteSpace(fileName))
+                    return;
+
+                //Ensure directory exists before watching
+                if (!Directory.Exists(directory))
+                    return;
+
+                StopSyncIgnoreWatcher();
+
+                _syncIgnoreWatcher = new FileSystemWatcher(directory)
+                {
+                    Filter = fileName,
+                    NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName
+                };
+
+                _syncIgnoreWatcher.Changed += OnSyncIgnoreChanged;
+                _syncIgnoreWatcher.Created += OnSyncIgnoreChanged;
+                _syncIgnoreWatcher.Deleted += OnSyncIgnoreDeleted;
+                _syncIgnoreWatcher.Error += OnSyncIgnoreError;
+
+                _syncIgnoreWatcher.EnableRaisingEvents = true;
+                Log("Started watching .syncignore file for changes.");
+            }
+            catch (Exception ex)
+            {
+                Log($"Warning: Could not start watching .syncignore file: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Stops watching the syncignore file.
+        /// </summary>
+        private void StopSyncIgnoreWatcher()
+        {
+            if (_syncIgnoreWatcher != null)
+            {
+                _syncIgnoreWatcher.EnableRaisingEvents = false;
+                _syncIgnoreWatcher.Changed -= OnSyncIgnoreChanged;
+                _syncIgnoreWatcher.Created -= OnSyncIgnoreChanged;
+                _syncIgnoreWatcher.Deleted -= OnSyncIgnoreDeleted;
+                _syncIgnoreWatcher.Error -= OnSyncIgnoreError;
+                _syncIgnoreWatcher.Dispose();
+                _syncIgnoreWatcher = null;
+            }
+        }
+
+        private async void OnSyncIgnoreChanged(object sender, FileSystemEventArgs e)
+        {
+            try
+            {
+                //Debounce to avoid multiple rapid reloads
+                await Task.Delay(300);
+                await LoadIgnorePatternsAsync();
+            }
+            catch (Exception ex)
+            {
+                Log($"Warning: Failed to reload .syncignore file: {ex.Message}");
+            }
+        }
+
+        private void OnSyncIgnoreDeleted(object sender, FileSystemEventArgs e)
+        {
+            try
+            {
+                //Clear all patterns when syncignore is deleted
+                _ignorePatternMatcher.LoadPatterns(string.Empty);
+                Log(".syncignore file deleted - all patterns cleared.");
+            }
+            catch (Exception ex)
+            {
+                Log($"Warning: Error handling .syncignore deletion: {ex.Message}");
+            }
+        }
+
+        private void OnSyncIgnoreError(object sender, ErrorEventArgs e)
+        {
+            Log($".syncignore watcher error: {e.GetException()?.Message ?? "Unknown error"}");
         }
 
         private async void OnCreated(object sender, FileSystemEventArgs e)
