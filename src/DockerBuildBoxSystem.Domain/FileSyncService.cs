@@ -353,6 +353,10 @@ namespace DockerBuildBoxSystem.Domain
                 if (IsIgnored(subDir))
                     continue;
 
+                string relative = Path.GetRelativePath(_rootPath!, subDir);
+                string targetDir = Path.Combine(tempRoot, relative);
+                Directory.CreateDirectory(targetDir);
+
                 CopyToTempRecursive(subDir, tempRoot, ct);
             }
         }
