@@ -47,14 +47,19 @@ namespace DockerBuildBoxSystem.Domain
             if (isDirectoryPattern)
                 pattern = pattern[..^1];
 
+            pattern = pattern.Trim();
+            if (pattern.Length == 0) return;
+
+            //in the rare case the user would ever want DOUBLE_STAR_PLACEHOLDER as a name for something...
+            const string ds = "__IGNOREPATTERNMATCHER__";
+
             string regexPattern = Regex.Escape(pattern)
-                .Replace(@"\*\*", "DOUBLE_STAR_PLACEHOLDER")
+                .Replace(@"\*\*", ds)
                 .Replace(@"\*", "[^/\\\\]*")
                 .Replace(@"\?", "[^/\\\\]")
-                .Replace("DOUBLE_STAR_PLACEHOLDER", ".*");
+                .Replace(ds, ".*");
 
             bool startsWithSlash = pattern.StartsWith("/");
-            bool containsSlash = pattern.Contains('/') || pattern.Contains('\\');
 
             if (startsWithSlash)
             {
