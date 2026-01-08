@@ -8,15 +8,15 @@ DockerBuildBoxSystem is a Windows desktop application (WPF, .NET) that helps you
 
 
 **Contents**
-- [Introduction](#-introduction)
-- [Architecture Overview](#%EF%B8%8F-architecture-overview)
-- [Installation](#-installation)
-- [Configuration](#%EF%B8%8F-configuration)
-- [User Controls](#%EF%B8%8F-user-controls)
-- [Commands & Arguments](#%EF%B8%8F-user-controls)
-- [Quick Start](#-quick-start)
-- [Testing](#-testing)
-- [Troubleshooting](#%EF%B8%8F-troubleshooting)
+- [📖 Introduction](#-introduction)
+- [🏗️ Architecture Overview](#%EF%B8%8F-architecture-overview)
+- [💻 Installation](#-installation)
+- [⚙️ Configuration](#%EF%B8%8F-configuration)
+- [🎛️ User Controls](#%EF%B8%8F-user-controls)
+- [📝 Commands & Arguments](#%EF%B8%8F-user-controls)
+- [🚀 Quick Start](#-quick-start)
+- [🧪 Testing](#-testing)
+- [⚠️ Troubleshooting](#%EF%B8%8F-troubleshooting)
 
 ## 📖 Introduction
 DockerBuildBoxSystem centralizes common Docker developer workflows:
@@ -31,21 +31,21 @@ DockerBuildBoxSystem centralizes common Docker developer workflows:
 
 <img
   src="https://github.com/ReflexLevel0/DockerBuildboxSystem/blob/DBS-208-add-readme/docs/product/application.png"
-  width="60%"
+  width="70%"
   alt="Docker Buildbox App User Interface"
 />
 
 ## 🏗️ Architecture Overview
 The app is organized into layered projects with clear contracts and domain services:
 
-* **Presentation**: WPF UI with JSON-defined controls and ViewModels; handles binding, commands, input, and progress/log display.
+* **Presentation**: WPF UI with view models and JSON-defined controls; handles binding, commands, input, and progress/log display.
 * **Core**: Domain services implementing workflows for images, containers, volumes, commands, file transfer, and continuous sync; defines contracts, models, and business rules independent of UI/OS.
 * **Infrastructure**: Adapters and concrete implementations integrating with Docker and the OS (Docker.DotNet, external processes, filesystem, environment, settings persistence, logging).
 
 
 <img
   src="https://github.com/ReflexLevel0/DockerBuildboxSystem/blob/development/docs/plantumlimages/Architecture.png"
-  width="60%"
+  width="50%"
   alt="Architecture Overview Diagram"
 />
 
@@ -72,38 +72,42 @@ Options:
 
 ## ⚙️ Configuration
 The app reads settings and UI definitions from JSON files:
-- [App settings](https://github.com/ReflexLevel0/DockerBuildboxSystem/blob/development/src/DockerBuildBoxSystem.App/Config/appsettings.json) with optional [Development overrides](https://github.com/ReflexLevel0/DockerBuildboxSystem/blob/development/src/DockerBuildBoxSystem.App/Config/appsettings.Development.json).
-- [UI controls](https://github.com/ReflexLevel0/DockerBuildboxSystem/blob/development/src/DockerBuildBoxSystem.App/Config/controls.json) — defines inputs and buttons shown in the UI.
-- Container creation arguments: provide `container_creation_args.json` to specify Docker `HostConfig` options when creating containers.
+- [App settings](https://github.com/ReflexLevel0/DockerBuildboxSystem/blob/development/src/DockerBuildBoxSystem.App/Config/appsettings.json) - app settings, with optional [Development overrides](https://github.com/ReflexLevel0/DockerBuildboxSystem/blob/development/src/DockerBuildBoxSystem.App/Config/appsettings.Development.json).
+- [UI controls](https://github.com/ReflexLevel0/DockerBuildboxSystem/blob/development/src/DockerBuildBoxSystem.App/Config/controls.json) - defines inputs and buttons shown in the UI.
+- [Container creation arguments & build directory location](https://github.com/ReflexLevel0/DockerBuildboxSystem/blob/development/src/DockerBuildBoxSystem.App/Config/config.json) - defines parameters for container creation and the location of the build directory.
 
 
-Sample `container_creation_args.json` demonstrating how to assign 8 GB memory and 4 CPUs, enable auto-removal on stop, and configure both a read-only bind mount and a volume mount.
+Sample `config.json` demonstrating how to assign 8 GB memory and 4 CPUs, enable auto-removal on stop, and configure both a read-only bind mount and a volume mount.
 ```json
 {
-	"AutoRemove": true,
-	"Memory": 8000000000,
-	"CpusetCpus": 4,
-	"Mounts": [
-		{
-			"Type": "bind",
-			"Source": "C:/Users/User/videos",
-			"Target": "/server/videos",
-			"ReadOnly": true,
-			"BindOptions": { "CreateMountpoint": true }
-		},
-		{
-			"Type": "volume",
-			"Source": "gameVolume",
-			"Target": "/games"
-		}
-	]
+	"BuildDirectoryPath": "build",
+	"ContainerCreationParams": 
+	{
+		"AutoRemove": true,
+		"Memory": 8000000000,
+		"CpusetCpus": 4,
+		"Mounts": [
+			{
+				"Type": "bind",
+				"Source": "C:/Users/User/videos",
+				"Target": "/server/videos",
+				"ReadOnly": true,
+				"BindOptions": { "CreateMountpoint": true }
+			},
+			{
+				"Type": "volume",
+				"Source": "gameVolume",
+				"Target": "/games"
+			}
+		]
+	}
 }
 ```
 Reference: HostConfig options in Docker.DotNet (see the project's [documentation](https://github.com/dotnet/Docker.DotNet/blob/master/src/Docker.DotNet/Models/HostConfig.Generated.cs)).
 
 
 ## 🎛️ User Controls
-Controls are defined in [`controls.json`](https://github.com/ReflexLevel0/DockerBuildboxSystem/blob/development/src/DockerBuildBoxSystem.App/Config/controls.json) and rendered dynamically. The current set includes:
+Controls are defined in [`controls.json`](https://github.com/ReflexLevel0/DockerBuildboxSystem/blob/development/src/DockerBuildBoxSystem.App/Config/controls.json) and are rendered dynamically. The current set includes:
 
 #### Text Inputs
 
@@ -150,7 +154,7 @@ docker build -t buildbox-mock -f docs/buildbox_mock/Dockerfile docs/buildbox_moc
 - Launch the app from src/DockerBuildBoxSystem.App after building.
 
 3) Create a container:
-- Provide `container_creation_args.json` as needed (memory, CPUs, mounts, volumes).
+- Provide `config.json` as needed (memory, CPUs, mounts, volumes).
 - Create and start the container from the UI.
 
 4) Run commands:
@@ -170,5 +174,5 @@ dotnet test DockerBuildBoxSystem.sln
 ## ⚠️ Troubleshooting
 - Ensure Docker Desktop is running and accessible.
 - If commands fail inside the container, verify mounts and paths (e.g., `/data`).
-- Adjust `container_creation_args.json` for resource limits and mounts.
+- Adjust `config.json` for resource limits and mounts.
 - For UI controls using `${dir}`, set the directory value appropriately.
