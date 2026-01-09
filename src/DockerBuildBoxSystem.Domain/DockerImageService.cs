@@ -1,11 +1,6 @@
 ﻿using Docker.DotNet;
 using Docker.DotNet.Models;
 using DockerBuildBoxSystem.Contracts;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace DockerBuildBoxSystem.Domain
 {
@@ -50,7 +45,7 @@ namespace DockerBuildBoxSystem.Domain
                     Labels = inspect.Config?.Labels is null ? new Dictionary<string, string>() : new Dictionary<string, string>(inspect.Config.Labels)
                 };
             }
-            catch (DockerImageNotFoundException ex)
+            catch (DockerImageNotFoundException)
             {
                 return null;
             }

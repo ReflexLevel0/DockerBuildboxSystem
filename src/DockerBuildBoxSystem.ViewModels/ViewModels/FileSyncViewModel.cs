@@ -4,12 +4,6 @@ using CommunityToolkit.Mvvm.Messaging;
 using DockerBuildBoxSystem.Contracts;
 using DockerBuildBoxSystem.ViewModels.Common;
 using DockerBuildBoxSystem.ViewModels.Messages;
-using System;
-using System.Collections.Generic;
-using System.ComponentModel.Design;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace DockerBuildBoxSystem.ViewModels.ViewModels
 {
@@ -54,7 +48,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private string _hostSyncPath = string.Empty;
 
         [ObservableProperty]
-        private string _SyncOutPath = string.Empty;
+        private string _syncOutPath = string.Empty;
 
         [ObservableProperty]
         private string _containerSyncPath = "/data/";
@@ -93,7 +87,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
             _settingsService.SourcePathChanged += OnSourcePathChanged;
             _settingsService.SyncOutPathChanged += OnSyncOutPathChanged;
-            InitializeSettingsAsync();
+            _ = InitializeSettingsAsync();
 
             //register to receive messages
             WeakReferenceMessenger.Default.RegisterAll(this);
@@ -102,7 +96,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
         private void CancelAutoSync()
         {
-            CancellationTokenSource? cts = null;
+            CancellationTokenSource? cts;
 
             lock (_autoSyncSemaphore)
             {
@@ -421,6 +415,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             _settingsService.SourcePathChanged -= OnSourcePathChanged;
             _fileSyncService.StopWatching();
             await base.DisposeAsync();
+            GC.SuppressFinalize(this);
         }
 
     }

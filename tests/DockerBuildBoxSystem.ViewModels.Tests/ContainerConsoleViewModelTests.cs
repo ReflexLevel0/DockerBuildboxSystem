@@ -5,7 +5,6 @@ using DockerBuildBoxSystem.ViewModels.Common;
 using Microsoft.Extensions.Configuration;
 using NSubstitute;
 using static DockerBuildBoxSystem.TestUtils.ChannelTestUtil;
-using Docker.DotNet.Models;
 
 namespace DockerBuildBoxSystem.ViewModels.Tests;
 
@@ -108,6 +107,7 @@ public class ContainerConsoleViewModelTests
             {
                 async IAsyncEnumerable<(bool IsStdErr, string Line)> Stream()
                 {
+                    await Task.Yield();
                     LogsService.IsRunning.Returns(true);
                     yield return (false, "sup");
                 }
@@ -189,6 +189,7 @@ public class ContainerConsoleViewModelTests
             {
                 async IAsyncEnumerable<(bool IsStdErr, string Line)> Stream()
                 {
+                    await Task.Yield();
                     CommandService.IsRunning.Returns(true);
                     await foreach (var (isErr, line) in output.ReadAllAsync().ConfigureAwait(false))
                     {
@@ -251,6 +252,7 @@ public class ContainerConsoleViewModelTests
             {
                 async IAsyncEnumerable<(bool IsStdErr, string Line)> Stream()
                 {
+                    await Task.Yield();
                     LogsService.IsRunning.Returns(true);
                     yield return (false, "sup");
                 }
@@ -317,6 +319,7 @@ public class ContainerConsoleViewModelTests
             {
                 async IAsyncEnumerable<(bool IsStdErr, string Line)> Stream()
                 {
+                    await Task.Yield();
                     LogsService.IsRunning.Returns(true);
                     yield return (false, "sup");
                     LogsService.IsRunning.Returns(false);

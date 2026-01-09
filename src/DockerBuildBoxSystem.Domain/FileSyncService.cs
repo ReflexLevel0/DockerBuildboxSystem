@@ -184,7 +184,7 @@ namespace DockerBuildBoxSystem.Domain
 
             try
             {
-                ForceSyncStarted?.Invoke(this, null);
+                ForceSyncStarted?.Invoke(this, EventArgs.Empty);
                 Log("Starting Force Sync...");
                 Directory.CreateDirectory(tempRoot);
 
@@ -224,7 +224,7 @@ namespace DockerBuildBoxSystem.Domain
             }
             finally
             {
-                ForceSyncStopped?.Invoke(this, null);
+                ForceSyncStopped?.Invoke(this, EventArgs.Empty);
 
                 //clean up temp folder with retry logic
                 await DeleteTempFolderWithRetryAsync(tempRoot);

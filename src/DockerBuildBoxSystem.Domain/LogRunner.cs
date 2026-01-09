@@ -1,13 +1,6 @@
 ﻿using DockerBuildBoxSystem.Contracts;
-using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Linq;
 using System.Runtime.CompilerServices;
-using System.Text;
-using System.Text.RegularExpressions;
 using System.Threading.Channels;
-using System.Threading.Tasks;
 
 namespace DockerBuildBoxSystem.Domain
 {
@@ -82,9 +75,10 @@ namespace DockerBuildBoxSystem.Domain
         /// <summary>
         /// Initiates an asynchronous operation to stop the logging process.
         /// </summary>
-        public async Task StopAsync()
+        public Task StopAsync()
         {
             _logsCts?.Cancel();
+            return Task.CompletedTask;
         }
 
         public ValueTask DisposeAsync()

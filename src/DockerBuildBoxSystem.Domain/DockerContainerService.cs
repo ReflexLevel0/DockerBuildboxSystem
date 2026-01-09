@@ -1,16 +1,10 @@
 ﻿using Docker.DotNet;
 using Docker.DotNet.Models;
 using DockerBuildBoxSystem.Contracts;
-using System;
 using System.Buffers;
-using System.Collections.Generic;
-using System.ComponentModel;
 using System.Formats.Tar;
-using System.Linq;
-using System.Reflection.Metadata.Ecma335;
 using System.Text;
 using System.Threading.Channels;
-using System.Threading.Tasks;
 
 namespace DockerBuildBoxSystem.Domain
 {
@@ -221,7 +215,7 @@ namespace DockerBuildBoxSystem.Domain
         #endregion
 
         #region Container Logs and Exec
-        public async Task<ChannelReader<(bool IsStdErr, string Line)>> StreamLogsAsync(
+        public Task<ChannelReader<(bool IsStdErr, string Line)>> StreamLogsAsync(
             string containerId,
             bool follow = true,
             string tail = "all",
@@ -325,7 +319,7 @@ namespace DockerBuildBoxSystem.Domain
 
             }, ct);
 
-            return ch.Reader;
+            return Task.FromResult(ch.Reader);
         }
 
         public async Task<(ChannelReader<(bool IsStdErr, string Line)> Output, ChannelWriter<string> Input, Task<long> ExitCodeTask)> StreamExecAsync(
@@ -464,6 +458,9 @@ namespace DockerBuildBoxSystem.Domain
                 }
                 finally
                 {
+                    //Return the buffer to the pool
+                    ArrayPool<byte>.Shared.Return(buffer);
+
                     //Stop stdin
                     try { stdinCts.Cancel(); } catch { }
                     try { inCh.Writer.TryComplete(); } catch { }
