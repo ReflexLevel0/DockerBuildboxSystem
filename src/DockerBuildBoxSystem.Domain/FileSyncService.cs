@@ -30,6 +30,9 @@ namespace DockerBuildBoxSystem.Domain
 
         public ObservableCollection<string> Changes { get; } = new ObservableCollection<string>();
 
+        public event EventHandler? ForceSyncStarted;
+        public event EventHandler? ForceSyncStopped;
+
         public FileSyncService(
             IContainerService containerService,
             IContainerFileTransferService fileTransferService,
@@ -181,6 +184,7 @@ namespace DockerBuildBoxSystem.Domain
 
             try
             {
+                ForceSyncStarted?.Invoke(this, null);
                 Log("Starting Force Sync...");
                 Directory.CreateDirectory(tempRoot);
 
@@ -220,6 +224,8 @@ namespace DockerBuildBoxSystem.Domain
             }
             finally
             {
+                ForceSyncStopped?.Invoke(this, null);
+
                 //clean up temp folder with retry logic
                 await DeleteTempFolderWithRetryAsync(tempRoot);
             }

@@ -1,4 +1,6 @@
-﻿using DockerBuildBoxSystem.ViewModels.Main;
+﻿using DockerBuildBoxSystem.Contracts;
+using DockerBuildBoxSystem.ViewModels.Main;
+using DockerBuildBoxSystem.ViewModels.ViewModels;
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
@@ -18,7 +20,7 @@ public partial class MainWindow : Window
     /// Initializes a new instance of the MainWindow class. The ViewModel is injected via dependency injection.
     /// </summary>
     /// <param name="viewModel">The MainViewModel instance injected by dependency injection container.</param>
-    public MainWindow(MainViewModel viewModel)
+    public MainWindow(MainViewModel viewModel, IFileSyncService fileSyncService)
     {
         InitializeComponent();
         
@@ -35,6 +37,30 @@ public partial class MainWindow : Window
 
         //Cleanup when window is closing (before it closes)
         Closing += OnWindowClosing;
+
+        ((SpinnerOverlayViewModel)ShutdownOverlayControl.DataContext).Text = "Shutting down...";
+
+        // Setting up syncing overlay
+        ((SpinnerOverlayViewModel)SyncingOverlayControl.DataContext).Text = "Syncing...";
+        fileSyncService.ForceSyncStarted += async (s, e) =>
+        {
+            await Application.Current.Dispatcher.InvokeAsync(async () =>
+            {
+                if (SyncingOverlayControl == null) return;
+                SyncingOverlayControl.Visibility = Visibility.Visible;
+                await Task.Yield();
+            });
+
+        };
+        fileSyncService.ForceSyncStopped += async (s, e) =>
+        {
+            await Application.Current.Dispatcher.InvokeAsync(async () =>
+            {
+                if (SyncingOverlayControl == null) return;
+                SyncingOverlayControl.Visibility = Visibility.Collapsed;
+                await Task.Yield();
+            });
+        };
     }
 
     private async void OnWindowClosing(object? sender, CancelEventArgs e)

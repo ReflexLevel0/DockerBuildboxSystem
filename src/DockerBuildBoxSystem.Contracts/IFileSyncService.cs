@@ -11,6 +11,17 @@ namespace DockerBuildBoxSystem.Contracts
     public interface IFileSyncService : IDisposable
     {
         ObservableCollection<string> Changes { get; }
+
+        /// <summary>
+        /// Event that gets invoked when force sync starts
+        /// </summary>
+        event EventHandler? ForceSyncStarted;
+
+        /// <summary>
+        /// Event that gets invoked when force sync stopped
+        /// </summary>
+        event EventHandler? ForceSyncStopped;
+
         void Configure(string path, string containerId, string containerRootPath = "/data/");
 
         /// <summary>
