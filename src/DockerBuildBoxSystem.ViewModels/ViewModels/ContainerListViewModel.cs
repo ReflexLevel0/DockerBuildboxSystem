@@ -499,6 +499,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// </remarks>
         /// <returns>the task representing the asynchronous operation.</returns>
         [RelayCommand(CanExecute = nameof(IsContainerRunning))]
+        public Task OpenContainerInCmdAsync()
         {
             if (string.IsNullOrWhiteSpace(SelectedContainer?.Id)) return Task.CompletedTask;
             try
