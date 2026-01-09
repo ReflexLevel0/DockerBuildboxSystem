@@ -172,7 +172,7 @@
         <!-- Shutdown Overlay Component -->
         <uc:SpinnerOverlayControl x:Name="ShutdownOverlayControl"
                     Grid.RowSpan="3"
-                    Panel.ZIndex="100"
+                    Panel.ZIndex="200"
                     Visibility="Collapsed"/>
 
         <!-- Syncing Overlay Component -->
