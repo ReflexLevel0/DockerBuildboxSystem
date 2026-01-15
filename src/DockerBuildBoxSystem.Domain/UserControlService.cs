@@ -144,14 +144,14 @@ namespace DockerBuildBoxSystem.Domain
         }
 
         /// <summary>
-        /// Replaces variable tokens in the command string with their corresponding values from the user variables list asynchronously.
+        /// Replaces variable tokens in the command string with their corresponding values from the user variables list.
         /// </summary>
         /// <remarks>Placeholders in the command string must match the format <c>${variableName}</c>,
         /// where <c>variableName</c> corresponds to an Id in the user-defined variables.</remarks>
         /// <param name="command">The command string containing variable tokens.</param>
         /// <param name="userVariables">The list of user variables to replace in the command.</param>
         /// <returns>The command string with variables replaced by their values.</returns>
-        public async Task<string> RetrieveVariableAsync(string command, List<UserVariables> userVariables)
+        public Task<string> RetrieveVariableAsync(string command, List<UserVariables> userVariables)
         {
             foreach (var variable in userVariables)
             {
@@ -162,7 +162,7 @@ namespace DockerBuildBoxSystem.Domain
                     command = command.Replace($"${{{variable.Id}}}", variable.Value);
                 }
             }
-            return command;
+            return Task.FromResult(command);
         }
     }
 }

@@ -184,7 +184,7 @@ namespace DockerBuildBoxSystem.Domain
 
             try
             {
-                ForceSyncStarted?.Invoke(this, null);
+                ForceSyncStarted?.Invoke(this, EventArgs.Empty);
                 Log("Starting Force Sync...");
                 Directory.CreateDirectory(tempRoot);
 
@@ -224,7 +224,7 @@ namespace DockerBuildBoxSystem.Domain
             }
             finally
             {
-                ForceSyncStopped?.Invoke(this, null);
+                ForceSyncStopped?.Invoke(this, EventArgs.Empty);
 
                 //clean up temp folder with retry logic
                 await DeleteTempFolderWithRetryAsync(tempRoot);
@@ -273,26 +273,26 @@ namespace DockerBuildBoxSystem.Domain
             }
         }
         // Performs a full sync from the container to the host directory
-        public async Task ForceSyncFromContainerAsync(CancellationToken ct = default)
+        public async Task ForceSyncFromContainerAsync(string hostPath, string containerId, string containerPath, CancellationToken ct = default)
         {
             ct.ThrowIfCancellationRequested();
 
             //Reload ignore patterns before syncing
             await LoadIgnorePatternsAsync();
 
-            if (string.IsNullOrWhiteSpace(_rootPath))
+            if (string.IsNullOrWhiteSpace(hostPath))
             {
                 Log("Error: Host path is not set.");
                 return;
             }
 
-            if (string.IsNullOrWhiteSpace(_containerId))
+            if (string.IsNullOrWhiteSpace(containerId))
             {
                 Log("Error: Container ID is not set.");
                 return;
             }
 
-            if (string.IsNullOrWhiteSpace(_containerRootPath))
+            if (string.IsNullOrWhiteSpace(containerPath))
             {
                 Log("Error: Container sync path is not set.");
                 return;
@@ -303,26 +303,26 @@ namespace DockerBuildBoxSystem.Domain
                 Log("Starting Force Sync from Container...");
 
                 // Ensure target directory exists
-                if (!Directory.Exists(_rootPath))
+                if (!Directory.Exists(hostPath))
                 {
-                    Directory.CreateDirectory(_rootPath);
+                    Directory.CreateDirectory(hostPath);
                 }
 
                 // Ensure build directory exists in the container
-                var containerRootExists = await _containerService.ContainerDirectoryExists(_containerId, _containerRootPath);
+                var containerRootExists = await _containerService.ContainerDirectoryExists(containerId, containerPath);
                 if (containerRootExists == false)
                 {
-                    Log($"Failed to copy from container: build directory '{_containerRootPath}' does not exist. You should create the directory in the container.");
+                    Log($"Failed to copy from container: build directory '{containerPath}' does not exist. You should create the directory in the container.");
                     return;
                 }
 
                 // Copy directly from container to host folder
-                var (success, error) = await _fileTransferService.CopyDirectoryFromContainerAsync(_containerId, _containerRootPath, _rootPath, ct);
+                var (success, error) = await _fileTransferService.CopyDirectoryFromContainerAsync(containerId, containerPath, hostPath, ct);
 
                 ct.ThrowIfCancellationRequested();
 
                 if (success)
-                    Log($"Full Folder Sync <- {_containerId}:{_containerRootPath} | Success");
+                    Log($"Full Folder Sync <- {containerId}:{containerPath} | Success");
                 else
                     Log($"Failed to copy from container: {error}");
             }

@@ -1,11 +1,6 @@
 ﻿using DockerBuildBoxSystem.Contracts;
-using System.Collections.Generic;
-using System.Linq;
-using System.Reflection.PortableExecutable;
 using System.Runtime.CompilerServices;
-using System.Text;
 using System.Threading.Channels;
-using System.Threading.Tasks;
 
 namespace DockerBuildBoxSystem.Domain
 {
@@ -153,12 +148,13 @@ namespace DockerBuildBoxSystem.Domain
         /// <summary>
         /// Stops the current operation if it is running.
         /// </summary>
-        public async Task StopAsync()
+        public Task StopAsync()
         {
-            if (!IsRunning) return;
+            if (!IsRunning) return Task.CompletedTask;
 
             _execCts?.Cancel();
             IsRunning = false;
+            return Task.CompletedTask;
         }
 
 

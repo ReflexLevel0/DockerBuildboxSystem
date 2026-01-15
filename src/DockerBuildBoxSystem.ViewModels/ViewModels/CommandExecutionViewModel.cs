@@ -2,13 +2,8 @@
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using DockerBuildBoxSystem.Contracts;
-using CommunityToolkit.Mvvm.Messaging;
-using CommunityToolkit.Mvvm.Messaging.Messages;
 using DockerBuildBoxSystem.ViewModels.Common;
 using DockerBuildBoxSystem.ViewModels.Messages;
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 
 namespace DockerBuildBoxSystem.ViewModels.ViewModels
 {
@@ -22,6 +17,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private readonly IUserControlService _userControlService;
         private readonly IViewModelLogger _logger;
         private readonly UserControlsViewModel _userControlsViewModel;
+        private readonly System.Threading.Timer _containerRefreshTimer;
 
         private string ContainerId
         {
@@ -76,11 +72,15 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             };
 
             // Refreshing container info every couple of seconds
-            new System.Threading.Timer(async _ =>
+            _containerRefreshTimer = new System.Threading.Timer(async _ =>
             {
-                if (SelectedContainer == null) return;
-                var container = await _service.InspectAsync(SelectedContainer.Id);
-                SelectedContainer.Status = container.Status;
+                var currentContainer = SelectedContainer;
+                if (currentContainer == null) return;
+                var container = await _service.InspectAsync(currentContainer.Id);
+                if (container != null && SelectedContainer?.Id == currentContainer.Id)
+                {
+                    currentContainer.Status = container.Status;
+                }
             }, null, 0, 5000);
 
             //register to receive messages
@@ -265,10 +265,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
         public override async ValueTask DisposeAsync()
         {
+            _containerRefreshTimer?.Dispose();
             WeakReferenceMessenger.Default.UnregisterAll(this);
             await StopExecAsync();
-            // Unregister message subscriptions
-            WeakReferenceMessenger.Default.UnregisterAll(this);
             await base.DisposeAsync();
         }
 

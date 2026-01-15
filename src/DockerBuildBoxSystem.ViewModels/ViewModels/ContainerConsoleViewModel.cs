@@ -1,23 +1,9 @@
-﻿using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
+﻿using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
-using Docker.DotNet.Models;
 using DockerBuildBoxSystem.Contracts;
 using DockerBuildBoxSystem.ViewModels.Common;
-using CommunityToolkit.Mvvm.Messaging;
 using DockerBuildBoxSystem.ViewModels.Messages;
 using Microsoft.Extensions.Configuration;
-using Microsoft.VisualBasic.Logging;
-using System;
-using System.Collections.Concurrent;
-using System.Collections.ObjectModel;
-using System.ComponentModel;
-using System.Linq;
-using System.Text;
-using System.Text.Json;
-using System.Threading;
-using System.Threading.Channels;
-using System.Threading.Tasks;
 
 namespace DockerBuildBoxSystem.ViewModels.ViewModels
 {
@@ -101,7 +87,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
             // Periodically refreshing container and image info 
             var refreshImagesContainersTimer = new System.Timers.Timer(new TimeSpan(0, 0, 5));
-            refreshImagesContainersTimer.Elapsed += async (_, _) =>
+            refreshImagesContainersTimer.Elapsed += (_, _) =>
             {
                 if (_synchronizationContext != null)
                 {
