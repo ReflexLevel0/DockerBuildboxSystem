@@ -315,8 +315,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 //construct container path, ensuring proper format
                 string containerPath = $"{ContainerSyncPath.TrimEnd('/')}/{ContainerSyncOutPath.TrimStart('/')}";
 
-                _fileSyncService.Configure(SyncOutPath, ContainerId, containerPath);
-                await _fileSyncService.ForceSyncFromContainerAsync().ConfigureAwait(false);
+                await _fileSyncService.ForceSyncFromContainerAsync(SyncOutPath, ContainerId, containerPath).ConfigureAwait(false);
 
                 _logger.LogWithNewline("[sync-out] Completed sync from container to host.", false, false);
             }
@@ -329,8 +328,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 //resume the file watcher if it was running before
                 if (wasWatching)
                 {
-                    //reconfigure back to the original host sync path
-                    _fileSyncService.Configure(HostSyncPath, ContainerId, ContainerSyncPath);
                     _fileSyncService.ResumeWatching();
                 }
             }

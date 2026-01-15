@@ -58,9 +58,12 @@ namespace DockerBuildBoxSystem.Contracts
         /// <summary>
         /// Copies the build directory from the container to the host
         /// </summary>
+        /// <param name="hostPath">The host directory path to copy to</param>
+        /// <param name="containerId">The container ID to copy from</param>
+        /// <param name="containerPath">The container path to copy from</param>
         /// <param name="ct"></param>
         /// <returns></returns>
-        Task ForceSyncFromContainerAsync(CancellationToken ct = default);
+        Task ForceSyncFromContainerAsync(string hostPath, string containerId, string containerPath, CancellationToken ct = default);
 
         /// <summary>
         /// Cleans the target directory in the container, excluding specified paths
