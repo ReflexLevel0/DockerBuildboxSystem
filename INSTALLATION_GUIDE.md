@@ -18,9 +18,9 @@ Choose the path that best fits your needs:
 
 | Installation Type                       | Description                                                                         | Link                                                                                                                                                  |
 | --------------------------------------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 🟢 **Standard Installer (Recommended)** | Self-contained Windows desktop app with Start Menu and optional Desktop shortcut.   | See [Standard Installer](https://github.com/ReflexLevel0/DockerBuildboxSystem/DBS-217-installation-document/INSTALLATION_GUIDE.md#standard-installer) |
-| 📦 **Portable (No Installer)**          | Run from a published folder without installing; useful for controlled environments. | See [Portable Deploy](https://github.com/ReflexLevel0/DockerBuildboxSystem/DBS-217-installation-document/INSTALLATION_GUIDE.md#portable-deploy)       |
-| 🛠 **Developer (From Source)**          | Build and run from source for development or CI/CD.                                 | See [Install for Developers](#install-for-developers)                                                                                                 |
+| 🟢 **Standard Installer (Recommended)** | Self-contained Windows desktop app with Start Menu and optional Desktop shortcut.   | See [Standard Installer](https://github.com/ReflexLevel0/DockerBuildboxSystem/edit/development/README.md#-standard-installer) |
+| 📦 **Portable (No Installer)**          | Run from a published folder without installing; useful for controlled environments. | See [Portable Deploy](https://github.com/ReflexLevel0/DockerBuildboxSystem/DBS-217-installation-document/INSTALLATION_GUIDE.md#-portable-deploy)       |
+| 🛠 **Developer (From Source)**          | Build and run from source for development or CI/CD.                                 | See [Install for Developers](https://github.com/ReflexLevel0/DockerBuildboxSystem/edit/development/README.md#-install-for-developers)                                                                                                 |
 
 ---
 
@@ -30,15 +30,6 @@ Choose the path that best fits your needs:
 * **Installer:** Inno Setup–based; non-admin (per-user)
 * **Target OS:** Windows 10 / 11 (x64)
 * **Required:** Docker Desktop + Docker CLI
-* **Installed Files**
-
-  * App binaries: `%LocalAppData%\Programs\Docker BuildBox System`
-  * Configuration shipped with app:
-
-    * [appsettings.json](src/DockerBuildBoxSystem.App/Config/appsettings.json)
-    * [appsettings.Development.json](src/DockerBuildBoxSystem.App/Config/appsettings.Development.json)
-    * [config.json](src/DockerBuildBoxSystem.App/Config/config.json)
-    * [controls.json](src/DockerBuildBoxSystem.App/Config/controls.json)
 
 ---
 
@@ -69,10 +60,8 @@ Choose the path that best fits your needs:
 ```powershell
 # Install Docker Desktop
 winget install --id Docker.DockerDesktop -e
-
 # Optional: .NET 8 SDK
 winget install --id Microsoft.DotNet.SDK.8 -e
-
 # Optional: Inno Setup
 winget install --id JRSoftware.InnoSetup -e
 ```
@@ -106,7 +95,7 @@ winget install --id JRSoftware.InnoSetup -e
 6. Launch App: Click “Launch Docker BuildBox System” at the end.
    - Result: Application starts and loads main window.
    - Tip: If Docker isn’t running, start Docker Desktop first.
-   
+
 ---
 
 ### 📦 Portable Deploy
@@ -206,7 +195,6 @@ Commands (optional):
 ```powershell
 # Verify Docker CLI
 "$Env:ProgramFiles\\Docker\\Docker\\resources\\bin\\docker.exe" version
-
 # Check engine
 "$Env:ProgramFiles\\Docker\\Docker\\resources\\bin\\docker.exe" info
 ```
