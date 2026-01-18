@@ -150,27 +150,3 @@ winget install --id JRSoftware.InnoSetup -e
 | **App launches but cannot communicate with Docker**      | Docker Engine is stopped or there is a WSL2 backend issue | Start Docker Desktop and verify that `docker info` runs successfully             |
 | **Execution blocked by SmartScreen**                     | Binary is unsigned or unrecognized by Windows             | Use a trusted distribution, allow execution explicitly, or contact the publisher |
 | **Missing configuration**                                | Configuration files are missing or malformed              | Verify files in the `Config` folder and restore them from the repository sources |
-
-
-
----
-
-## ➡️ Next Steps
-
-* Explore container workflows
-* Review domain services: [DockerBuildBoxSystem.Domain](https://github.com/ReflexLevel0/DockerBuildboxSystem/tree/main/src/DockerBuildBoxSystem.Domain)
-* Customize configs and re-publish
-* Contact support: **FER & MDU team**
-
----
-
-## 📖 Definition of Terms
-
-| Term           | Description                            |
-| -------------- | -------------------------------------- |
-| Docker Desktop | Windows GUI managing Docker Engine     |
-| CLI            | Command Line Interface (`docker.exe`)  |
-| Self-contained | .NET publish mode bundling runtime     |
-| Inno Setup     | Installer framework used for packaging |
-
----
