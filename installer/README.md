@@ -19,8 +19,8 @@ Choose the path that best fits your needs:
 | Installation Type                       | Description                                                                         | Link                                                                                                                                                  |
 | --------------------------------------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 🟢 **Standard Installer (Recommended)** | Self-contained Windows desktop app with Start Menu and optional Desktop shortcut.   | See [Standard Installer](#-standard-installer) |
-| 📦 **Portable (No Installer)**          | Run from a published folder without installing; useful for controlled environments. | See [Portable Deploy](https://github.com/ReflexLevel0/DockerBuildboxSystem/DBS-217-installation-document/INSTALLATION_GUIDE.md#-portable-deploy)       |
-| 🛠 **Developer (From Source)**          | Build and run from source for development or CI/CD.                                 | See [Install for Developers](https://github.com/ReflexLevel0/DockerBuildboxSystem/edit/development/README.md#-install-for-developers)                                                                                                 |
+| 📦 **Portable (No Installer)**          | Run from a published folder without installing; useful for controlled environments. | See [Portable Deploy](#-portable-deploy)       |
+| 🛠 **Developer (From Source)**          | Build and run from source for development or CI/CD.                                 | See [Install for Developers](#-install-for-developers)                                                                                                 |
 
 ---
 
@@ -72,37 +72,18 @@ winget install --id JRSoftware.InnoSetup -e
 
 ### 🟢 Standard Installer
 
-1. Download: Obtain the `DockerBuildBoxSystem_Setup_1.0.0.exe` from your distribution portal.
-   - Result: Installer is available locally.
-   - Check: File is signed/expected size; Windows SmartScreen allows running.
-
+1. Download: Obtain the `DockerBuildBoxSystem_Setup.exe` from your distribution portal.
 2. Launch: Double-click the installer.
-   - Result: Modern wizard UI opens (per-user install).
-   - Tip: No admin prompt; installation targets `%LocalAppData%`.
-
 3. Accept Terms: Review EULA and privacy prompts.
-   - Result: Proceed only after acknowledging warnings.
-   - Check: Next button enabled after acknowledgment.
-
 4. Docker Check: The installer warns if Docker is not detected.
-   - Result: You can continue, but the app requires Docker to function.
-   - Tip: If missing, install Docker Desktop before first use.
-
 5. Choose Options: Optional desktop icon; confirm install directory.
-   - Result: Files are copied; Start Menu shortcut created.
-   - Check: Wizard completes with a success message.
-
 6. Launch App: Click “Launch Docker BuildBox System” at the end.
-   - Result: Application starts and loads main window.
-   - Tip: If Docker isn’t running, start Docker Desktop first.
 
 ---
 
 ### 📦 Portable Deploy
 
 1. Publish: Create a portable folder (self-contained) from source.
-   - Result: A `publish\\win-x64` folder with all binaries.
-   - Command:
    ```powershell
    dotnet publish .\src\DockerBuildBoxSystem.App -c Release -r win-x64 --self-contained true -o .\publish\win-x64
    ```
@@ -115,73 +96,28 @@ winget install --id JRSoftware.InnoSetup -e
      - If missing, fix the copy settings in `src/DockerBuildBoxSystem.App/DockerBuildBoxSystem.App.csproj` and republish.
 
 2. Distribute: Zip and share `publish\\win-x64`.
-   - Result: Recipients can extract and run without installer.
-   - Tip: Place folder in a path without elevated permission requirements.
-
 3. Run: Start `DockerBuildBoxSystem.App.exe`.
-   - Result: App starts; config files load from `Config` subfolder.
 
 ---
 
 ### 🛠 Install for Developers
 
 1. Clone repo: Get the source locally.
-   - Result: Source code in a working directory.
-   - Command:
    ```powershell
-   git clone <[repo-url](https://github.com/ReflexLevel0/DockerBuildboxSystem)>
+   git clone https://github.com/ReflexLevel0/DockerBuildboxSystem
    cd DockerBuildBoxSystem
    ```
-
 2. Restore & Build: Use .NET 8 SDK.
-   - Result: Solution builds; WPF app compiles.
-   - Commands:
    ```powershell
    dotnet restore DockerBuildBoxSystem.sln
    dotnet build src/DockerBuildBoxSystem.App/DockerBuildBoxSystem.App.csproj -c Debug
    dotnet run --project src/DockerBuildBoxSystem.App/DockerBuildBoxSystem.App.csproj
    ```
-
 3. Build the Installer (optional): Use Inno Setup.
-   - Result: A distributable `DockerBuildBoxSystem_Setup_1.0.0.exe`.
-   - Commands:
    ```powershell
    # Publish self-contained app
    dotnet publish .\src\DockerBuildBoxSystem.App -c Release -r win-x64 --self-contained true -o .\publish\win-x64
-   
-   # Compile installer script (via ISCC or GUI)
-   # Open and compile: installer/DockerBuildBoxSystem.iss
    ```
-   - Reference: [installer](installer/DockerBuildBoxSystem.iss)
-   - Before you publish: ensure config files are included in the publish output. The project already defines copy rules; if customizing, verify the following entries in `src/DockerBuildBoxSystem.App/DockerBuildBoxSystem.App.csproj`:
-   ```xml
-   <ItemGroup>
-     <None Update="Config\appsettings.json">
-       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-     </None>
-     <None Update="Config\appsettings.Development.json">
-       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-     </None>
-     <None Update="Config\config.json">
-       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-       <CopyToPublishDirectory>Always</CopyToPublishDirectory>
-     </None>
-     <None Update="Config\controls.json">
-       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-       <CopyToPublishDirectory>Always</CopyToPublishDirectory>
-     </None>
-   </ItemGroup>
-   <ItemGroup>
-     <None Update="Assets\icons\*.*">
-       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-     </None>
-   </ItemGroup>
-   ```
-   - Verify after publish: Confirm the `Config` and `Assets\icons` folders exist under `.\publish\win-x64`.
-
 ---
 
 ## ✅ Verify Installation
@@ -189,19 +125,6 @@ winget install --id JRSoftware.InnoSetup -e
 - Start the app from Start Menu or Desktop icon.
 - Ensure Docker Desktop is running; `docker info` returns engine details.
 - In-app: Confirm initial screen loads; actions referencing containers respond without errors.
-
-
-Commands (optional):
-```powershell
-# Verify Docker CLI
-"$Env:ProgramFiles\\Docker\\Docker\\resources\\bin\\docker.exe" version
-# Check engine
-"$Env:ProgramFiles\\Docker\\Docker\\resources\\bin\\docker.exe" info
-```
-
-Expected results:
-- App launches without errors.
-- Docker CLI outputs version and engine details.
 
 ---
 
@@ -215,37 +138,21 @@ Expected results:
 
 ## 🔧 Configuration Options
 
-* **App behavior:** `appsettings.json`
-* **UI & controls:** `controls.json`
-* **Core operations:** `config.json`
-
-References:
-
-* [appsettings.json](src/DockerBuildBoxSystem.App/Config/appsettings.json)
-* [appsettings.Development.json](src/DockerBuildBoxSystem.App/Config/appsettings.Development.json)
-* [config.json](src/DockerBuildBoxSystem.App/Config/config.json)
-* [controls.json](src/DockerBuildBoxSystem.App/Config/controls.json)
+* **App behavior:** [`appsettings.json`](src/DockerBuildBoxSystem.App/Config/appsettings.json)
+* **UI & controls:** [`controls.json`](src/DockerBuildBoxSystem.App/Config/controls.json)
+* **Core operations:** [`config.json`](src/DockerBuildBoxSystem.App/Config/config.json)
 
 ---
 
 ## 🧯 Troubleshooting
 
+| Problem                                                  | Cause                                                     | Solution                                                                         |
+| -------------------------------------------------------- | --------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| **“Docker Desktop not detected” warning during install** | Docker is not installed or not available on `PATH`        | Install Docker Desktop using `winget` and restart Docker                         |
+| **App launches but cannot communicate with Docker**      | Docker Engine is stopped or there is a WSL2 backend issue | Start Docker Desktop and verify that `docker info` runs successfully             |
+| **Execution blocked by SmartScreen**                     | Binary is unsigned or unrecognized by Windows             | Use a trusted distribution, allow execution explicitly, or contact the publisher |
+| **Missing configuration**                                | Configuration files are missing or malformed              | Verify files in the `Config` folder and restore them from the repository sources |
 
-- Problem: “Docker Desktop not detected” warning during install.
-  - Cause: Docker not installed or not on PATH.
-  - Solution: Install Docker Desktop via `winget` and restart Docker.
-
-- Problem: App launches but cannot communicate with Docker.
-  - Cause: Docker Engine stopped or WSL2 backend issue.
-  - Solution: Start Docker Desktop; ensure `docker info` succeeds.
-
-- Problem: Execution blocked by SmartScreen.
-  - Cause: Unsigned or unrecognized binary.
-  - Solution: Use trusted distribution; run as allowed or contact the publisher.
-
-- Problem: Missing configuration.
-  - Cause: Config files not present or malformed.
-  - Solution: Verify `Config` folder files; restore from repo sources.
 
 
 ---
