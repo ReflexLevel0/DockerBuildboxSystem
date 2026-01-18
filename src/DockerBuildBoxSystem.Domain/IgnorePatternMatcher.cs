@@ -9,6 +9,13 @@ namespace DockerBuildBoxSystem.Domain
     {
         private readonly List<Regex> _ignorePatterns = new();
 
+        /// <summary>
+        /// Loads ignore patterns from a string and replaces any existing patterns.
+        /// </summary>
+        /// <remarks>Existing ignore patterns are cleared before loading new ones. Empty or
+        /// whitespace-only input results in all patterns being cleared.</remarks>
+        /// <param name="patterns">A string containing one or more ignore patterns, separated by line breaks. Each line represents a single
+        /// pattern.</param>
         public void LoadPatterns(string patterns)
         {
             _ignorePatterns.Clear();
@@ -22,6 +29,12 @@ namespace DockerBuildBoxSystem.Domain
             }
         }
 
+        /// <summary>
+        /// Adds a file or directory pattern to the ignore list.
+        /// </summary>
+        /// <param name="pattern">The pattern to add. Supports wildcards: <c>*</c> matches any sequence of characters except directory
+        /// separators, <c>**</c> matches any sequence of characters including directory separators, and <c>?</c>
+        /// matches any single character. Leading <c>./</c> is ignored. Trailing slashes indicate directory patterns.</param>
         public void AddPattern(string pattern)
         {
             pattern = pattern.Trim();
@@ -30,18 +43,46 @@ namespace DockerBuildBoxSystem.Domain
             if (pattern.StartsWith("./"))
                 pattern = pattern[2..];
 
+            bool isDirectoryPattern = pattern.EndsWith("/");
+            if (isDirectoryPattern)
+                pattern = pattern[..^1];
+
+            pattern = pattern.Trim();
+            if (pattern.Length == 0) return;
+
+            const string ds = "__IGNOREPATTERNMATCHER__";
+
             string regexPattern = Regex.Escape(pattern)
-                .Replace(@"\*\*", ".*")
+                .Replace(@"\*\*", ds)
                 .Replace(@"\*", "[^/\\\\]*")
-                .Replace(@"\?", ".");
+                .Replace(@"\?", "[^/\\\\]")
+                .Replace(ds, ".*");
 
-            if (pattern.EndsWith("/"))
-                regexPattern = $"{regexPattern}.*";
+            bool startsWithSlash = pattern.StartsWith("/");
 
-            regexPattern = ".*" + regexPattern + ".*";
+            if (startsWithSlash)
+            {
+                regexPattern = "^" + regexPattern.Substring(1);
+            }
+            else
+            {
+                regexPattern = "(^|[/\\\\])" + regexPattern;
+            }
+
+            if (isDirectoryPattern)
+                regexPattern = regexPattern + "[/\\\\]";
+            else
+                regexPattern = regexPattern + "([/\\\\]|$)";
+
             _ignorePatterns.Add(new Regex(regexPattern, RegexOptions.IgnoreCase));
         }
 
+        /// <summary>
+        /// Determines whether the specified path matches any of the configured ignore patterns.
+        /// </summary>
+        /// <param name="path">The file or directory path to evaluate. May use either forward or backward slashes as separators.</param>
+        /// <returns><see langword="true"/> if the path matches an ignore pattern and should be excluded; otherwise, <see
+        /// langword="false"/>.</returns>
         public bool IsIgnored(string path)
         {
             string normalized = path.Replace('\\', '/');
@@ -51,7 +92,11 @@ namespace DockerBuildBoxSystem.Domain
             return false;
         }
 
-        //The GetIgnoreSummary method, just renamed.
+        /// <summary>
+        /// Returns an enumerable collection of all ignore patterns as strings.
+        /// </summary>
+        /// <returns>An <see cref="IEnumerable{String}"/> containing the string representations of all ignore patterns. The
+        /// collection will be empty if no ignore patterns are defined.</returns>
         public IEnumerable<string> GetPatterns()
         {
             foreach (var r in _ignorePatterns)

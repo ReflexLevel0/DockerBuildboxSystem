@@ -4,12 +4,6 @@ using CommunityToolkit.Mvvm.Messaging;
 using DockerBuildBoxSystem.Contracts;
 using DockerBuildBoxSystem.ViewModels.Common;
 using DockerBuildBoxSystem.ViewModels.Messages;
-using System;
-using System.Collections.Generic;
-using System.ComponentModel.Design;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace DockerBuildBoxSystem.ViewModels.ViewModels
 {
@@ -54,7 +48,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private string _hostSyncPath = string.Empty;
 
         [ObservableProperty]
-        private string _SyncOutPath = string.Empty;
+        private string _syncOutPath = string.Empty;
 
         [ObservableProperty]
         private string _containerSyncPath = "/data/";
@@ -93,7 +87,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
             _settingsService.SourcePathChanged += OnSourcePathChanged;
             _settingsService.SyncOutPathChanged += OnSyncOutPathChanged;
-            InitializeSettingsAsync();
+            _ = InitializeSettingsAsync();
 
             //register to receive messages
             WeakReferenceMessenger.Default.RegisterAll(this);
@@ -102,7 +96,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
         private void CancelAutoSync()
         {
-            CancellationTokenSource? cts = null;
+            CancellationTokenSource? cts;
 
             lock (_autoSyncSemaphore)
             {
@@ -247,13 +241,12 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             IsSyncRunning = true;
             try
             {
-                _fileSyncService.StartWatching(HostSyncPath, ContainerId, ContainerSyncPath);
-                await Task.CompletedTask;
+                await _fileSyncService.StartWatchingAsync(HostSyncPath, ContainerId, ContainerSyncPath).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
                 _logger.LogWithNewline($"[sync-error] {ex.Message}", true, false);
-                IsSyncRunning = false;
+                SetOnUiThread(() => IsSyncRunning = false);
             }
         }
 
@@ -280,6 +273,18 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 return;
             }
 
+            if (string.IsNullOrWhiteSpace(ContainerSyncPath))
+            {
+                _logger.LogWithNewline("[sync-out] Error: Container sync path is not configured.", true, false);
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(ContainerSyncOutPath))
+            {
+                _logger.LogWithNewline("[sync-out] Error: Container sync out path is not configured.", true, false);
+                return;
+            }
+
             try
             {
                 string buildSyncOutPath = Path.Combine(SyncOutPath, _appConfig.BuildDirectoryPath);
@@ -292,7 +297,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             catch (Exception ex)
             {
                 _logger.LogWithNewline($"[sync-out] Error creating sync out directory: {ex.Message}", true, false);
-                return;
+                throw;
             }
 
             bool wasWatching = IsSyncRunning;
@@ -307,8 +312,10 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
                 _logger.LogWithNewline("[sync-out] Starting sync from container to host...", false, false);
 
-                _fileSyncService.Configure(SyncOutPath, ContainerId, $"{ContainerSyncPath}/{ContainerSyncOutPath}");
-                await _fileSyncService.ForceSyncFromContainerAsync();
+                //construct container path, ensuring proper format
+                string containerPath = $"{ContainerSyncPath.TrimEnd('/')}/{ContainerSyncOutPath.TrimStart('/')}";
+
+                await _fileSyncService.ForceSyncFromContainerAsync(SyncOutPath, ContainerId, containerPath).ConfigureAwait(false);
 
                 _logger.LogWithNewline("[sync-out] Completed sync from container to host.", false, false);
             }
@@ -321,8 +328,6 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                 //resume the file watcher if it was running before
                 if (wasWatching)
                 {
-                    //reconfigure back to the original host sync path
-                    _fileSyncService.Configure(HostSyncPath, ContainerId, ContainerSyncPath);
                     _fileSyncService.ResumeWatching();
                 }
             }
@@ -330,7 +335,8 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
         private async Task StartForceSyncCoreAsync(CancellationToken ct)
         {
-            IsSyncRunning = true;
+            // Set IsSyncRunning on UI thread
+            SetOnUiThread(() => IsSyncRunning = true);
 
             try
             {
@@ -346,10 +352,10 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
                 _fileSyncService.Configure(HostSyncPath, ContainerId, ContainerSyncPath);
 
-                await _fileSyncService.CleanDirectoryAsync([ContainerSyncOutPath], ct);
+                await _fileSyncService.CleanDirectoryAsync([ContainerSyncOutPath], ct).ConfigureAwait(false);
                 ct.ThrowIfCancellationRequested();
 
-                await _fileSyncService.ForceSyncAsync(ct);
+                await _fileSyncService.ForceSyncAsync(ct).ConfigureAwait(false);
                 ct.ThrowIfCancellationRequested();
 
                 //update the tracker
@@ -360,9 +366,20 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
                 _logger.LogWithNewline("[force-sync] Completed force sync operation", false, false);
             }
+            catch (OperationCanceledException)
+            {
+                _logger.LogWithNewline("[force-sync] Operation cancelled.", true, false);
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWithNewline($"[force-sync] Error: {ex.Message}", true, false);
+                throw;
+            }
             finally
             {
-                IsSyncRunning = false;
+                // Reset IsSyncRunning on UI thread
+                SetOnUiThread(() => IsSyncRunning = false);
             }
         }
 
@@ -395,6 +412,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             _settingsService.SourcePathChanged -= OnSourcePathChanged;
             _fileSyncService.StopWatching();
             await base.DisposeAsync();
+            GC.SuppressFinalize(this);
         }
 
     }

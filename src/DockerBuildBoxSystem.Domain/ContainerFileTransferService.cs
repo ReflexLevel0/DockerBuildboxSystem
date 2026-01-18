@@ -83,13 +83,17 @@ namespace DockerBuildBoxSystem.Domain
                 {
                     foreach (var exclude in excludedPaths)
                     {
+                        // Skip empty or whitespace-only paths
+                        if (string.IsNullOrWhiteSpace(exclude))
+                            continue;
+
                         //ensue we scape single quotes in filename
                         string safeExclude = exclude.Replace("'", "'\\''");
                         excludes.Add($"! -name '{safeExclude}'");
                     }
                 }
                 
-                string excludeStr = string.Join(" ", excludes);
+                string excludeStr = excludes.Count > 0 ? string.Join(" ", excludes) : "";
                 string targetPath = containerPath.TrimEnd('/');
                 if (string.IsNullOrEmpty(targetPath)) targetPath = "/";
 
@@ -163,6 +167,26 @@ namespace DockerBuildBoxSystem.Domain
             catch (Exception ex)
             {
                 return (false, "ERROR: " + ex.Message);
+            }
+        }
+
+        public async Task<(bool Success, string Error)> CreateDirectoryInContainerAsync(string containerId, string containerPath, CancellationToken ct = default)
+        {
+            try
+            {
+                ct.ThrowIfCancellationRequested();
+                var (exitCode, output, error) = await _containerService.ExecAsync(containerId, new[] { "mkdir", "-p", containerPath }, ct);
+                if (exitCode != 0)
+                    return (false, $"ERROR (ExitCode {exitCode}): {error}");
+                return (true, output);
+            }
+            catch (OperationCanceledException)
+            {
+                return (false, "Cancelled");
+            }
+            catch (Exception ex)
+            {
+                return (false, "EXCEPTION: " + ex.Message);
             }
         }
     }

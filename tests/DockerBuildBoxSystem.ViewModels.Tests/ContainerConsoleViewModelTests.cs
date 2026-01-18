@@ -5,7 +5,6 @@ using DockerBuildBoxSystem.ViewModels.Common;
 using Microsoft.Extensions.Configuration;
 using NSubstitute;
 using static DockerBuildBoxSystem.TestUtils.ChannelTestUtil;
-using Docker.DotNet.Models;
 
 namespace DockerBuildBoxSystem.ViewModels.Tests;
 
@@ -55,6 +54,9 @@ public class ContainerConsoleViewModelTests
     {
         //Arrange
         var imageService = Substitute.For<IImageService>();
+        var containerService = Substitute.For<IContainerService>();
+
+        containerService.IsEngineAvailableAsync().Returns(Task.FromResult(true));
 
         //The ListImagesAsync method is subbed to return a list with one image
         imageService
@@ -64,7 +66,7 @@ public class ContainerConsoleViewModelTests
                 new ImageInfo { Id = "1", RepoTags = new []{"n1"} }
             }));
 
-        var vm = CreateViewModel(imageService: imageService);
+        var vm = CreateViewModel(service: containerService, imageService: imageService);
 
         //Act
         await vm.InitializeCommand.ExecuteAsync(null);
@@ -105,6 +107,7 @@ public class ContainerConsoleViewModelTests
             {
                 async IAsyncEnumerable<(bool IsStdErr, string Line)> Stream()
                 {
+                    await Task.Yield();
                     LogsService.IsRunning.Returns(true);
                     yield return (false, "sup");
                 }
@@ -186,6 +189,7 @@ public class ContainerConsoleViewModelTests
             {
                 async IAsyncEnumerable<(bool IsStdErr, string Line)> Stream()
                 {
+                    await Task.Yield();
                     CommandService.IsRunning.Returns(true);
                     await foreach (var (isErr, line) in output.ReadAllAsync().ConfigureAwait(false))
                     {
@@ -248,6 +252,7 @@ public class ContainerConsoleViewModelTests
             {
                 async IAsyncEnumerable<(bool IsStdErr, string Line)> Stream()
                 {
+                    await Task.Yield();
                     LogsService.IsRunning.Returns(true);
                     yield return (false, "sup");
                 }
@@ -314,6 +319,7 @@ public class ContainerConsoleViewModelTests
             {
                 async IAsyncEnumerable<(bool IsStdErr, string Line)> Stream()
                 {
+                    await Task.Yield();
                     LogsService.IsRunning.Returns(true);
                     yield return (false, "sup");
                     LogsService.IsRunning.Returns(false);

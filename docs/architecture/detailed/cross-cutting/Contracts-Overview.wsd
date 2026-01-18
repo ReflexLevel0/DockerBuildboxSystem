@@ -1,0 +1,234 @@
+@startuml Contracts Layer Overview
+!theme plain
+skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+skinparam interfaceStyle rectangle
+
+title Contracts Layer - Service Interfaces & Abstractions
+
+' ====================================================================
+' CONTRACTS LAYER
+' ====================================================================
+package "Contracts Layer" <<contracts>> #Honeydew {
+
+    package "Tier 1: Docker Operations" #LightBlue {
+        interface IContainerService {
+            --Engine Status--
+            + IsEngineAvailableAsync(ct)
+            --Events--
+            + ContainerStarted
+            --Container Lifecycle--
+            + ListContainersAsync(all, nameFilter, labelFilter, ct)
+            + CreateContainerAsync(options, ct)
+            + StartAsync(containerId, ct)
+            + StopAsync(containerId, timeout, ct)
+            + StopAsync(containerIds, timeout, ct)
+            + RestartAsync(containerId, timeout, ct)
+            + KillContainer(containerId, ct)
+            + RemoveAsync(containerId, force, ct)
+            + InspectAsync(containerId, ct)
+            --Logs & Execution--
+            + StreamLogsAsync(containerId, follow, tail, tty, ct)
+            + ExecAsync(containerId, cmd, ct)
+            + StreamExecAsync(containerId, cmd, tty, ct)
+            --File Operations--
+            + CopyFileToContainerAsync(containerId, hostPath, containerPath, ct)
+            + CopyDirectoryToContainerAsync(containerId, hostPath, containerPath, ct)
+            + CopyFileFromContainerAsync(containerId, containerPath, hostPath, ct)
+            + CopyDirectoryFromContainerAsync(containerId, containerPath, hostPath, ct)
+        }
+
+        interface IImageService {
+            + ListImagesAsync(all, ct)
+            + PullImageAsync(imageName, tag, ct)
+            + RemoveImageAsync(imageId, force, prune, ct)
+            + InspectImageAsync(imageId, ct)
+        }
+
+        interface IVolumeService {
+            + GetSharedVolumeAsync(createIfNotExists, ct)
+            + CreateVolumeAsync(parameters, ct)
+        }
+    }
+
+    package "Tier 2: Business Logic" #LightGreen {
+        interface IStreamReader {
+            --Properties--
+            + IsRunning
+            --Events--
+            + RunningChanged
+            --Methods--
+            + RunAsync(svc, containerId, args, ct)
+            + StopAsync()
+        }
+
+        interface IContainerFileTransferService {
+            + CopyToContainerAsync(containerId, hostPath, containerPath, ct)
+            + CopyFromContainerAsync(containerId, containerPath, hostPath, ct)
+            + CopyDirectoryToContainerAsync(containerId, hostPath, containerPath, ct)
+            + CopyDirectoryFromContainerAsync(containerId, containerPath, hostPath, ct)
+            + DeleteInContainerAsync(containerId, containerPath, ct)
+            + RenameInContainerAsync(containerId, oldPath, newPath, ct)
+            + EmptyDirectoryInContainerAsync(containerId, containerPath, excludedPaths, ct)
+        }
+
+        interface IFileSyncService {
+            --Properties--
+            + Changes : ObservableCollection<string>
+            --Methods--
+            + Configure(path, containerId, containerRootPath)
+            + StartWatchingAsync(path, containerId, containerRootPath)
+            + StopWatching()
+            + PauseWatching()
+            + ResumeWatching()
+            + ForceSyncAsync(ct)
+            + ForceSyncFromContainerAsync(ct)
+            + CleanDirectoryAsync(excludedPaths, ct)
+            + UpdateIgnorePatterns(patterns)
+            + LoadIgnorePatternsAsync()
+        }
+
+        interface ICommandRunner {
+            --Properties--
+            + ExitCode : Task<long>
+            --Methods--
+            + TryWriteToInteractiveAsync(raw)
+            + InterruptAsync()
+        }
+
+        interface ILogRunner {
+        }
+    }
+
+    package "Tier 3: Configuration & Utilities" #LightYellow {
+        interface IEnvironmentService {
+            + LoadEnvAsync()
+            + SaveEnvAsync(envVariables)
+            + OpenEnvFile()
+        }
+
+        interface ISettingsService {
+            --Properties--
+            + SourceFolderPath
+            + SyncOutFolderPath
+            --Events--
+            + SourcePathChanged
+            + SyncOutPathChanged
+            --Methods--
+            + LoadSettingsAsync()
+            + SaveSettingsAsync()
+        }
+
+        interface ISyncIgnoreService {
+            + LoadSyncIgnoreAsync()
+            + SaveSyncIgnoreAsync(syncIgnore)
+            + OpenSyncIgnore()
+        }
+
+        interface IExternalProcessService {
+            + StartProcess(command, arguments)
+        }
+
+        interface IUserControlService {
+            + LoadUserControlsAsync()
+            + SaveUserControlAsync(userControls)
+            + AddUserControlValueAsync(id, value)
+            + RetrieveVariableAsync(command, variables)
+            + LoadUserVariables(controls)
+        }
+
+        interface IIgnorePatternMatcher {
+            + LoadPatterns(patterns)
+            + AddPattern(pattern)
+            + IsIgnored(path)
+            + GetPatterns()
+        }
+    }
+
+    package "Presentation Layer Services" #LightCyan {
+        interface IDialogService {
+            + ShowInformation(message, title)
+            + ShowWarning(message, title)
+            + ShowError(message, title)
+            + ShowConfirmation(message, title)
+            + ShowFolderBrowser(description)
+        }
+
+        interface IClipboardService {
+            + SetTextAsync(text, ct)
+        }
+
+        interface IViewModelLogger {
+            + LogWithNewline(message, isError, isImportant)
+            + Log(message, isError, isImportant)
+            + DiscardPendingLogs()
+        }
+    }
+}
+
+' ====================================================================
+' GROUPING & RELATIONSHIPS
+' ====================================================================
+
+' Layout hints for vertical stacking within packages
+IContainerService -[hidden]down-> IImageService
+IImageService -[hidden]down-> IVolumeService
+
+IStreamReader -[hidden]down-> IContainerFileTransferService
+IContainerFileTransferService -[hidden]down-> IFileSyncService
+
+
+ICommandRunner -[hidden]right-> IStreamReader
+ILogRunner -[hidden]right-> IStreamReader
+
+IEnvironmentService -[hidden]down-> ISettingsService
+ISettingsService -[hidden]down-> ISyncIgnoreService
+ISyncIgnoreService -[hidden]down-> IExternalProcessService
+IExternalProcessService -[hidden]down-> IUserControlService
+IUserControlService -[hidden]down-> IIgnorePatternMatcher
+
+IDialogService -[hidden]down-> IClipboardService
+IClipboardService -[hidden]down-> IViewModelLogger
+
+' Tier relationships - horizontal layout (left to right)
+"Tier 1: Docker Operations" -[hidden]right-> "Tier 2: Business Logic"
+"Tier 2: Business Logic" -[hidden]right-> "Tier 3: Configuration & Utilities"
+"Tier 3: Configuration & Utilities" -[hidden]down-> "Presentation Layer Services"
+
+' Inheritance relationships
+IStreamReader <|-- ICommandRunner : extends
+IStreamReader <|-- ILogRunner : extends
+
+' Key cross-tier dependencies
+IFileSyncService ..> IContainerFileTransferService : uses
+IContainerFileTransferService ..> IContainerService : uses
+IFileSyncService ..> IIgnorePatternMatcher : uses
+IStreamReader ..> IContainerService : uses
+IEnvironmentService ..> IExternalProcessService : uses
+ISyncIgnoreService ..> IExternalProcessService : uses
+
+
+' ====================================================================
+' LEGEND
+' ====================================================================
+legend bottom left
+    <b>Contracts Layer</b>
+
+    <b>Purpose:</b>
+    • Define service interfaces
+    • Enable dependency injection
+    • Support unit testing with mocks
+    • Enforce separation of concerns
+
+    <b>Architecture Benefits:</b>
+    • ViewModels depend only on interfaces (not implementations)
+    • Infrastructure can be swapped without affecting UI
+    • Easy to mock for testing
+    • Clear service boundaries
+
+    <b>Dependency Flow:</b>
+    Presentation → Contracts ← Infrastructure
+    (Dependency Inversion Principle)
+end legend
+
+@enduml

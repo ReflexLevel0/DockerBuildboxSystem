@@ -2,13 +2,8 @@
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using DockerBuildBoxSystem.Contracts;
-using CommunityToolkit.Mvvm.Messaging;
-using CommunityToolkit.Mvvm.Messaging.Messages;
 using DockerBuildBoxSystem.ViewModels.Common;
 using DockerBuildBoxSystem.ViewModels.Messages;
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 
 namespace DockerBuildBoxSystem.ViewModels.ViewModels
 {
@@ -22,6 +17,7 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         private readonly IUserControlService _userControlService;
         private readonly IViewModelLogger _logger;
         private readonly UserControlsViewModel _userControlsViewModel;
+        private readonly System.Threading.Timer _containerRefreshTimer;
 
         private string ContainerId
         {
@@ -74,6 +70,18 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
                     WeakReferenceMessenger.Default.Send(new IsCommandRunningChangedMessage(IsCommandRunning));
                 });
             };
+
+            // Refreshing container info every couple of seconds
+            _containerRefreshTimer = new System.Threading.Timer(async _ =>
+            {
+                var currentContainer = SelectedContainer;
+                if (currentContainer == null) return;
+                var container = await _service.InspectAsync(currentContainer.Id);
+                if (container != null && SelectedContainer?.Id == currentContainer.Id)
+                {
+                    currentContainer.Status = container.Status;
+                }
+            }, null, 0, 5000);
 
             //register to receive messages
             WeakReferenceMessenger.Default.RegisterAll(this);
@@ -155,6 +163,10 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             }
         }
 
+        /// <summary>
+        /// Routes the specified raw input string to the appropriate command handler or interactive shell.
+        /// </summary>
+        /// <param name="raw">The raw input string to process. Cannot be null, empty, or consist only of white-space characters.</param>
         private async Task RouteInputAsync(string raw)
         {
             if (string.IsNullOrWhiteSpace(raw))
@@ -170,6 +182,13 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             await ExecuteAndLog(args);
         }
 
+        /// <summary>
+        /// Handles changes to the selected container and performs necessary actions when the selection changes.
+        /// </summary>
+        /// <param name="oldValue">The previously selected <see cref="ContainerInfo"/>, or <see langword="null"/> if there was no previous
+        /// selection.</param>
+        /// <param name="newValue">The newly selected <see cref="ContainerInfo"/>, or <see langword="null"/> if no container is currently
+        /// selected.</param>
         partial void OnSelectedContainerChanged(ContainerInfo? oldValue, ContainerInfo? newValue)
         {
             var switchedContainer = oldValue?.Id != newValue?.Id;
@@ -246,10 +265,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
 
         public override async ValueTask DisposeAsync()
         {
+            _containerRefreshTimer?.Dispose();
             WeakReferenceMessenger.Default.UnregisterAll(this);
             await StopExecAsync();
-            // Unregister message subscriptions
-            WeakReferenceMessenger.Default.UnregisterAll(this);
             await base.DisposeAsync();
         }
 

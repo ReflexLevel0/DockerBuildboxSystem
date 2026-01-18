@@ -8,12 +8,6 @@ using System.Threading.Tasks;
 
 namespace DockerBuildBoxSystem.Domain
 {
-    /// <summary>
-    /// Functionality for application settings, since the source folder path and sync out folder path need 
-    /// to be shared between viewmodels.
-    /// The previuous PersistSourcePathAsync and PersistSyncOutPathAsync methods had similar logic, 
-    /// so this class just centralizes and also solves the issue with sharing settings between viewmodels.
-    /// </summary>
     public class SettingsService : ISettingsService
     {
         private readonly IConfiguration _configuration;
@@ -102,7 +96,7 @@ namespace DockerBuildBoxSystem.Domain
                 //iignore load errors, fall back to defaults
             }
         }
-
+        
         public async Task SaveSettingsAsync()
         {
             try

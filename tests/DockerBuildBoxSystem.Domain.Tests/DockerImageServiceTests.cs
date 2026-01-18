@@ -2,13 +2,7 @@
 using Docker.DotNet.Models;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Net;
-using System.Reflection.Metadata.Ecma335;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace DockerBuildBoxSystem.Domain.Tests
 {
@@ -48,6 +42,7 @@ namespace DockerBuildBoxSystem.Domain.Tests
             // Validation
             if (imageExists)
             {
+                Assert.NotNull(image);
                 Assert.True(string.CompareOrdinal(imageReponse.ID, image.Id) == 0);
                 Assert.True(
                     image.RepoTags.Count == 3 &&

@@ -28,7 +28,8 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <Menu Grid.Column="0">
-                <MenuItem Header="_Sync">
+                <MenuItem Header="_Sync"
+                          ToolTip="Sync options">
                     <MenuItem Header="Select Sync _In folder"
                                 Command="{Binding SelectSourcePathCommand}">
                         <MenuItem.Icon>
@@ -169,9 +170,15 @@
         </Grid>
 
         <!-- Shutdown Overlay Component -->
-        <uc:ShutdownOverlay x:Name="ShutdownOverlayControl"
-                            Grid.RowSpan="3"
-                            Panel.ZIndex="100"
-                            Visibility="Collapsed"/>
+        <uc:SpinnerOverlayControl x:Name="ShutdownOverlayControl"
+                    Grid.RowSpan="3"
+                    Panel.ZIndex="200"
+                    Visibility="Collapsed"/>
+
+        <!-- Syncing Overlay Component -->
+        <uc:SpinnerOverlayControl x:Name="SyncingOverlayControl"
+                    Grid.RowSpan="3"
+                    Panel.ZIndex="100"
+                    Visibility="Collapsed"/>
     </Grid>
 </Window>

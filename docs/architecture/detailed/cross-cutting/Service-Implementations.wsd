@@ -1,0 +1,271 @@
+@startuml Service Implementations
+!theme plain
+left to right direction
+skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+
+title Service Implementations - Interface to Implementation Mapping
+
+' ====================================================================
+' CONTRACTS LAYER (INTERFACES)
+' ====================================================================
+package "Contracts Layer" <<contracts>> #Honeydew {
+    package "Tier 1: Docker Operations" {
+        interface IContainerService
+        interface IImageService
+        interface IVolumeService
+    }
+
+    package "Tier 2: Business Logic" {
+        interface IStreamReader
+        interface IContainerFileTransferService
+        interface IFileSyncService
+        interface ICommandRunner
+        interface ILogRunner
+    }
+
+    package "Tier 3: Configuration & Utilities" {
+        interface ISettingsService
+        interface IEnvironmentService
+        interface ISyncIgnoreService
+        interface IExternalProcessService
+        interface IUserControlService
+        interface IIgnorePatternMatcher
+    }
+
+    package "Presentation Layer" {
+        interface IDialogService
+        interface IClipboardService
+        interface IViewModelLogger
+    }
+}
+
+' ====================================================================
+' INFRASTRUCTURE LAYER (IMPLEMENTATIONS)
+' ====================================================================
+package "Infrastructure Layer" <<infrastructure>> #LemonChiffon {
+    package "Tier 1: Core Docker Services" #AliceBlue {
+        class DockerContainerService {
+            + IsEngineAvailableAsync()
+            + ListContainersAsync()
+            + CreateContainerAsync()
+            + StartAsync()
+            + StopAsync() [2 overloads]
+            + RestartAsync()
+            + KillContainer()
+            + RemoveAsync()
+            + InspectAsync()
+            + StreamLogsAsync()
+            + ExecAsync()
+            + StreamExecAsync()
+            + CopyFileToContainerAsync()
+            + CopyDirectoryToContainerAsync()
+            + CopyFileFromContainerAsync()
+            + CopyDirectoryFromContainerAsync()
+        }
+
+        class DockerImageService {
+            + ListImagesAsync()
+            + PullImageAsync()
+            + RemoveImageAsync()
+            + InspectImageAsync()
+        }
+
+        class DockerVolumeService {
+            + GetSharedVolumeAsync()
+            + CreateVolumeAsync()
+        }
+    }
+
+    package "Tier 2: Business Services" #MistyRose {
+        abstract StreamReaderBase {
+            + RunAsync()
+            + StopAsync()
+            + IsRunning
+            # OnRunningChanged()
+        }
+
+        class ContainerFileTransferService {
+            + CopyToContainerAsync()
+            + CopyFromContainerAsync()
+            + CopyDirectoryToContainerAsync()
+            + CopyDirectoryFromContainerAsync()
+            + DeleteInContainerAsync()
+            + RenameInContainerAsync()
+            + EmptyDirectoryInContainerAsync()
+        }
+
+        class FileSyncService {
+            + Configure()
+            + StartWatchingAsync()
+            + StopWatching()
+            + PauseWatching()
+            + ResumeWatching()
+            + ForceSyncAsync()
+            + ForceSyncFromContainerAsync()
+            + CleanDirectoryAsync()
+            + UpdateIgnorePatterns()
+            + LoadIgnorePatternsAsync()
+        }
+
+        class CommandRunner {
+            + RunAsync()
+            + StopAsync()
+            + InterruptAsync()
+            + TryWriteToInteractiveAsync()
+            + ExitCode
+        }
+
+        class LogRunner {
+            + RunAsync()
+            + StopAsync()
+            + IsRunning
+        }
+
+        StreamReaderBase <|-- CommandRunner
+        StreamReaderBase <|-- LogRunner
+    }
+
+    package "Tier 3: Supporting Services" #Lavender {
+        class SettingsService {
+            + SourceFolderPath
+            + SyncOutFolderPath
+            + LoadSettingsAsync()
+            + SaveSettingsAsync()
+        }
+
+        class EnvironmentService {
+            + LoadEnvAsync()
+            + SaveEnvAsync()
+            + OpenEnvFile()
+        }
+
+        class SyncIgnoreService {
+            + LoadSyncIgnoreAsync()
+            + SaveSyncIgnoreAsync()
+            + OpenSyncIgnore()
+        }
+
+        class ExternalProcessService {
+            + StartProcess()
+        }
+
+        class UserControlService {
+            + LoadUserControlsAsync()
+            + SaveUserControlAsync()
+            + AddUserControlValueAsync()
+            + RetrieveVariableAsync()
+            + LoadUserVariables()
+        }
+
+        class IgnorePatternMatcher {
+            + LoadPatterns()
+            + AddPattern()
+            + IsIgnored()
+            + GetPatterns()
+        }
+    }
+
+    package "Presentation Services" #PowderBlue {
+        class DialogService {
+            + ShowInformation()
+            + ShowWarning()
+            + ShowError()
+            + ShowConfirmation()
+            + ShowFolderBrowser()
+        }
+
+        class ClipboardService {
+            + SetTextAsync()
+        }
+
+        class ViewModelLogger {
+            + LogWithNewline()
+            + Log()
+            + DiscardPendingLogs()
+        }
+    }
+}
+
+' ====================================================================
+' IMPLEMENTATION RELATIONSHIPS (ONLY)
+' ====================================================================
+
+' Tier 1 implementations
+IContainerService <|.. DockerContainerService : implements
+IImageService <|.. DockerImageService : implements
+IVolumeService <|.. DockerVolumeService : implements
+
+' Tier 2 implementations
+IStreamReader <|.. StreamReaderBase : implements
+IContainerFileTransferService <|.. ContainerFileTransferService : implements
+IFileSyncService <|.. FileSyncService : implements
+ICommandRunner <|.. CommandRunner : implements
+ILogRunner <|.. LogRunner : implements
+
+' Tier 3 implementations
+ISettingsService <|.. SettingsService : implements
+IEnvironmentService <|.. EnvironmentService : implements
+ISyncIgnoreService <|.. SyncIgnoreService : implements
+IExternalProcessService <|.. ExternalProcessService : implements
+IUserControlService <|.. UserControlService : implements
+IIgnorePatternMatcher <|.. IgnorePatternMatcher : implements
+
+' Presentation layer implementations
+IDialogService <|.. DialogService : implements
+IClipboardService <|.. ClipboardService : implements
+IViewModelLogger <|.. ViewModelLogger : implements
+
+' ====================================================================
+' NOTES
+' ====================================================================
+
+' note right of "Tier 1: Docker Operations"
+'     <b>Low-Level Docker API</b>
+'     Direct wrappers around Docker.DotNet
+'     Minimal business logic
+' end note
+
+' note right of "Tier 2: Business Logic"
+'     <b>High-Level Operations</b>
+'     Workflow orchestration
+'     External integrations
+' end note
+
+' note right of "Tier 3: Configuration & Utilities"
+'     <b>Supporting Services</b>
+'     Configuration management
+'     Cross-cutting concerns
+' end note
+
+' note bottom of "Infrastructure Layer"
+'     <b>Implementation Pattern:</b>
+'     All services implement their corresponding
+'     interface using constructor injection.
+
+'     Services are registered in DI container
+'     at application startup (App.xaml.cs)
+' end note
+
+' ====================================================================
+' LEGEND
+' ====================================================================
+legend bottom left
+    <b>Service Implementation Mapping</b>
+
+    <b>Purpose:</b>
+    Shows which concrete classes implement which interfaces
+
+    <b>Key Principles:</b>
+    • One implementation per interface (1:1 mapping)
+    • Implementations in Infrastructure Layer
+    • Interfaces in Contracts Layer
+    • All use constructor-based dependency injection
+
+    <b>Benefits:</b>
+    • Clear separation of contract and implementation
+    • Easy to swap implementations for testing
+    • Supports dependency inversion principle
+end legend
+
+@enduml

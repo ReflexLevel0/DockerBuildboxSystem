@@ -1,14 +1,13 @@
 ﻿using DockerBuildBoxSystem.Contracts;
-using System.Collections.Generic;
-using System.Linq;
-using System.Reflection.PortableExecutable;
 using System.Runtime.CompilerServices;
-using System.Text;
 using System.Threading.Channels;
-using System.Threading.Tasks;
 
 namespace DockerBuildBoxSystem.Domain
 {
+    /// <summary>
+    /// Provides functionality to execute commands asynchronously within a container, stream their output, and interact
+    /// with running processes.
+    /// </summary>
     public sealed class CommandRunner : ICommandRunner
     {
         //exec streaming
@@ -52,6 +51,18 @@ namespace DockerBuildBoxSystem.Domain
             _environmentService = environmentService;
         }
 
+        /// <summary>
+        /// Executes a command asynchronously in the specified container and streams the output lines as they become
+        /// available.
+        /// </summary>
+        /// <param name="svc">The container service used to interact with the target container.</param>
+        /// <param name="containerId">The identifier of the container in which to execute the command.</param>
+        /// <param name="args">—An array of command-line arguments representing the command to execute.  If <paramref name="args"/> is <see
+        /// langword="null"/> or empty, the method completes without yielding any output.</param>
+        /// <param name="ct">A cancellation token that can be used to cancel the operation.</param>
+        /// <returns>An asynchronous stream of tuples, where each tuple contains a Boolean indicating whether the line is from
+        /// standard error (<see langword="true"/>) or standard output (<see langword="false"/>), and the output line as
+        /// a string. The stream yields one tuple per output line produced by the command.</returns>
         public async IAsyncEnumerable<(bool IsStdErr, string Line)> RunAsync(IContainerService svc,
             string containerId,
             string[]? args,
@@ -134,12 +145,16 @@ namespace DockerBuildBoxSystem.Domain
             await TryWriteToInteractiveAsync(AnsiControlChars.ETX.ToString()).ConfigureAwait(false);
         }
 
-        public async Task StopAsync()
+        /// <summary>
+        /// Stops the current operation if it is running.
+        /// </summary>
+        public Task StopAsync()
         {
-            if (!IsRunning) return;
+            if (!IsRunning) return Task.CompletedTask;
 
             _execCts?.Cancel();
             IsRunning = false;
+            return Task.CompletedTask;
         }
 
 

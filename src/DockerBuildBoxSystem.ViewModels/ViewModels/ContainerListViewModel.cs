@@ -1,21 +1,10 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
-using Docker.DotNet.Models;
+using Docker.DotNet;
 using DockerBuildBoxSystem.Contracts;
-using CommunityToolkit.Mvvm.Messaging;
 using DockerBuildBoxSystem.ViewModels.Common;
 using DockerBuildBoxSystem.ViewModels.Messages;
-using System;
-using System.Collections.Generic;
-using System.Collections.ObjectModel;
-using System.ComponentModel;
-using System.ComponentModel.Design;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Xml.Linq;
-using Docker.DotNet;
 using System.Net;
 
 namespace DockerBuildBoxSystem.ViewModels.ViewModels
@@ -371,6 +360,16 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             }
         }
 
+        /// <summary>
+        /// Attempts to start the currently selected container asynchronously, updating its state and notifying
+        /// listeners of the result.
+        /// </summary>
+        /// <remarks>If the selected container is already running, the method logs this information and
+        /// does not attempt to start it again. Upon successful start, the container's state is refreshed and a
+        /// notification is sent to interested components. If the operation is cancelled or fails, appropriate log
+        /// messages are generated. This method does not throw exceptions; errors are logged instead.</remarks>
+        /// <param name="ct">A <see cref="CancellationToken"/> that can be used to cancel the start operation.</param>
+        /// <returns></returns>
         private async Task StartContainerInternalAsync(CancellationToken ct)
         {
             if (SelectedContainer is null) return;
@@ -500,9 +499,9 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
         /// </remarks>
         /// <returns>the task representing the asynchronous operation.</returns>
         [RelayCommand(CanExecute = nameof(IsContainerRunning))]
-        public async Task OpenContainerInCmdAsync()
+        public Task OpenContainerInCmdAsync()
         {
-            if (string.IsNullOrWhiteSpace(SelectedContainer?.Id)) return;
+            if (string.IsNullOrWhiteSpace(SelectedContainer?.Id)) return Task.CompletedTask;
             try
             {
                 _logger.LogWithNewline($"[info] Opening container in windows cmd: {SelectedContainer.Id}", false, false);
@@ -512,16 +511,18 @@ namespace DockerBuildBoxSystem.ViewModels.ViewModels
             {
                 _logger.LogWithNewline($"[open-shell-error] {ex.Message}", true, false);
             }
+            return Task.CompletedTask;
         }
 
+        /// <summary>
+        /// Asynchronously releases all resources used by the instance and performs cleanup of managed containers.
+        /// </summary>
         public override async ValueTask DisposeAsync()
         {
             if (Interlocked.Exchange(ref _disposeOnce, 1) != 0)
                 return;
             
             // Unregister message subscriptions
-            WeakReferenceMessenger.Default.UnregisterAll(this);
-
             WeakReferenceMessenger.Default.UnregisterAll(this);
 
             try

@@ -10,10 +10,13 @@ namespace DockerBuildBoxSystem.Domain
 {
     public class FileSyncService : IFileSyncService
     {
+        private readonly IContainerService _containerService;
         private readonly IContainerFileTransferService _fileTransferService;
         private readonly IIgnorePatternMatcher _ignorePatternMatcher;
+        private readonly ISyncIgnoreService _syncIgnoreService;
         
         private FileSystemWatcher? _watcher;
+        private FileSystemWatcher? _syncIgnoreWatcher;
         private string? _rootPath;
         private string? _containerId;
         private string? _containerRootPath;
@@ -22,28 +25,41 @@ namespace DockerBuildBoxSystem.Domain
         private readonly TimeSpan _debounceInterval = TimeSpan.FromMilliseconds(500);
         private readonly object _changesLock = new object();
 
+        //captured UI synchronization context for thread-safe ObservableCollection updates
+        private SynchronizationContext? _uiContext;
+
         public ObservableCollection<string> Changes { get; } = new ObservableCollection<string>();
 
+        public event EventHandler? ForceSyncStarted;
+        public event EventHandler? ForceSyncStopped;
+
         public FileSyncService(
+            IContainerService containerService,
             IContainerFileTransferService fileTransferService,
-            IIgnorePatternMatcher ignorePatternMatcher)
+            IIgnorePatternMatcher ignorePatternMatcher,
+            ISyncIgnoreService syncIgnoreService)
         {
+            _containerService = containerService;
             _fileTransferService = fileTransferService ?? throw new ArgumentNullException(nameof(fileTransferService));
             _ignorePatternMatcher = ignorePatternMatcher ?? throw new ArgumentNullException(nameof(ignorePatternMatcher));
+            _syncIgnoreService = syncIgnoreService ?? throw new ArgumentNullException(nameof(syncIgnoreService));
         }
 
         public void Configure(string path, string containerId, string containerRootPath = "/data/")
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Path cannot be empty", nameof(path));
             if (string.IsNullOrWhiteSpace(containerId)) throw new ArgumentException("ContainerId cannot be empty", nameof(containerId));
+            if (string.IsNullOrWhiteSpace(containerRootPath)) throw new ArgumentException("ContainerRootPath cannot be empty", nameof(containerRootPath));
 
             _rootPath = Path.GetFullPath(path);
             _containerId = containerId;
             _containerRootPath = containerRootPath;
         }
 
-        public void StartWatching(string path, string containerId, string containerRootPath = "/data/")
+        public async Task StartWatchingAsync(string path, string containerId, string containerRootPath = "/data/")
         {
+            _uiContext = SynchronizationContext.Current;
+
             Configure(path, containerId, containerRootPath);
 
             if (!Directory.Exists(_rootPath))
@@ -55,6 +71,12 @@ namespace DockerBuildBoxSystem.Domain
             //Stop if already running
             StopWatching();
 
+            //Load ignore patterns before starting the watcher
+            await LoadIgnorePatternsAsync();
+
+            //Start watching the syncignore file for changes
+            StartSyncIgnoreWatcher();
+
             _watcher = new FileSystemWatcher(_rootPath)
             {
                 IncludeSubdirectories = true,
@@ -64,10 +86,10 @@ namespace DockerBuildBoxSystem.Domain
                                NotifyFilters.Size
             };
 
-            _watcher.Created += OnFileChanged;
-            _watcher.Changed += OnFileChanged;
-            _watcher.Deleted += OnFileDeleted;
-            _watcher.Renamed += OnFileRenamed;
+            _watcher.Created += OnCreated;
+            _watcher.Changed += OnChanged;
+            _watcher.Deleted += OnDeleted;
+            _watcher.Renamed += OnRenamed;
             _watcher.Error += OnError;
 
             _watcher.EnableRaisingEvents = true;
@@ -80,15 +102,17 @@ namespace DockerBuildBoxSystem.Domain
             if (_watcher != null)
             {
                 _watcher.EnableRaisingEvents = false;
-                _watcher.Created -= OnFileChanged;
-                _watcher.Changed -= OnFileChanged;
-                _watcher.Deleted -= OnFileDeleted;
-                _watcher.Renamed -= OnFileRenamed;
+                _watcher.Created -= OnCreated;
+                _watcher.Changed -= OnChanged;
+                _watcher.Deleted -= OnDeleted;
+                _watcher.Renamed -= OnRenamed;
                 _watcher.Error -= OnError;
                 _watcher.Dispose();
                 _watcher = null;
                 Log("Stopped watching.");
             }
+
+            StopSyncIgnoreWatcher();
         }
 
         public void PauseWatching()
@@ -119,7 +143,6 @@ namespace DockerBuildBoxSystem.Domain
                 return;
             }
 
-            Log($"Cleaning container directory: {_containerRootPath} with {excludedPaths?.Count() ?? 0} exclusions.");
             var (cleanSuccess, cleanError) = await _fileTransferService.EmptyDirectoryInContainerAsync(_containerId, _containerRootPath, excludedPaths, ct);
             ct.ThrowIfCancellationRequested();
             if (!cleanSuccess)
@@ -131,10 +154,13 @@ namespace DockerBuildBoxSystem.Domain
                 Log("Container directory cleaned successfully!");
             }
         }
-
+        // Performs a full sync of the host directory to the container
         public async Task ForceSyncAsync(CancellationToken ct = default)
         {
             ct.ThrowIfCancellationRequested();
+
+            //Reload ignore patterns before syncing
+            await LoadIgnorePatternsAsync();
 
             if (string.IsNullOrWhiteSpace(_rootPath) || !Directory.Exists(_rootPath))
             {
@@ -158,11 +184,18 @@ namespace DockerBuildBoxSystem.Domain
 
             try
             {
+                ForceSyncStarted?.Invoke(this, EventArgs.Empty);
                 Log("Starting Force Sync...");
                 Directory.CreateDirectory(tempRoot);
 
                 //copy only non-ignored files into temp folder
                 CopyToTempRecursive(_rootPath, tempRoot, ct);
+
+                //verify we have a valid container path before syncing
+                if (string.IsNullOrWhiteSpace(_containerRootPath))
+                {
+                    throw new InvalidOperationException("Container root path is not configured.");
+                }
 
                 //copy temp folder to Docker
                 var (success, error) = await _fileTransferService.CopyDirectoryToContainerAsync(_containerId, tempRoot, _containerRootPath, ct);
@@ -170,9 +203,14 @@ namespace DockerBuildBoxSystem.Domain
                 ct.ThrowIfCancellationRequested();
 
                 if (success)
+                {
                     Log($"Full Folder Sync -> {_containerId}:{_containerRootPath} | Success");
+                }
                 else
+                {
                     Log($"Full Folder Sync Failed | {error}");
+                    throw new InvalidOperationException($"Full Folder Sync Failed: {error}");
+                }
             }
             catch (OperationCanceledException)
             {
@@ -182,38 +220,79 @@ namespace DockerBuildBoxSystem.Domain
             catch (Exception ex)
             {
                 Log("EXCEPTION during full folder copy: " + ex.Message);
+                throw;
             }
             finally
             {
-                try
-                {
-                    if(Directory.Exists(tempRoot))
-                        Directory.Delete(tempRoot, true);
-                }
-                catch (Exception ex)
-                {
-                    Log("Failed to delete temp folder: " + ex.Message);
-                }
+                ForceSyncStopped?.Invoke(this, EventArgs.Empty);
+
+                //clean up temp folder with retry logic
+                await DeleteTempFolderWithRetryAsync(tempRoot);
             }
         }
 
-        public async Task ForceSyncFromContainerAsync(CancellationToken ct = default)
+        /// <summary>
+        /// Attempts to delete the temp folder with retry logic to handle file locks.
+        /// </summary>
+        private async Task DeleteTempFolderWithRetryAsync(string tempRoot)
+        {
+            if (!Directory.Exists(tempRoot))
+                return;
+
+            const int maxRetries = 3;
+            const int delayMs = 500;
+
+            for (int i = 0; i < maxRetries; i++)
+            {
+                try
+                {
+                    //give time for file handles to release
+                    if (i > 0)
+                        await Task.Delay(delayMs);
+
+                    Directory.Delete(tempRoot, true);
+                    return;
+                }
+                catch (IOException) when (i < maxRetries - 1)
+                {
+                    //retry on IO exceptions (file in use, access denied)
+                    continue;
+                }
+                catch (UnauthorizedAccessException) when (i < maxRetries - 1)
+                {
+                    //retry on access denied
+                    continue;
+                }
+                catch (Exception ex)
+                {
+                    Log($"Failed to delete temp folder (attempt {i + 1}/{maxRetries}): {ex.Message}");
+                    if (i == maxRetries - 1)
+                        Log($"Warning: Temp folder may remain at: {tempRoot}");
+                    return;
+                }
+            }
+        }
+        // Performs a full sync from the container to the host directory
+        public async Task ForceSyncFromContainerAsync(string hostPath, string containerId, string containerPath, CancellationToken ct = default)
         {
             ct.ThrowIfCancellationRequested();
 
-            if (string.IsNullOrWhiteSpace(_rootPath))
+            //Reload ignore patterns before syncing
+            await LoadIgnorePatternsAsync();
+
+            if (string.IsNullOrWhiteSpace(hostPath))
             {
                 Log("Error: Host path is not set.");
                 return;
             }
 
-            if (string.IsNullOrWhiteSpace(_containerId))
+            if (string.IsNullOrWhiteSpace(containerId))
             {
                 Log("Error: Container ID is not set.");
                 return;
             }
 
-            if (string.IsNullOrWhiteSpace(_containerRootPath))
+            if (string.IsNullOrWhiteSpace(containerPath))
             {
                 Log("Error: Container sync path is not set.");
                 return;
@@ -224,18 +303,26 @@ namespace DockerBuildBoxSystem.Domain
                 Log("Starting Force Sync from Container...");
 
                 // Ensure target directory exists
-                if (!Directory.Exists(_rootPath))
+                if (!Directory.Exists(hostPath))
                 {
-                    Directory.CreateDirectory(_rootPath);
+                    Directory.CreateDirectory(hostPath);
+                }
+
+                // Ensure build directory exists in the container
+                var containerRootExists = await _containerService.ContainerDirectoryExists(containerId, containerPath);
+                if (containerRootExists == false)
+                {
+                    Log($"Failed to copy from container: build directory '{containerPath}' does not exist. You should create the directory in the container.");
+                    return;
                 }
 
                 // Copy directly from container to host folder
-                var (success, error) = await _fileTransferService.CopyDirectoryFromContainerAsync(_containerId, _containerRootPath, _rootPath, ct);
+                var (success, error) = await _fileTransferService.CopyDirectoryFromContainerAsync(containerId, containerPath, hostPath, ct);
 
                 ct.ThrowIfCancellationRequested();
 
                 if (success)
-                    Log($"Full Folder Sync <- {_containerId}:{_containerRootPath} | Success");
+                    Log($"Full Folder Sync <- {containerId}:{containerPath} | Success");
                 else
                     Log($"Failed to copy from container: {error}");
             }
@@ -249,7 +336,8 @@ namespace DockerBuildBoxSystem.Domain
                 Log("EXCEPTION during container-to-host sync: " + ex.Message);
             }
         }
-
+        // Recursively copies non-ignored files to a temporary directory
+        // Used for preparing files for ForceSync to container for performance reasons
         private void CopyToTempRecursive(string sourceDir, string tempRoot, CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
@@ -282,33 +370,166 @@ namespace DockerBuildBoxSystem.Domain
                 if (IsIgnored(subDir))
                     continue;
 
+                string relative = Path.GetRelativePath(_rootPath!, subDir);
+                string targetDir = Path.Combine(tempRoot, relative);
+                Directory.CreateDirectory(targetDir);
+
                 CopyToTempRecursive(subDir, tempRoot, ct);
             }
         }
 
-        public void UpdateIgnorePatterns(string patterns)
+        /// <summary>
+        /// Asynchronously loads ignore patterns from the configured source and updates the pattern matcher.
+        /// </summary>
+        public async Task LoadIgnorePatternsAsync()
         {
-            _ignorePatternMatcher.LoadPatterns(patterns);
-            Log("Updated ignore patterns.");
+            var patterns = await _syncIgnoreService.LoadSyncIgnoreAsync();
+            var patternsString = string.Join(Environment.NewLine, patterns);
+            _ignorePatternMatcher.LoadPatterns(patternsString);
+            Log($"Sync Ignore file loaded with {patterns.Count()} exclusions.");
         }
 
-        private async void OnFileChanged(object sender, FileSystemEventArgs e)
+        /// <summary>
+        /// Starts watching the syncignore file for changes and automatically reloads patterns when modified.
+        /// </summary>
+        private void StartSyncIgnoreWatcher()
+        {
+            try
+            {
+                var syncIgnorePath = _syncIgnoreService.FilePath;
+                if (string.IsNullOrWhiteSpace(syncIgnorePath))
+                    return;
+
+                var directory = Path.GetDirectoryName(syncIgnorePath);
+                var fileName = Path.GetFileName(syncIgnorePath);
+
+                if (string.IsNullOrWhiteSpace(directory) || string.IsNullOrWhiteSpace(fileName))
+                    return;
+
+                //Ensure directory exists before watching
+                if (!Directory.Exists(directory))
+                    return;
+
+                StopSyncIgnoreWatcher();
+
+                _syncIgnoreWatcher = new FileSystemWatcher(directory)
+                {
+                    Filter = fileName,
+                    NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName
+                };
+
+                _syncIgnoreWatcher.Changed += OnSyncIgnoreChanged;
+                _syncIgnoreWatcher.Created += OnSyncIgnoreChanged;
+                _syncIgnoreWatcher.Deleted += OnSyncIgnoreDeleted;
+                _syncIgnoreWatcher.Error += OnSyncIgnoreError;
+
+                _syncIgnoreWatcher.EnableRaisingEvents = true;
+                Log("Started watching .syncignore file for changes.");
+            }
+            catch (Exception ex)
+            {
+                Log($"Warning: Could not start watching .syncignore file: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Stops watching the syncignore file.
+        /// </summary>
+        private void StopSyncIgnoreWatcher()
+        {
+            if (_syncIgnoreWatcher != null)
+            {
+                _syncIgnoreWatcher.EnableRaisingEvents = false;
+                _syncIgnoreWatcher.Changed -= OnSyncIgnoreChanged;
+                _syncIgnoreWatcher.Created -= OnSyncIgnoreChanged;
+                _syncIgnoreWatcher.Deleted -= OnSyncIgnoreDeleted;
+                _syncIgnoreWatcher.Error -= OnSyncIgnoreError;
+                _syncIgnoreWatcher.Dispose();
+                _syncIgnoreWatcher = null;
+            }
+        }
+
+        private async void OnSyncIgnoreChanged(object sender, FileSystemEventArgs e)
+        {
+            try
+            {
+                //Debounce to avoid multiple rapid reloads
+                await Task.Delay(300);
+                await LoadIgnorePatternsAsync();
+            }
+            catch (Exception ex)
+            {
+                Log($"Warning: Failed to reload .syncignore file: {ex.Message}");
+            }
+        }
+
+        private void OnSyncIgnoreDeleted(object sender, FileSystemEventArgs e)
+        {
+            try
+            {
+                //Clear all patterns when syncignore is deleted
+                _ignorePatternMatcher.LoadPatterns(string.Empty);
+                Log(".syncignore file deleted - all patterns cleared.");
+            }
+            catch (Exception ex)
+            {
+                Log($"Warning: Error handling .syncignore deletion: {ex.Message}");
+            }
+        }
+
+        private void OnSyncIgnoreError(object sender, ErrorEventArgs e)
+        {
+            Log($".syncignore watcher error: {e.GetException()?.Message ?? "Unknown error"}");
+        }
+
+        private async void OnCreated(object sender, FileSystemEventArgs e)
+        {
+            if (IsIgnored(e.FullPath) || IsDuplicateEvent(e.FullPath, "Created"))
+                return;
+
+            // Directory
+            if (Directory.Exists(e.FullPath))
+            {
+                string dir = ToContainerPath(e.FullPath);
+                var (success, error) = await _fileTransferService.CreateDirectoryInContainerAsync(_containerId!, dir);
+                if (success)
+                    Log($"Dir created {e.FullPath} → {dir} | {success}");
+                else
+                    Log($"Dir creation failed {e.FullPath} → {dir} | {error}");
+                return;
+            }
+
+            // File
+            if (File.Exists(e.FullPath))
+            {
+                string file = ToContainerPath(e.FullPath);
+                var (success, error) = await _fileTransferService.CopyToContainerAsync(_containerId!, e.FullPath, file);
+                if (success)
+                    Log($"File created {e.FullPath} → {file} | {success}");
+                else
+                    Log($"File Failed {e.FullPath} → {file} | {error}");
+            }
+        }
+
+
+        private async void OnChanged(object sender, FileSystemEventArgs e)
         {
             if (IsIgnored(e.FullPath) || IsDuplicateEvent(e.FullPath, "Copy"))
                 return;
 
-            if (File.Exists(e.FullPath))
-            {
-                string containerPath = ToContainerPath(e.FullPath);
-                var (success, error) = await _fileTransferService.CopyToContainerAsync(_containerId!, e.FullPath, containerPath);
-                if (success)
-                    Log($"Copy {e.FullPath} -> {containerPath}");
-                else
-                    Log($"Copy Failed: {e.FullPath} -> {containerPath} | {error}");
-            }
+            if (!File.Exists(e.FullPath))
+                return;
+            
+            string containerPath = ToContainerPath(e.FullPath);
+            var (success, error) = await _fileTransferService.CopyToContainerAsync(_containerId!, e.FullPath, containerPath);
+            if (success)
+                Log($"Copy {e.FullPath} -> {containerPath}");
+            else
+                Log($"Copy Failed: {e.FullPath} -> {containerPath} | {error}");
+            
         }
 
-        private async void OnFileDeleted(object sender, FileSystemEventArgs e)
+        private async void OnDeleted(object sender, FileSystemEventArgs e)
         {
             if (IsIgnored(e.FullPath) || IsDuplicateEvent(e.FullPath, "Deleted"))
                 return;
@@ -321,19 +542,63 @@ namespace DockerBuildBoxSystem.Domain
                 Log($"Delete Failed: {e.FullPath} | {error}");
         }
 
-        private async void OnFileRenamed(object sender, RenamedEventArgs e)
+        private async void OnRenamed(object sender, RenamedEventArgs e)
         {
-            if (IsIgnored(e.FullPath) || IsDuplicateEvent(e.FullPath, "Renamed"))
+            bool oldIgnored = IsIgnored(e.OldFullPath);
+            bool newIgnored = IsIgnored(e.FullPath);
+
+            //if both files are ignored then there is nothing to be done
+            if (oldIgnored && newIgnored)
+                return;
+
+            //if old name was ignored but new is not, treat as a new file creation on the container
+            //Why? well the old file was ignored and doesn't exist on the container (if I think of this correctly), so there are no file there with that name.
+            //This can use OnFileChanged logic, quick fix to get thingss working.
+            if (oldIgnored && !newIgnored)
+            {
+                if (IsDuplicateEvent(e.FullPath, "Copy"))
+                    return;
+
+                if (File.Exists(e.FullPath))
+                {
+                    string containerPath = ToContainerPath(e.FullPath);
+                    var (success, error) = await _fileTransferService.CopyToContainerAsync(_containerId!, e.FullPath, containerPath);
+                    if (success)
+                        Log($"Copy {e.FullPath} -> {containerPath}");
+                    else
+                        Log($"Copy Failed: {e.FullPath} -> {containerPath} | {error}");
+                }
+                return;
+            }
+
+            //if old name was not ignored but new is, treat as a deletion
+            //This can use OnFileDeleted logic, quick fix to get thingss working.
+            if (!oldIgnored && newIgnored)
+            {
+                if (IsDuplicateEvent(e.OldFullPath, "Deleted"))
+                    return;
+
+                string oldContainerPath = ToContainerPath(e.OldFullPath);
+                var (success, error) = await _fileTransferService.DeleteInContainerAsync(_containerId!, oldContainerPath);
+                if (success)
+                    Log($"Deleted {e.OldFullPath} (renamed to ignored path)");
+                else
+                    Log($"Delete Failed: {e.OldFullPath} | {error}");
+                return;
+            }
+
+            //both paths are not ignored, perform a rename (the intended way)
+            if (IsDuplicateEvent(e.FullPath, "Renamed"))
                 return;
 
             string oldPath = ToContainerPath(e.OldFullPath);
             string newPath = ToContainerPath(e.FullPath);
 
-            var (success, error) = await _fileTransferService.RenameInContainerAsync(_containerId!, oldPath, newPath);
-            if (success)
+            var (renameSuccess, renameError) = await _fileTransferService.RenameInContainerAsync(_containerId!, oldPath, newPath);
+            if (renameSuccess)
                 Log($"Renamed {e.OldFullPath} -> {e.FullPath}");
             else
-                Log($"Rename Failed: {e.OldFullPath} -> {e.FullPath} | {error}");
+                Log($"Rename Failed: {e.OldFullPath} -> {e.FullPath} | {renameError}");
         }
 
         private void OnError(object sender, ErrorEventArgs e)
@@ -346,6 +611,7 @@ namespace DockerBuildBoxSystem.Domain
             return _ignorePatternMatcher.IsIgnored(path);
         }
 
+        // Checks if an event is a duplicate within a debounce interval
         private bool IsDuplicateEvent(string path, string changeType)
         {
             string key = $"{changeType}:{path}";
@@ -370,9 +636,22 @@ namespace DockerBuildBoxSystem.Domain
 
         private void Log(string msg)
         {
-            lock (_changesLock)
+            void AddToChanges()
             {
-                Changes.Add($"{msg}");
+                lock (_changesLock)
+                {
+                    Changes.Add($"{msg}");
+                }
+            }
+
+            //f we have a UI context and we're not on the UI thread, dispatch to UI thread
+            if (_uiContext != null && SynchronizationContext.Current != _uiContext)
+            {
+                _uiContext.Post(_ => AddToChanges(), null);
+            }
+            else
+            {
+                AddToChanges();
             }
         }
 

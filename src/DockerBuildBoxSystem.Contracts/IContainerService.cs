@@ -59,7 +59,7 @@ namespace DockerBuildBoxSystem.Contracts
         /// <summary>
         /// The container status description.
         /// </summary>
-        public string? Status { get; init; }
+        public string? Status { get; set; }
 
         /// <summary>
         /// The image name used by the container.
@@ -301,6 +301,18 @@ namespace DockerBuildBoxSystem.Contracts
             string containerId,
             string containerPath,
             string hostPath,
+            CancellationToken ct = default);
+
+        /// <summary>
+        /// Checks if the directory in the container exists
+        /// </summary>
+        /// <param name="containerId">Container ID in which the directory is located</param>
+        /// <param name="containerPath">Directory path</param>
+        /// <param name="ct"></param>
+        /// <returns></returns>
+        Task<bool> ContainerDirectoryExists(
+            string containerId, 
+            string containerPath, 
             CancellationToken ct = default);
     }
 }

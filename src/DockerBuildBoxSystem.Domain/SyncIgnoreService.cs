@@ -20,6 +20,8 @@ namespace DockerBuildBoxSystem.Domain
         private readonly string _filePath;
         private readonly IExternalProcessService _externalProcessService;
 
+        public string FilePath => _filePath;
+
         public SyncIgnoreService(IExternalProcessService externalProcessService,  string filename = ".syncignore")
         {
             _externalProcessService = externalProcessService;

@@ -1,0 +1,70 @@
+@startuml File Sync - Delete File
+!theme plain
+skinparam sequenceMessageAlign center
+
+title File Sync - Delete File from Container
+
+actor Developer
+participant "FileSystemWatcher" as FSW
+participant "FileSyncService" as SyncSvc
+participant "IIgnorePatternMatcher" as IgnoreMatcher
+participant "IContainerFileTransferService" as TransferSvc
+participant "Docker Engine" as Docker
+participant "Container" as Container
+
+== File Deletion ==
+
+Developer -> Developer: Delete file in host directory
+
+FSW -> SyncSvc: OnFileDeleted Event\n(path: /src/old.js)
+activate SyncSvc
+
+SyncSvc -> IgnoreMatcher: IsIgnored(path, patterns)
+activate IgnoreMatcher
+IgnoreMatcher -> IgnoreMatcher: Check patterns
+
+alt File is Ignored
+    IgnoreMatcher --> SyncSvc: true (ignored)
+    deactivate IgnoreMatcher
+    SyncSvc -> SyncSvc: Skip ignored file
+    note right
+        Don't delete ignored files
+        from container (e.g., .git/, build/)
+    end note
+    deactivate SyncSvc
+
+else File Not Ignored
+    IgnoreMatcher --> SyncSvc: false (not ignored)
+    deactivate IgnoreMatcher
+
+    SyncSvc -> TransferSvc: DeleteInContainerAsync(containerId, path)
+    activate TransferSvc
+
+    TransferSvc -> Docker: POST /containers/{id}/exec
+    note right
+        Command: ["rm", "-rf", "/data/src/old.js"]
+    end note
+    activate Docker
+
+    Docker -> Container: Execute command
+    activate Container
+    Container -> Container: rm -rf /data/src/old.js
+    Container --> Docker: Exit code 0
+    deactivate Container
+
+    Docker --> TransferSvc: Exec Complete
+    deactivate Docker
+
+    TransferSvc --> SyncSvc: Deleted
+    deactivate TransferSvc
+
+    SyncSvc -> SyncSvc: Add to Changes Log\n"Deleted: old.js"
+    deactivate SyncSvc
+end
+
+note over Developer
+    File removed from both
+    host and container
+end note
+
+@enduml
