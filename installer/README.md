@@ -20,7 +20,7 @@ Choose the path that best fits your needs:
 | --------------------------------------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 🟢 **Standard Installer (Recommended)** | Self-contained Windows desktop app with Start Menu and optional Desktop shortcut.   | See [Standard Installer](#-standard-installer) |
 | 📦 **Portable (No Installer)**          | Run from a published folder without installing; useful for controlled environments. | See [Portable Deploy](#-portable-deploy)       |
-| 🛠 **Developer (From Source)**          | Build and run from source for development or CI/CD.                                 | See [Install for Developers](#-install-for-developers)                                                                                                 |
+| 🛠 **Developer (From Source)**          | Build and run from source for development or CI/CD.                                 | See [For Developers](#-install-for-developers)                                                                                                 |
 
 ---
 
@@ -130,7 +130,7 @@ winget install --id JRSoftware.InnoSetup -e
 
 ## ⚙️ Post Installation
 
-* **Shortcuts:** Start Menu entry + optional desktop icon
+* **Shortcuts:** Start Menu entry and optional desktop icon
 * **Configuration:** Edit files in `Config` folder
 * **Logs:** View via app or local log output
 
@@ -138,9 +138,9 @@ winget install --id JRSoftware.InnoSetup -e
 
 ## 🔧 Configuration Options
 
-* **App behavior:** [`appsettings.json`](src/DockerBuildBoxSystem.App/Config/appsettings.json)
-* **UI & controls:** [`controls.json`](src/DockerBuildBoxSystem.App/Config/controls.json)
-* **Core operations:** [`config.json`](src/DockerBuildBoxSystem.App/Config/config.json)
+* **App behavior:** [`appsettings.json`](https://github.com/ReflexLevel0/DockerBuildboxSystem/blob/main/src/DockerBuildBoxSystem.App/Config/appsettings.json)
+* **UI & controls:** [`controls.json`](https://github.com/ReflexLevel0/DockerBuildboxSystem/blob/main/src/DockerBuildBoxSystem.App/Config/controls.json)
+* **Core operations:** [`config.json`](https://github.com/ReflexLevel0/DockerBuildboxSystem/blob/main/src/DockerBuildBoxSystem.App/Config/config.json)
 
 ---
 
@@ -160,7 +160,7 @@ winget install --id JRSoftware.InnoSetup -e
 ## ➡️ Next Steps
 
 * Explore container workflows
-* Review domain services: [DockerBuildBoxSystem.Domain](src/DockerBuildBoxSystem.Domain)
+* Review domain services: [DockerBuildBoxSystem.Domain](https://github.com/ReflexLevel0/DockerBuildboxSystem/tree/main/src/DockerBuildBoxSystem.Domain)
 * Customize configs and re-publish
 * Contact support: **FER & MDU team**
 
