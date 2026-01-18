@@ -75,9 +75,8 @@ winget install --id JRSoftware.InnoSetup -e
 1. Download: Obtain the `DockerBuildBoxSystem_Setup.exe` from your distribution portal.
 2. Launch: Double-click the installer.
 3. Accept Terms: Review EULA and privacy prompts.
-4. Docker Check: The installer warns if Docker is not detected.
-5. Choose Options: Optional desktop icon; confirm install directory.
-6. Launch App: Click “Launch Docker BuildBox System” at the end.
+4. Choose Options: Optional desktop icon; confirm install directory.
+5. Launch App: Click “Launch Docker BuildBox System” at the end.
 
 ---
 
