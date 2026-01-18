@@ -114,7 +114,6 @@ winget install --id JRSoftware.InnoSetup -e
    ```
 3. Build the Installer (optional): Use Inno Setup.
    ```powershell
-   # Publish self-contained app
    dotnet publish .\src\DockerBuildBoxSystem.App -c Release -r win-x64 --self-contained true -o .\publish\win-x64
    ```
 ---
